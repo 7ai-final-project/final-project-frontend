@@ -26,5 +26,21 @@ export const toggleReady = (id: string) => api.post(`game/${id}/toggle-ready/`);
 export const startGame = (id: string) => api.post(`game/${id}/start/`);
 export const endGame = (id: string) => api.post(`game/${id}/end/`);
 export const getWebSocketNonce = () => api.post("common/websocket-nonce/");
+export const fetchScenarios = () => api.get("game/options/scenarios/");
+export const fetchDifficulties = () => api.get("game/options/difficulties/");
+export const fetchModes = () => api.get("game/options/modes/");
+export const fetchGenres = () => api.get("game/options/genres/");
+
+export const saveRoomOptions = (
+  roomId: string,
+  options: {
+    scenario: string | null;
+    difficulty: string | null;
+    mode: string | null;
+    genre: string | null;
+  }
+) => {
+  return api.post(`game/${roomId}/options/`, options);
+};
 
 export default api;
