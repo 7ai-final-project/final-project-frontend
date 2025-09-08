@@ -164,10 +164,11 @@ export default function RoomScreen() {
               topic: message.topic,
               difficulty: message.difficulty,
               mode: message.mode,
+              genre: message.genre,
             };
 
             let secondsLeft = 5;
-            const countdownText = `주제: ${gameOptions.topic}\n난이도: ${gameOptions.difficulty}\n방식: ${gameOptions.mode}\n\n${secondsLeft}초 후 게임을 시작합니다...`;
+            const countdownText = `주제: ${gameOptions.topic}\n난이도: ${gameOptions.difficulty}\n방식: ${gameOptions.mode}\n장르: ${gameOptions.genre}\n\n${secondsLeft}초 후 게임을 시작합니다...`;
             setCountdownModalContent(countdownText);
             
             if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
@@ -176,7 +177,7 @@ export default function RoomScreen() {
               secondsLeft -= 1;
               if (secondsLeft > 0) {
                 setCountdownModalContent(
-                  `주제: ${gameOptions.topic}\n난이도: ${gameOptions.difficulty}\n방식: ${gameOptions.mode}\n\n${secondsLeft}초 후 게임을 시작합니다...`
+                  `주제: ${gameOptions.topic}\n난이도: ${gameOptions.difficulty}\n방식: ${gameOptions.mode}\n장르: ${gameOptions.genre}\n\n${secondsLeft}초 후 게임을 시작합니다...`
                 );
               } else {
                 if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
@@ -188,6 +189,7 @@ export default function RoomScreen() {
                     topic: gameOptions.topic,
                     difficulty: gameOptions.difficulty,
                     mode: gameOptions.mode,
+                    genre: gameOptions.genre,
                   },
                 });
                 

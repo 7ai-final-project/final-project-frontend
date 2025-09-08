@@ -280,6 +280,15 @@ return (
 
           {user && (
             <View style={styles.modeContainer}>
+              <MedievalButton onPress={() => router.push('/game/single')}>
+                싱글 모드
+              </MedievalButton>
+              {/* 옵션 버튼은 헤더로 이동했으므로 여기서 삭제합니다. */}
+            </View>
+          )}
+
+          {user && (
+            <View style={styles.modeContainer}>
               <MedievalButton onPress={() => router.push('/game/multi')}>
                 멀티 모드
               </MedievalButton>
