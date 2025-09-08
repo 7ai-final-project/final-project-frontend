@@ -9,6 +9,7 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
+  Pressable,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { storage } from "../../../../services/storage";
@@ -22,6 +23,7 @@ import {
   fetchModes,
   saveRoomOptions,
   fetchGenres,
+  leaveRoom,
 } from "../../../../services/api";
 import ChatBox from "../../../../components/chat/ChatBox";
 import { useWebSocket } from "@//components/context/WebSocketContext";
@@ -80,9 +82,10 @@ export default function RoomScreen() {
   const [countdownModalContent, setCountdownModalContent] = useState("");
   const [isTopicModalVisible, setIsTopicModalVisible] = useState(false);
   const [isChatVisible, setIsChatVisible] = useState<boolean>(false);
+  const [isLeaveModalVisible, setIsLeaveModalVisible] = useState(false);
 
   const chatSocketRef = useRef<WebSocket | null>(null);
-  const countdownIntervalRef = useRef<NodeJS.Timeout | number | null>(null);
+  const countdownIntervalRef = useRef<number | null>(null);
 
   // State: 하드코딩된 배열을 제거하고, API로부터 받아올 목록과 유저가 선택한 ID를 저장할 state를 선언합니다.
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
@@ -254,6 +257,21 @@ export default function RoomScreen() {
 
 
   // --- 이벤트 핸들러 ---
+  const handleLeaveRoom = async () => {
+    if (!roomId) return;
+    try {
+      await leaveRoom(roomId);
+      Alert.alert("알림", "방에서 나갔습니다.");
+      // 모달을 닫고 멀티플레이 로비 화면으로 이동
+      setIsLeaveModalVisible(false);
+      router.replace("/game/multi");
+    } catch (error) {
+      console.error("방 나가기 실패:", error);
+      Alert.alert("오류", "방을 나가는 데 실패했습니다.");
+      setIsLeaveModalVisible(false);
+    }
+  };
+
   const handleOptionSelect = async () => {
     if (!isOwner) return;
 
@@ -384,12 +402,23 @@ export default function RoomScreen() {
           <View style={styles.rightPanel}>
             <View style={styles.participantsHeader}>
               <Text style={styles.subTitle}>참가자 ({room.selected_by_room?.length || 0}/{room.max_players})</Text>
-              <TouchableOpacity
-                style={styles.chatBtn}
-                onPress={() => setIsChatVisible(prev => !prev)}
-              >
-                <Ionicons name="chatbubbles" size={20} color="#E2C044" />
-              </TouchableOpacity>
+              <View style={styles.headerButtonContainer}>
+                {/* 방 나가기 버튼을 이곳으로 이동 */}
+                <TouchableOpacity
+                  style={styles.headerIconBtn}
+                  onPress={() => setIsLeaveModalVisible(true)}
+                >
+                  <Ionicons name="exit-outline" size={24} color="#E0E0E0" />
+                </TouchableOpacity>
+
+                {/* 기존 채팅 버튼 */}
+                <TouchableOpacity
+                  style={styles.headerIconBtn}
+                  onPress={() => setIsChatVisible(prev => !prev)}
+                >
+                  <Ionicons name="chatbubbles" size={20} color="#E2C044" />
+                </TouchableOpacity>
+              </View>
             </View>
             <View style={styles.participantsBox}>
               {room.selected_by_room?.map((p) => (
@@ -497,6 +526,38 @@ export default function RoomScreen() {
           </View>
         </View>
       </Modal>
+      <Modal
+        transparent={true}
+        visible={isLeaveModalVisible}
+        animationType="fade"
+        onRequestClose={() => setIsLeaveModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.leaveModalBox}>
+            {/* isOwner 값에 따라 다른 문구를 보여줍니다. */}
+            <Text style={styles.leaveModalText}>
+              {isOwner
+                ? "방장이 나가면 방이 삭제됩니다.\n정말 나가시겠습니까?"
+                : "방에서 나가시겠습니까?"}
+            </Text>
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setIsLeaveModalVisible(false)}
+              >
+                <Text style={styles.topicText}>아니요</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={handleLeaveRoom}
+              >
+                <Text style={styles.topicText}>예</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {isChatVisible && <ChatBox roomId={roomId} chatSocketRef={chatSocketRef} />}
     </SafeAreaView>
   );
@@ -676,5 +737,58 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 32,
   },
-  text: { color: '#fff' }
+  text: { color: '#fff' },
+  headerButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10, // 버튼 사이의 간격
+  },
+  headerIconBtn: {
+    padding: 8,
+    backgroundColor: '#161B2E',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#2C344E'
+  },
+  leaveButton: {
+    position: 'absolute',
+    top: 50, // 상단 safe area에 맞춰 조정 가능
+    right: 20,
+    zIndex: 10, // 다른 요소들 위에 보이도록 z-index 설정
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(22, 27, 46, 0.8)', // 반투명 배경
+  },
+  leaveModalBox: {
+    width: "30%",
+    backgroundColor: "#161B2E",
+    borderRadius: 12,
+    padding: 25,
+    borderWidth: 1,
+    borderColor: '#2C344E',
+    alignItems: 'center',
+  },
+  leaveModalText: {
+    fontSize: 18,
+    color: "#E0E0E0",
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  modalButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginHorizontal: 10,
+  },
+  confirmButton: {
+    backgroundColor: '#E53E3E', // 빨간색 계열
+  },
+  cancelButton: {
+    backgroundColor: '#4A5568', // 회색 계열
+  }
 });
