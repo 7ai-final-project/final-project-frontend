@@ -17,11 +17,28 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+export interface Character {
+  id: string;
+  name: string;
+  description: string;
+  image: any;
+  stats: Record<string, number>;
+  skills: string[];
+  items: string[];
+}
+
+export interface PaginatedCharacterResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: Character[];
+}
+
 // ---- Rooms API helpers ----
 export const fetchRooms = () => api.get("game/");
 export const fetchRoomDetail = (id: string) => api.get(`game/${id}/`);
-export const joinRoom = (id: string, data: { password?: string } = {}) => api.post(`game/${id}/join/`, data);
-export const leaveRoom = (roomId: string) => api.post(`game/${roomId}/leave/`);
+export const joinRoom = (id: string, data?: { password?: string }) => api.post(`game/${id}/join/`, data);
+export const leaveRoom = (id: string) => api.post(`game/${id}/leave/`);
 export const toggleReady = (id: string) => api.post(`game/${id}/toggle-ready/`);
 export const startGame = (id: string) => api.post(`game/${id}/start/`);
 export const endGame = (id: string) => api.post(`game/${id}/end/`);
@@ -41,6 +58,13 @@ export const saveRoomOptions = (
   }
 ) => {
   return api.post(`game/${roomId}/options/`, options);
+};
+
+export const fetchCharactersByTopic = async (topic: string): Promise<PaginatedCharacterResponse> => {
+  const response = await api.get("game/characters/", {
+    params: { topic },
+  });
+  return response.data;
 };
 
 export default api;
