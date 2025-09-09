@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Pressable,
+  TextInput,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { storage } from "../../../../services/storage";
@@ -45,6 +46,7 @@ interface RoomType {
   max_players: number;
   status: string;
   selected_by_room: Participant[];
+  room_type: 'public' | 'private';
 }
 
 // API: 서버에서 받아올 게임 옵션 데이터 타입을 정의합니다.
@@ -78,6 +80,9 @@ export default function RoomScreen() {
   const { wsRef } = useWebSocket();
   const { user, loading: authLoading } = useAuth();
 
+  const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+
   const [isCountdownModalVisible, setIsCountdownModalVisible] = useState(false);
   const [countdownModalContent, setCountdownModalContent] = useState("");
   const [isTopicModalVisible, setIsTopicModalVisible] = useState(false);
@@ -97,6 +102,26 @@ export default function RoomScreen() {
   const [selectedDifficultyId, setSelectedDifficultyId] = useState<string | null>(null);
   const [selectedModeId, setSelectedModeId] = useState<string | null>(null);
   const [selectedGenreId, setSelectedGenreId] = useState<string | null>(null);
+
+  // ✅ 비밀방 입장 처리를 위한 별도 함수 추가
+    const handleJoinPrivateRoom = async () => {
+      if (!passwordInput) {
+        Alert.alert("경고", "비밀번호를 입력해주세요.");
+        return;
+      }
+      
+      try {
+        // 비밀번호를 포함하여 API 호출
+        const res = await joinRoom(roomId, { password: passwordInput });
+        setRoom(res.data);
+        setIsPasswordModalVisible(false); // 성공 시 모달 닫기
+        setPasswordInput("");
+      } catch (error: any) {
+        console.error("비밀방 참가 실패:", error);
+        // 백엔드에서 비밀번호 불일치 시 보내는 오류 메시지에 따라 수정
+        Alert.alert("입장 실패", error.response?.data?.detail || "비밀번호가 올바르지 않거나 방에 입장할 수 없습니다.");
+      }
+    };
 
   // --- useEffect Hooks ---
   useEffect(() => {
@@ -126,9 +151,17 @@ export default function RoomScreen() {
       }
     };
 
-    const joinAndLoadRoom = async () => {
+   const joinAndLoadRoom = async () => {
       if (!roomId) return;
       try {
+        const roomDetails = await fetchRoomDetail(roomId);
+        
+        if (roomDetails.data.room_type === 'private') {
+            setIsPasswordModalVisible(true);
+            return; // 비밀번호 모달을 띄우고 종료
+        }
+        
+        // 공개방일 경우 바로 입장 시도
         const res = await joinRoom(roomId);
         setRoom(res.data);
       } catch (error: any) {
@@ -559,6 +592,43 @@ export default function RoomScreen() {
           </View>
         </View>
       </Modal>
+      <Modal
+        transparent={true}
+        visible={isPasswordModalVisible}
+        animationType="fade"
+        onRequestClose={() => setIsPasswordModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.passwordModalBox}>
+            <Text style={styles.modalTitle}>비밀번호를 입력하세요</Text>
+            <TextInput
+              style={styles.input}
+              value={passwordInput}
+              onChangeText={setPasswordInput}
+              secureTextEntry={true}
+              placeholder="비밀번호"
+              placeholderTextColor="#9CA3AF"
+            />
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setIsPasswordModalVisible(false);
+                  router.replace("/game/multi");
+                }}
+              >
+                <Text style={styles.topicText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={handleJoinPrivateRoom}
+              >
+                <Text style={styles.topicText}>입장</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {isChatVisible && <ChatBox roomId={roomId} chatSocketRef={chatSocketRef} />}
     </SafeAreaView>
@@ -775,6 +845,27 @@ const styles = StyleSheet.create({
     color: "#E0E0E0",
     fontWeight: 'bold',
     marginBottom: 20,
+  },
+  passwordModalBox: {
+    width: "30%",
+    backgroundColor: "#161B2E",
+    borderRadius: 12,
+    padding: 25,
+    borderWidth: 1,
+    borderColor: '#2C344E',
+    alignItems: 'center',
+  },
+  input: {
+    width: '100%',
+    backgroundColor: "rgba(255,255,255,0.1)",
+    color: "white",
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    fontSize: 16,
+    borderColor: "#131A33",
+    borderWidth: 1
   },
   modalButtonContainer: {
     flexDirection: 'row',

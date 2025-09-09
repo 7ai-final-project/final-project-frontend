@@ -20,7 +20,7 @@ api.interceptors.request.use(
 // ---- Rooms API helpers ----
 export const fetchRooms = () => api.get("game/");
 export const fetchRoomDetail = (id: string) => api.get(`game/${id}/`);
-export const joinRoom = (id: string) => api.post(`game/${id}/join/`);
+export const joinRoom = (id: string, data: { password?: string } = {}) => api.post(`game/${id}/join/`, data);
 export const leaveRoom = (roomId: string) => api.post(`game/${roomId}/leave/`);
 export const toggleReady = (id: string) => api.post(`game/${id}/toggle-ready/`);
 export const startGame = (id: string) => api.post(`game/${id}/start/`);
