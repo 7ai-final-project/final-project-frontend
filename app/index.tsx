@@ -5,7 +5,14 @@ import { router } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 import { useKakaoAuth } from '../hooks/useKakaoAuth';
+import { useFonts } from 'expo-font';
 
+// 텍스트가 영어인지 확인하는 헬퍼 함수를 만듭니다. 
+ const isEnglish = (text: string): boolean => {
+// 정규식을 사용하여 문자열에 영어 알파벳이 포함되어 있는지 확인합니다.
+ const englishRegex = /[a-zA-Z]/;
+ return englishRegex.test(text);
+ };
 
 const StarryBackground = () => {
   const stars = useRef([...Array(30)].map(() => ({
@@ -58,17 +65,13 @@ interface MedievalButtonProps {
   children: ReactNode;
   onPress?: () => void;
   disabled?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
-  size?: 'small' | 'medium' | 'large';
+  size?: 'medium' | 'large';
 }
 
 const MedievalButton: React.FC<MedievalButtonProps> = ({
   children,
   onPress,
   disabled = false,
-  style = {},
-  textStyle = {},
   size = 'medium',
 }) => {
   const [isPressed, setIsPressed] = useState<boolean>(false);
@@ -77,107 +80,83 @@ const MedievalButton: React.FC<MedievalButtonProps> = ({
   const handlePressIn = (): void => {
     if (!disabled) {
       setIsPressed(true);
-      Animated.spring(scaleAnim, {
-        toValue: 0.95,
-        useNativeDriver: true,
-      }).start();
+      Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true }).start();
     }
   };
-
   const handlePressOut = (): void => {
     setIsPressed(false);
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
   };
-
   const handlePress = (): void => {
     if (!disabled && onPress) {
       onPress();
     }
   };
 
-  const getButtonSize = () => {
-    switch (size) {
-      case 'small':
-        return {
-          width: 200,
-          height: 50,
-          fontSize: 14,
-        };
-      case 'large':
-        return {
-          width: 300,
-          height: 80,
-          fontSize: 20,
-        };
-      default:
-        return {
-          width: 250,
-          height: 65,
-          fontSize: 16,
-        };
-    }
-  };
 
-  const buttonSize = getButtonSize();
+  // getButtonSize 함수를 제거하고, 스타일에서 직접 크기를 관리합니다.
+  const buttonSizeStyle = size === 'large' ? styles.largeButton : styles.mediumButton;
+  const textSizeStyle = size === 'large' ? styles.largeButtonText : styles.mediumButtonText;
 
   return (
-    <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
-      <TouchableOpacity
-        onPress={handlePress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        disabled={disabled}
-        activeOpacity={0.8}
-        style={[
-          styles.container,
-          {
-            width: buttonSize.width,
-            height: buttonSize.height,
-          },
-          disabled && styles.disabled,
-          style,
-        ]}
-      >
-        {/* 외부 테두리 */}
-        <View style={[styles.outerBorder, { width: buttonSize.width + 16, height: buttonSize.height + 16 }]} />
-        
-        {/* 내부 테두리 */}
-        <View style={[styles.innerBorder, { width: buttonSize.width + 8, height: buttonSize.height + 8 }]} />
-        
-        {/* 체인 장식 */}
-        <View style={[styles.chainLeft, { top: -25 }]}>
-          <View style={styles.chainRing} />
+    <Pressable 
+      onPress={handlePress} 
+      onPressIn={handlePressIn} 
+      onPressOut={handlePressOut} 
+      disabled={disabled}
+    >
+      <Animated.View style={[styles.buttonContainer, buttonSizeStyle, { transform: [{ scale: scaleAnim }] }]}>
+        <View style={styles.outerBorder} />
+        <View style={styles.innerBorder} />
+        <View style={[styles.buttonBody, isPressed && styles.pressed]}>
+          <Text style={[styles.buttonText, textSizeStyle]}>{children}</Text>
         </View>
-        <View style={[styles.chainRight, { top: -25 }]}>
-          <View style={styles.chainRing} />
-        </View>
-        
-        {/* 메인 버튼 영역 */}
-        <View style={[
-          styles.buttonBody,
-          {
-            width: buttonSize.width,
-            height: buttonSize.height,
-          },
-          isPressed && styles.pressed,
-          disabled && styles.disabledBody,
-        ]}>
-          <Text style={[
-            styles.buttonText,
-            {
-              fontSize: buttonSize.fontSize,
-            },
-            disabled && styles.disabledText,
-            textStyle,
-          ]}>
-            {children}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
+        <View style={[styles.chain, styles.chainTopLeft]}><View style={styles.chainPin} /></View>
+        <View style={[styles.chain, styles.chainTopRight]}><View style={styles.chainPin} /></View>
+        <View style={[styles.chain, styles.chainBottomLeft]}><View style={styles.chainPin} /></View>
+        <View style={[styles.chain, styles.chainBottomRight]}><View style={styles.chainPin} /></View>
+      </Animated.View>
+    </Pressable>
+  );
+};
+
+interface TypingTextProps {
+  text: string;
+  speed?: number; // 타이핑 속도 (ms)
+  style?: TextStyle | TextStyle[];  // 텍스트 스타일을 적용하기 위한 prop
+}
+
+const TypingText: React.FC<TypingTextProps> = ({ text, speed = 50, style }) => {
+  const [displayedText, setDisplayedText] = useState('');
+  const [isTyping, setIsTyping] = useState(true);
+
+  useEffect(() => {
+    // 컴포넌트가 나타날 때 타이핑을 시작합니다.
+    setDisplayedText(''); // 텍스트 초기화
+    setIsTyping(true);
+
+    let i = 0;
+    const typingInterval = setInterval(() => {
+      if (i < text.length) {
+        setDisplayedText(prev => prev + text.charAt(i));
+        i++;
+      } else {
+        clearInterval(typingInterval);
+        setIsTyping(false); // 타이핑이 끝나면 isTyping을 false로 설정
+      }
+    }, speed);
+
+    // 컴포넌트가 사라질 때 인터벌을 정리합니다 (메모리 누수 방지)
+    return () => clearInterval(typingInterval);
+  }, [text, speed]); // text나 speed prop이 바뀌면 효과를 다시 시작합니다.
+
+  return (
+    // Text 컴포넌트에 전달받은 스타일을 적용합니다.
+    <Text style={style}>
+      {displayedText}
+      {/* 타이핑 중일 때만 깜빡이는 커서를 보여줍니다. */}
+      {isTyping && <Text style={{ opacity: 0.5 }}>|</Text>}
+    </Text>
   );
 };
 
@@ -251,12 +230,12 @@ return (
               <View style={styles.loggedInBox}>
                 <Text style={[styles.loggedInText, { fontSize: 16 * fontSizeMultiplier }]}>{user.name}님</Text>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                  <Text style={styles.loginText}>로그아웃</Text>
+                  <Text style={styles.loginText}>Logout</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <TouchableOpacity style={styles.loginButton} onPress={() => setLoginModalVisible(true)}>
-                <Text style={styles.loginText}>로그인</Text>
+                <Text style={styles.loginText}>Login</Text>
               </TouchableOpacity>
             )}
             {/* 톱니바퀴 모양의 설정 버튼을 추가합니다. */}
@@ -267,17 +246,30 @@ return (
         </View>
 
         <View style={styles.main}>
-          {/* ★★★ 1 & 2. 환영 메시지와 소식 창을 삭제했습니다. ★★★ */}
-          
-          <View style={styles.modeContainer}>
-            <MedievalButton onPress={() => router.push('/image_gen')}>
-              이미지 생성
-            </MedievalButton>
-            <MedievalButton onPress={() => router.push('/game/story')}>
-              스토리 모드
-            </MedievalButton>
-          </View>
+        {/* user 상태가 'null' 또는 'undefined'일 때 (즉, 로그인하지 않았을 때)만 이 안의 내용을 보여줍니다. */}
+          {!user && (
+            <> 
+              {/* ★★★ 2. 기존 Text를 TypingText 컴포넌트로 교체합니다! ★★★ */}
+              <TypingText 
+                text=" 전전래동화 기반 TRPG 세계에 오신 것을 환영합니다 " 
+                style={[styles.title, { fontSize: 22 * fontSizeMultiplier }]}
+                speed={70} // 타이핑 속도를 조절할 수 있습니다 (숫자가 작을수록 빠름)
+              />
+              {/* <TypingText 
+                text="We offer a role-playing game (TRPG) based on Korean old tales. 
+                Choose a story with your friends and embark on an adventure!!" 
+                style={[styles.description, { fontSize: 32 * fontSizeMultiplier, lineHeight: 24 * fontSizeMultiplier }]}
+                speed={30}
+              />*/}
 
+              <View style={styles.newsContainer}>
+                <Text style={styles.newsTitle}>✨ 로그인하여 모험을 시작하세요!✨ </Text>
+                {/*<Text style={[styles.newsText, { fontSize: 14 * fontSizeMultiplier }]}>- '멀티모드'에 신규 시나리오가 추가되었습니다!</Text>*/}
+              </View>
+            </>
+          )}
+          
+          {/* 멀티 모드 버튼은 로그인했을 때만 보입니다. */}
           {user && (
             <View style={styles.modeContainer}>
               <MedievalButton onPress={() => router.push('/game/single')}>
@@ -289,31 +281,56 @@ return (
 
           {user && (
             <View style={styles.modeContainer}>
+              <MedievalButton onPress={() => router.push('/game/story')}>
+                스토리 모드
+              </MedievalButton>
               <MedievalButton onPress={() => router.push('/game/multi')}>
                 멀티 모드
               </MedievalButton>
-              {/* 옵션 버튼은 헤더로 이동했으므로 여기서 삭제합니다. */}
             </View>
           )}
         </View>
 
       {/* 로그인 모달 */}
-      <Modal visible={loginModalVisible} animationType="none" transparent={true} onRequestClose={() => setLoginModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <TouchableOpacity style={styles.closeIcon} onPress={() => setLoginModalVisible(false)}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>로그인</Text>
-            <TouchableOpacity style={[styles.socialButton, { backgroundColor: '#1877F2' }]} onPress={() => googlePromptAsync()}>
-              <Text style={styles.socialText}>구글로 로그인</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.socialButton, { backgroundColor: '#FEE500' }]} onPress={() => kakaoPromptAsync()}>
-              <Text style={[styles.socialText, { color: '#000' }]}>카카오로 로그인</Text>
-            </TouchableOpacity>
+       <Modal visible={loginModalVisible} animationType="fade" transparent={true} onRequestClose={() => setLoginModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalBox}>
+              <TouchableOpacity style={styles.closeIcon} onPress={() => setLoginModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#aaa" />
+              </TouchableOpacity>
+              
+              <Text style={styles.modalTitle}>로그인</Text>
+              
+              {/* Google 로그인 버튼 */}
+              <TouchableOpacity
+                style={styles.socialLoginButton}
+                onPress={() => googlePromptAsync()}
+              >
+                {/* 아이콘을 담을 View */}
+                <View style={styles.socialIconContainer}>
+                  <Ionicons name="logo-google" size={24} color="#fff" />
+                </View>
+                {/* 텍스트 */}
+                <Text style={styles.socialButtonText}>Google로 로그인</Text>
+              </TouchableOpacity>
+              
+              {/* Kakao 로그인 버튼 */}
+              <TouchableOpacity
+                style={[styles.socialLoginButton, styles.kakaoButton]}
+                onPress={() => kakaoPromptAsync()}
+              >
+                {/* 아이콘을 담을 View */}
+                <View style={[styles.socialIconContainer, styles.kakaoIconContainer]}>
+                  {/* 카카오 로고는 아이콘 폰트에 없으므로, 텍스트로 'K'를 표현합니다. */}
+                  <Text style={styles.kakaoIcon}>K</Text>
+                </View>
+                {/* 텍스트 */}
+                <Text style={[styles.socialButtonText, styles.kakaoButtonText]}>Kakao로 로그인</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+
 
       {/* 4. 옵션 모달 UI 구현 */}
       <Modal visible={optionsModalVisible} animationType="fade" transparent={true} onRequestClose={() => setOptionsModalVisible(false)}>
@@ -373,18 +390,18 @@ return (
 }
 
 const styles = StyleSheet.create({
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  container: { 
-    flex: 1,
-  },
+  // --- 기본 레이아웃 ---
+  backgroundImage: { flex: 1, width: '100%', height: '100%' },
+  container: { flex: 1, paddingTop: 40 },
+  main: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#fff', fontSize: 18 },
+  vt323Font: {fontFamily: 'VT323'},
+
 header: {
     width: '100%',
     paddingHorizontal: 20,
-    paddingVertical: 10, // 패딩 약간 조절
+    paddingVertical: 10, 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -398,12 +415,6 @@ header: {
   },
   settingsButton: {
     padding: 5,
-  },
-  main: { 
-    flex: 1, 
-    justifyContent: 'center', // 환영 메시지가 사라졌으므로, 버튼들을 중앙에 위치시킵니다.
-    alignItems: 'center', 
-    paddingHorizontal: 30 
   },
   logo: { fontSize: 20, fontWeight: 'bold', color: '#E2C044' },
   loginButton: {
@@ -429,251 +440,85 @@ header: {
     backgroundColor: '#DC2626',
     borderRadius: 8,
   },
-    modeContainer: {
-    flexDirection: 'column',
-    marginTop: 30,
-    gap: 20,
-    alignItems: 'center',
-  },
-  modeButton: {
-    width: 200,
-    alignItems: 'center',
-    paddingVertical: 15,
-    borderRadius: 10,
-    backgroundColor: '#E2C044',
-  },
-  modeText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0B1021',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalBox: {
-    width: '80%',
-    backgroundColor: '#2B355E',
-    padding: 24,
-    borderRadius: 16,
-    alignItems: 'center',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 20,
-  },
-  socialButton: {
-    width: '100%',
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  socialText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  closeIcon: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    padding: 6,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#fff',
-    fontSize: 18,
-  },
-  starContainer: { position: 'absolute', width: '100%', height: '100%', zIndex: 0 },
-  star: { position: 'absolute', width: 2, height: 2, backgroundColor: 'white', borderRadius: 1, },
-  newsContainer: { width: '100%', backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: 15, borderRadius: 10, marginTop: 30, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
-  newsTitle: { color: '#E2C044', fontWeight: 'bold', fontSize: 16, marginBottom: 5 },
-  newsText: { color: '#D1C4E9' },
-  optionSection: { width: '100%', marginBottom: 15, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 15, },
-  optionLabel: { color: '#D1C4E9', fontSize: 16, marginBottom: 15, fontWeight: '600' },
-  optionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 5 },
-  optionText: { color: '#fff', fontSize: 16 },
-  colorOptionsContainer: { flexDirection: 'row', justifyContent: 'space-around', width: '100%' },
-  colorOption: { width: 40, height: 40, borderRadius: 20, borderWidth: 3 },
-  fontSizeSelector: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8 },
-  fontSizeButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
-  fontSizeButtonActive: { backgroundColor: '#7C3AED' },
-  fontSizeButtonText: { color: '#fff', fontWeight: '600' },
 
- medievalButtonWrapper: {
-    minWidth: 240,
-    height: 60,
-    marginVertical: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    // 그림자는 iOS에서만 작동합니다.
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    // Android에서는 elevation으로 비슷한 효과를 냅니다.
-    elevation: 8,
-  },
-  medievalButtonFrame: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: '#654321', // 어두운 나무색
-    borderRadius: 12,
-    borderWidth: 3,
-    borderColor: '#2F1B14', // 더 어두운 테두리
-  },
-  medievalButtonCore: {
-    position: 'absolute',
-    top: 4, left: 4, right: 4, bottom: 4,
-    backgroundColor: '#8B4513', // 중간 나무색
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#CD853F', // 밝은 테두리 하이라이트
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  medievalButtonText: {
-    color: '#F4E4BC', // 밝은 양피지 색
-    fontSize: 18,
-    fontWeight: '600',
-  },
+  // --- 메인 콘텐츠 (환영 메시지 & 소식 창) ---
+  title: { fontSize: 22, fontWeight: 'bold', color: '#F4E1D2', textAlign: 'center', marginBottom: 20 },
+  description: { fontSize: 16, color: '#D1C4E9', textAlign: 'center', lineHeight: 24 },
+  newsContainer: { width: '30%', backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: 15, borderRadius: 10, marginTop: 30, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
+  newsTitle: { color: '#E2C044', fontWeight: 'bold', fontSize: 16, textAlign: 'center', marginBottom: 5 },
+  newsText: { color: '#D1C4E9' , textAlign: 'center' },
+  modeContainer: { flexDirection: 'column', marginTop: 30, gap: 20, alignItems: 'center' },
 
+  // ★★★ 여기가 추가된 부분입니다! (중세 버튼 전체) ★★★
+  // --- 중세 버튼 스타일 ---
+  buttonContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 12,
+  },
+  mediumButton: { width: 280, height: 70 },
+  largeButton: { width: 320, height: 80 },
   outerBorder: {
     position: 'absolute',
-    backgroundColor: '#654321',
-    borderRadius: 12,
-    top: -8,
-    left: -8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    borderWidth: 3,
-    borderColor: '#2F1B14',
-  },
-  
-  innerBorder: {
-    position: 'absolute',
-    backgroundColor: 'transparent',
-    borderRadius: 8,
-    top: -4,
-    left: -4,
+    width: '100%', height: '100%',
+    backgroundColor: '#4a2c1a', // 아주 어두운 나무색
+    borderRadius: 18,
     borderWidth: 2,
-    borderColor: '#2F1B14',
-    shadowColor: '#CD853F',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.8,
-    shadowRadius: 0,
-    elevation: 2,
-  },
-  
-  chainLeft: {
+    borderColor: '#2a180e',
+  },  
+ innerBorder: {
     position: 'absolute',
-    left: 15,
-    width: 8,
-    height: 20,
-    backgroundColor: '#8B4513',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#2F1B14',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 3,
+    width: '95%', height: '90%',
+    backgroundColor: '#8B4513', // 중간 나무색
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#c88a5a', // 밝은 하이라이트
   },
-  
-  chainRight: {
-    position: 'absolute',
-    right: 15,
-    width: 8,
-    height: 20,
-    backgroundColor: '#8B4513',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#2F1B14',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  
-  chainRing: {
-    position: 'absolute',
-    top: -8,
-    left: -2,
-    width: 12,
-    height: 8,
-    backgroundColor: '#CD853F',
-    borderRadius: 6,
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    borderWidth: 1,
-    borderColor: '#2F1B14',
-  },
-  
   buttonBody: {
-    backgroundColor: '#8B4513',
-    borderRadius: 8,
+    width: '90%', height: '80%',
+    backgroundColor: '#6a381a', // 안쪽 어두운 판
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#2F1B14',
-    shadowOffset: {
-      width: 2,
-      height: 2,
-    },
-    shadowOpacity: 1,
-    shadowRadius: 0,
+    // 그림자 효과
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 2,
     elevation: 5,
-    // 나무 질감을 위한 그라데이션 효과 (React Native에서는 LinearGradient 컴포넌트 사용 권장)
-    borderWidth: 1,
-    borderColor: '#654321',
   },
-  
   pressed: {
-    backgroundColor: '#654321',
-    shadowOffset: {
-      width: 1,
-      height: 1,
-    },
-    elevation: 2,
+    backgroundColor: '#4a2c1a', // 눌렸을 때 더 어두워짐
   },
-  
   buttonText: {
-    color: '#F4E4BC',
-    fontWeight: '600',
-    textAlign: 'center',
-    letterSpacing: 1,
-    textShadowColor: '#2F1B14',
+    color: '#f0e6d2', // 밝은 양피지 색
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 0,
-    // React Native에서는 다중 텍스트 그림자가 제한적이므로 단일 그림자 사용
+    textShadowRadius: 2,
+  },
+  mediumButtonText: { fontSize: 20 },
+  largeButtonText: { fontSize: 24 },
+  
+  // 체인 장식 스타일
+  chain: {
+    position: 'absolute',
+    width: 8,
+    height: 16,
+    backgroundColor: '#4a2c1a',
+    borderWidth: 1,
+    borderColor: '#2a180e',
+  },
+  chainTopLeft: { top: -8, left: 30, borderTopLeftRadius: 4, borderTopRightRadius: 4 },
+  chainTopRight: { top: -8, right: 30, borderTopLeftRadius: 4, borderTopRightRadius: 4 },
+  chainBottomLeft: { bottom: -8, left: 30, borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
+  chainBottomRight: { bottom: -8, right: 30, borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
+  chainPin: {
+    position: 'absolute',
+    top: -4, left: 0, right: 0,
+    height: 8,
+    backgroundColor: '#c88a5a',
+    borderRadius: 4,
   },
   
   disabled: {
@@ -687,4 +532,36 @@ header: {
   disabledText: {
     color: '#A0A0A0',
   },
+
+  // --- 모달 공통 ---
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  modalBox: { width: '85%', maxWidth: 400, backgroundColor: '#2a2d47', borderRadius: 16, padding: 24, alignItems: 'center', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, position: 'relative' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
+  closeIcon: { position: 'absolute', top: 12, right: 12, padding: 6 },
+
+  // --- 로그인 모달 (아이콘 포함) ---
+  loginModalBox: { width: '85%', maxWidth: 400, backgroundColor: '#2a2d47', borderRadius: 16, padding: 24, alignItems: 'center', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, position: 'relative' },
+  socialLoginButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4285f4', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 12, marginBottom: 16, width: '100%', elevation: 2 },
+  kakaoButton: { backgroundColor: '#fee500' },
+  socialIconContainer: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  kakaoIconContainer: { backgroundColor: 'transparent' },
+  kakaoIcon: { fontSize: 20, fontWeight: 'bold', color: '#3c1e1e' },
+  socialButtonText: { fontSize: 16, fontWeight: '600', color: '#fff', flex: 1, textAlign: 'center' },
+  kakaoButtonText: { color: '#3c1e1e' },
+
+  // --- 옵션 모달 ---
+  optionSection: { width: '100%', marginBottom: 15, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 15 },
+  optionLabel: { color: '#D1C4E9', fontSize: 16, marginBottom: 15, fontWeight: '600' },
+  optionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 5 },
+  optionText: { color: '#fff', fontSize: 16 },
+  colorOptionsContainer: { flexDirection: 'row', justifyContent: 'space-around', width: '100%' },
+  colorOption: { width: 40, height: 40, borderRadius: 20, borderWidth: 3 },
+  fontSizeSelector: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8 },
+  fontSizeButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+  fontSizeButtonActive: { backgroundColor: '#7C3AED' },
+  fontSizeButtonText: { color: '#fff', fontWeight: '600' },
+
+    // --- 배경 효과 ---
+  starContainer: { position: 'absolute', width: '100%', height: '100%', zIndex: 0 },
+  star: { position: 'absolute', width: 2, height: 2, backgroundColor: 'white', borderRadius: 1 },
 });
