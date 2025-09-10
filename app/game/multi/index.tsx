@@ -13,18 +13,18 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-interface Room {
+interface GameRoom {
   id: number;
   name: string;
   description: string;
-  participants: any[];
+  selected_by_room: any[];
   max_players: number;
-  status: 'waiting' | 'in_game';
+  status: 'waiting' | 'play';
   room_type: 'public' | 'private';
 }
 
 export default function MultiModeLobby() {
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [rooms, setRooms] = useState<GameRoom[]>([]);
   const [createRoomModalVisible, setCreateRoomModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,7 +75,7 @@ export default function MultiModeLobby() {
       params.append('page', pageToFetch.toString());
       if (searchQuery) params.append('search', searchQuery);
       if (showAvailableOnly) params.append('status', 'waiting');
-      const res = await api.get<{ results: Room[], next: string | null }>(`/game/?${params.toString()}`);
+      const res = await api.get<{ results: GameRoom[], next: string | null }>(`/game/?${params.toString()}`);
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       if (isRefresh) {
         setRooms(res.data.results);
@@ -143,14 +143,14 @@ export default function MultiModeLobby() {
     fetchRooms(true);
   };
   
-  const renderRoomStatus = (status: 'waiting' | 'in_game') => {
+  const renderRoomStatus = (status: 'waiting' | 'play') => {
     // ... (이전과 동일)
     const color = status === 'waiting' ? '#4CAF50' : '#F44336';
     const text = status === 'waiting' ? '대기중' : '게임중';
     return <View style={[styles.statusIndicator, { backgroundColor: color }]}><Text style={styles.statusText}>{text}</Text></View>;
   };
   
-  const renderRoomItem = ({ item }: { item: Room }) => (
+  const renderRoomItem = ({ item }: { item: GameRoom }) => (
     <TouchableOpacity style={styles.roomCard} onPress={() => router.push({ pathname: "/game/multi/room/[id]", params: { id: item.id.toString() } })}>
       <View style={styles.roomCardHeader}>
         {renderRoomStatus(item.status)}
@@ -171,7 +171,7 @@ export default function MultiModeLobby() {
       <Text style={styles.roomDescription} numberOfLines={2}>{item.description || "설명 없음"}</Text>
       <View style={styles.roomCardFooter}>
         <Ionicons name="people" size={16} color="#9CA3AF" />
-        <Text style={styles.roomParticipants}>{item.participants?.length || 0} / {item.max_players} 명</Text>
+        <Text style={styles.roomParticipants}>{item.selected_by_room?.length || 0} / {item.max_players} 명</Text>
       </View>
     </TouchableOpacity>
   );

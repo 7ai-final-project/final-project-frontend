@@ -30,6 +30,13 @@ const ChatBox: React.FC<ChatBoxProps> = ({ roomId, chatSocketRef }) => {
   const { user } = useAuth();
   const username = user?.name || "me"; // user 없으면 기본값 me
   const scrollViewRef = useRef<ScrollView | null>(null);
+  const formatTimestamp = (isoString: string): string => {
+    if (!isoString) return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return new Date(isoString).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   // WebSocket 연결
   useEffect(() => {
@@ -53,18 +60,24 @@ const ChatBox: React.FC<ChatBoxProps> = ({ roomId, chatSocketRef }) => {
             const data = JSON.parse(e.data);
             console.log("📨 받은 메시지:", data);
 
-            const sender = data.username || data.user || "system";
-            const text = data.message || "";
-
-            if (text) {
-              const now = new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              });
-              setMessages((prev) => [
-                ...prev,
-                { username: sender, message: text, timestamp: now },
-              ]);
+            if (data.type === 'history') {
+              const historyMessages = data.messages.map((msg: any) => ({
+                username: msg.user || "system",
+                message: msg.message || "",
+                timestamp: formatTimestamp(msg.created_at),
+              }));
+              setMessages(historyMessages);
+            } 
+            else if (data.type === 'new_message') {
+              const newMessageData = data.message;
+              if (newMessageData && newMessageData.message) {
+                const newMessage = {
+                  username: newMessageData.user || "system",
+                  message: newMessageData.message,
+                  timestamp: formatTimestamp(newMessageData.created_at),
+                };
+                setMessages((prevMessages) => [...prevMessages, newMessage]);
+              }
             }
           } catch (err) {
             console.error("⚠️ 메시지 파싱 오류:", err);
