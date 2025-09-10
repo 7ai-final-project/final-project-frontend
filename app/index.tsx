@@ -5,7 +5,14 @@ import { router } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 import { useKakaoAuth } from '../hooks/useKakaoAuth';
+import { useFonts } from 'expo-font';
 
+// 텍스트가 영어인지 확인하는 헬퍼 함수를 만듭니다. 
+ const isEnglish = (text: string): boolean => {
+// 정규식을 사용하여 문자열에 영어 알파벳이 포함되어 있는지 확인합니다.
+ const englishRegex = /[a-zA-Z]/;
+ return englishRegex.test(text);
+ };
 
 const StarryBackground = () => {
   const stars = useRef([...Array(30)].map(() => ({
@@ -86,6 +93,7 @@ const MedievalButton: React.FC<MedievalButtonProps> = ({
     }
   };
 
+
   // getButtonSize 함수를 제거하고, 스타일에서 직접 크기를 관리합니다.
   const buttonSizeStyle = size === 'large' ? styles.largeButton : styles.mediumButton;
   const textSizeStyle = size === 'large' ? styles.largeButtonText : styles.mediumButtonText;
@@ -109,6 +117,46 @@ const MedievalButton: React.FC<MedievalButtonProps> = ({
         <View style={[styles.chain, styles.chainBottomRight]}><View style={styles.chainPin} /></View>
       </Animated.View>
     </Pressable>
+  );
+};
+
+interface TypingTextProps {
+  text: string;
+  speed?: number; // 타이핑 속도 (ms)
+  style?: TextStyle | TextStyle[];  // 텍스트 스타일을 적용하기 위한 prop
+}
+
+const TypingText: React.FC<TypingTextProps> = ({ text, speed = 50, style }) => {
+  const [displayedText, setDisplayedText] = useState('');
+  const [isTyping, setIsTyping] = useState(true);
+
+  useEffect(() => {
+    // 컴포넌트가 나타날 때 타이핑을 시작합니다.
+    setDisplayedText(''); // 텍스트 초기화
+    setIsTyping(true);
+
+    let i = 0;
+    const typingInterval = setInterval(() => {
+      if (i < text.length) {
+        setDisplayedText(prev => prev + text.charAt(i));
+        i++;
+      } else {
+        clearInterval(typingInterval);
+        setIsTyping(false); // 타이핑이 끝나면 isTyping을 false로 설정
+      }
+    }, speed);
+
+    // 컴포넌트가 사라질 때 인터벌을 정리합니다 (메모리 누수 방지)
+    return () => clearInterval(typingInterval);
+  }, [text, speed]); // text나 speed prop이 바뀌면 효과를 다시 시작합니다.
+
+  return (
+    // Text 컴포넌트에 전달받은 스타일을 적용합니다.
+    <Text style={style}>
+      {displayedText}
+      {/* 타이핑 중일 때만 깜빡이는 커서를 보여줍니다. */}
+      {isTyping && <Text style={{ opacity: 0.5 }}>|</Text>}
+    </Text>
   );
 };
 
@@ -182,12 +230,12 @@ return (
               <View style={styles.loggedInBox}>
                 <Text style={[styles.loggedInText, { fontSize: 16 * fontSizeMultiplier }]}>{user.name}님</Text>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                  <Text style={styles.loginText}>로그아웃</Text>
+                  <Text style={styles.loginText}>Logout</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <TouchableOpacity style={styles.loginButton} onPress={() => setLoginModalVisible(true)}>
-                <Text style={styles.loginText}>로그인</Text>
+                <Text style={styles.loginText}>Login</Text>
               </TouchableOpacity>
             )}
             {/* 톱니바퀴 모양의 설정 버튼을 추가합니다. */}
@@ -200,33 +248,33 @@ return (
         <View style={styles.main}>
         {/* user 상태가 'null' 또는 'undefined'일 때 (즉, 로그인하지 않았을 때)만 이 안의 내용을 보여줍니다. */}
           {!user && (
-            // 여러 컴포넌트를 하나로 묶기 위해 React Fragment(<>)를 사용합니다.
             <> 
-              <Text style={[styles.title, { fontSize: 22 * fontSizeMultiplier }]}>✨ 전래동화 기반 TRPG 세계에 오신 것을 환영합니다 ✨</Text>
-              <Text style={[styles.description, { fontSize: 16 * fontSizeMultiplier, lineHeight: 24 * fontSizeMultiplier }]}>
-                다양한 전래동화를 바탕으로 한 롤플레잉 게임(TRPG)을 제공합니다. 
-                친구들과 함께 이야기를 선택하고, 모험을 떠나보세요!
-              </Text>
+              {/* ★★★ 2. 기존 Text를 TypingText 컴포넌트로 교체합니다! ★★★ */}
+              <TypingText 
+                text=" 전전래동화 기반 TRPG 세계에 오신 것을 환영합니다 " 
+                style={[styles.title, { fontSize: 22 * fontSizeMultiplier }]}
+                speed={70} // 타이핑 속도를 조절할 수 있습니다 (숫자가 작을수록 빠름)
+              />
+              {/* <TypingText 
+                text="We offer a role-playing game (TRPG) based on Korean old tales. 
+                Choose a story with your friends and embark on an adventure!!" 
+                style={[styles.description, { fontSize: 32 * fontSizeMultiplier, lineHeight: 24 * fontSizeMultiplier }]}
+                speed={30}
+              />*/}
+
               <View style={styles.newsContainer}>
-                <Text style={styles.newsTitle}>업데이트 소식 📢</Text>
-                <Text style={[styles.newsText, { fontSize: 14 * fontSizeMultiplier }]}>- '멀티모드'에 신규 시나리오가 추가되었습니다!</Text>
+                <Text style={styles.newsTitle}>✨ 로그인하여 모험을 시작하세요!✨ </Text>
+                {/*<Text style={[styles.newsText, { fontSize: 14 * fontSizeMultiplier }]}>- '멀티모드'에 신규 시나리오가 추가되었습니다!</Text>*/}
               </View>
             </>
           )}
-
-          {/* 이 아래의 버튼들은 로그인 여부와 상관없이 항상 보입니다. */}
-          <View style={styles.modeContainer}>
-            <MedievalButton onPress={() => router.push('/image_gen')}>
-              이미지 생성
-            </MedievalButton>
-            <MedievalButton onPress={() => router.push('/game/story')}>
-              스토리 모드
-            </MedievalButton>
-          </View>
-
+          
           {/* 멀티 모드 버튼은 로그인했을 때만 보입니다. */}
           {user && (
             <View style={styles.modeContainer}>
+              <MedievalButton onPress={() => router.push('/game/story')}>
+                스토리 모드
+              </MedievalButton>
               <MedievalButton onPress={() => router.push('/game/multi')}>
                 멀티 모드
               </MedievalButton>
@@ -339,11 +387,12 @@ const styles = StyleSheet.create({
   main: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { color: '#fff', fontSize: 18 },
+  vt323Font: {fontFamily: 'VT323'},
 
 header: {
     width: '100%',
     paddingHorizontal: 20,
-    paddingVertical: 10, // 패딩 약간 조절
+    paddingVertical: 10, 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -382,10 +431,11 @@ header: {
     backgroundColor: '#DC2626',
     borderRadius: 8,
   },
+
   // --- 메인 콘텐츠 (환영 메시지 & 소식 창) ---
   title: { fontSize: 22, fontWeight: 'bold', color: '#F4E1D2', textAlign: 'center', marginBottom: 20 },
   description: { fontSize: 16, color: '#D1C4E9', textAlign: 'center', lineHeight: 24 },
-  newsContainer: { width: '60%', backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: 15, borderRadius: 10, marginTop: 30, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
+  newsContainer: { width: '30%', backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: 15, borderRadius: 10, marginTop: 30, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
   newsTitle: { color: '#E2C044', fontWeight: 'bold', fontSize: 16, textAlign: 'center', marginBottom: 5 },
   newsText: { color: '#D1C4E9' , textAlign: 'center' },
   modeContainer: { flexDirection: 'column', marginTop: 30, gap: 20, alignItems: 'center' },
