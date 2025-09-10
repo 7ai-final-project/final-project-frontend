@@ -1,210 +1,286 @@
-// components/game/GameSetup.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   Image,
-  Modal,
   StyleSheet,
   ActivityIndicator,
   ImageBackground,
   ScrollView,
+  Modal,
 } from "react-native";
-import { storage } from "@/util/util";
-// [수정] API 서비스와 새로운 Character 타입을 import 합니다.
-import { fetchCharactersByTopic, Character } from "@/services/api";
+import { Character } from "@/services/api";
 import { useWebSocket } from "@/components/context/WebSocketContext";
+import { useAuth } from "@/hooks/useAuth";
 
-// --- 상수 정의 ---
-// [추가] 백엔드 서버의 기본 URL입니다. 실제 앱에서는 환경 변수로 관리하는 것이 좋습니다.
 const API_BASE_URL = "http://127.0.0.1:8000";
 
-interface GameSetupProps {
-  topic: string | string[];
-  difficulty: string | string[];
-  roomId: string | string[];
-  onStart: (character: Character) => void;
+// --- 타입 정의 ---
+interface Participant {
+  id: string;
+  username: string;
 }
 
-// --- 자식 컴포넌트들 ---
+interface SelectedRoomParticipant {
+  id: string;
+  username: string;
+  is_ready: boolean;
+  selected_character: {
+    id: string;
+    name: string;
+  } | null;
+}
 
-// [수정 없음] stats 객체를 표시하는 컴포넌트
-const CharacterStats = ({ stats }: { stats: Record<string, number> }) => (
-  <View style={styles.statsContainer}>
-    <Text style={styles.listTitle}>능력치</Text>
-    {Object.entries(stats).map(([label, value]) => (
-      <Text key={label} style={styles.statText}>
-        {label}: {value}
-      </Text>
-    ))}
-  </View>
-);
+interface GameSetupProps {
+  topic: string;
+  roomId: string;
+  characters: string;
+  participants: string;
+  isOwner: boolean;
+  onStart: (payload: {
+    myCharacter: Character;
+    aiCharacters: Character[];
+    allCharacters: Character[];
+  }) => void;
+}
 
-// [추가] skills와 items 배열을 표시하는 새로운 컴포넌트
-const CharacterSkillsAndItems = ({ skills, items }: { skills: string[]; items: string[] }) => (
-  <View style={styles.listContainer}>
-    {skills.length > 0 && (
-      <View style={styles.subListContainer}>
+// --- 자식 컴포넌트: 상세 정보 표시용 ---
+const CharacterDetails = ({ char }: { char: Character }) => (
+  <>
+    <Text style={styles.characterDescription}>{char.description}</Text>
+    <View style={styles.statsContainer}>
+        <Text style={styles.listTitle}>능력치</Text>
+      {Object.entries(char.stats).map(([stat, value]) => (
+        <Text key={stat} style={styles.statText}>
+          {stat}: {value}
+        </Text>
+      ))}
+    </View>
+    {char.skills?.length > 0 && (
+      <View style={styles.listContainer}>
         <Text style={styles.listTitle}>스킬</Text>
-        {skills.map((skill) => (
-          <Text key={skill} style={styles.listItemText}>- {skill}</Text>
-        ))}
+        {char.skills.map(skill => <Text key={skill} style={styles.listItemText}>- {skill}</Text>)}
       </View>
     )}
-    {items.length > 0 && (
-      <View style={styles.subListContainer}>
+    {char.items?.length > 0 && (
+      <View style={styles.listContainer}>
         <Text style={styles.listTitle}>아이템</Text>
-        {items.map((item) => (
-          <Text key={item} style={styles.listItemText}>- {item}</Text>
-        ))}
+        {char.items.map(item => <Text key={item} style={styles.listItemText}>- {item}</Text>)}
       </View>
     )}
-  </View>
+  </>
 );
-
 
 // --- 메인 컴포넌트 ---
-
-export default function GameSetup({ topic, difficulty, roomId, onStart }: GameSetupProps) {
-  // [수정] DB에서 캐릭터를 비동기로 가져오므로 로딩/에러 상태 추가
-  const [activeCharacters, setActiveCharacters] = useState<Character[]>([]);
-  const [isCharacterLoading, setIsCharacterLoading] = useState(true);
-  const [characterError, setCharacterError] = useState<string | null>(null);
-
-  const [username, setUsername] = useState<string>("플레이어");
-  const [selectedCharacter, setSelectedCharacter] = useState<number | null>(null);
-  const [takenCharacters, setTakenCharacters] = useState<string[]>([]);
-  const [phase, setPhase] = useState<"loading" | "character" | "loadingSteps" | "confirm">("loading");
-  const [loadingMessage, setLoadingMessage] = useState("캐릭터를 생성 중입니다...");
-  const [showCharacterModal, setShowCharacterModal] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [hasShownCharacterModal, setHasShownCharacterModal] = useState(false);
-  const [loadingImage, setLoadingImage] = useState<any>(null);
-
+export default function GameSetup({
+  topic,
+  roomId,
+  characters: initialCharacters,
+  participants: initialParticipants,
+  isOwner,
+  onStart,
+}: GameSetupProps) {
+  const { user } = useAuth();
   const { wsRef } = useWebSocket();
 
-  // [수정] topic이 바뀔 때마다 API를 호출하여 캐릭터 목록을 가져옵니다.
+  const allCharacters: Character[] = useMemo(() => {
+    try { return JSON.parse(initialCharacters); } 
+    catch (e) { console.error("캐릭터 데이터 파싱 실패:", e); return []; }
+  }, [initialCharacters]);
+  
+  // ✅ [수정] Stale한 prop 대신 실시간으로 업데이트될 참가자 state를 만듭니다.
+  const [realtimeParticipants, setRealtimeParticipants] = useState<Participant[]>(() => {
+    try { return JSON.parse(initialParticipants); }
+    catch (e) { return []; }
+  });
+
+  const [phase, setPhase] = useState<"loading" | "character_select" | "loading_steps" | "confirm">("loading");
+  const [characterSelections, setCharacterSelections] = useState<Record<string, string>>({});
+  const [loadingMessage, setLoadingMessage] = useState("다른 플레이어들의 선택을 기다리는 중...");
+  const [loadingImage, setLoadingImage] = useState<any>(null);
+  const [showCharacterModal, setShowCharacterModal] = useState(false);
+  const [remainingTime, setRemainingTime] = useState(30);
+
+  const mySelectedCharacterId = useMemo(() => 
+    Object.keys(characterSelections).find(charId => characterSelections[charId] === user?.name)
+  , [characterSelections, user]);
+  
+  const allPlayersSelected = useMemo(() => {
+    // ✅ [수정] Stale한 prop 대신 실시간 state를 사용합니다.
+    const participantCount = realtimeParticipants.length;
+    const selectionCount = Object.values(characterSelections).length;
+
+    // 참가자가 없거나, 선택한 사람 수가 참가자 수와 다르면 false
+    if (participantCount === 0 || selectionCount < participantCount) {
+        return false;
+    }
+    
+    // 모든 참가자가 선택했는지 최종 확인
+    const selectedUsernames = new Set(Object.values(characterSelections));
+    return realtimeParticipants.every(p => selectedUsernames.has(p.username));
+
+  }, [realtimeParticipants, characterSelections]);
+
   useEffect(() => {
-    const loadCharacters = async () => {
-      setIsCharacterLoading(true);
-      setCharacterError(null);
-      const currentTopic = Array.isArray(topic) ? topic[0] : topic;
-      if (!currentTopic) return;
+      const ws = wsRef?.current;
+      if (!ws) return;
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        // ✅ [로그 1] 서버로부터 받은 모든 메시지를 그대로 출력합니다.
+        console.log("--- 📥 [1] WebSocket 메시지 수신 ---", data);
 
-      try {
-        // 1. API 응답 전체를 responseData 변수에 받습니다.
-        const responseData = await fetchCharactersByTopic(currentTopic);
-        
-        // 2. responseData에서 .results 배열을 추출하여 상태에 저장합니다.
-        if (responseData && Array.isArray(responseData.results)) {
-          setActiveCharacters(responseData.results);
-        } else if (Array.isArray(responseData)) {
-          // 페이지네이션이 없는 경우를 대비한 코드
-          setActiveCharacters(responseData);
-        } else {
-          // 예상치 못한 데이터 구조일 경우 에러 처리
-          throw new Error("API 응답 형식이 올바르지 않습니다.");
+        if (data.type === "room_state") {
+          const newSelections: Record<string, string> = {};
+          const updatedParticipants: Participant[] = [];
+
+          if (Array.isArray(data.selected_by_room)) {
+              // ✅ [로그 2] 서버가 보내준 핵심 데이터인 참가자 목록을 확인합니다.
+              console.log("--- [2] 서버가 보낸 참가자 RAW 데이터 ---", data.selected_by_room);
+
+              data.selected_by_room.forEach((p: SelectedRoomParticipant) => {
+                  updatedParticipants.push({ id: p.id, username: p.username });
+                  if (p.selected_character && p.selected_character.id) {
+                      newSelections[p.selected_character.id] = p.username;
+                  }
+              });
+          }
+          
+          // ✅ [로그 3] 가공 후 state에 저장될 최종 데이터를 확인합니다.
+          console.log("--- [3] State에 반영될 참가자/선택 정보 ---", { updatedParticipants, newSelections });
+          setRealtimeParticipants(updatedParticipants);
+          setCharacterSelections(newSelections);
         }
+        
+        if (data.type === "selections_confirmed") {
+          onStart(data.payload);
+        }
+      };
 
-      } catch (error) {
-        console.error("캐릭터 정보 로딩 실패:", error);
-        setCharacterError("캐릭터를 불러오는 데 실패했습니다.");
-      } finally {
-        setIsCharacterLoading(false);
-      }
-    };
+      ws.send(JSON.stringify({ action: "request_selection_state" }));
+      return () => { if (ws) ws.onmessage = null; };
+  }, [wsRef, onStart]);
 
-    loadCharacters();
-    setSelectedCharacter(null);
-  }, [topic]);
+  useEffect(() => {
+    if (phase === "loading") {
+      const timer = setTimeout(() => {
+        setPhase("character_select");
+        setShowCharacterModal(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [phase]);
 
+  useEffect(() => {
+    if (phase !== "character_select" || allPlayersSelected) return;
+
+    if (mySelectedCharacterId) {
+      setRemainingTime(0);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setRemainingTime((prevTime) => {
+        if (prevTime <= 1) {
+          clearInterval(timer);
+          if (!Object.values(characterSelections).includes(user?.name ?? '')) {
+            const availableChars = allCharacters.filter(char => !characterSelections[char.id]);
+            if (availableChars.length > 0) {
+              const randomChar = availableChars[Math.floor(Math.random() * availableChars.length)];
+              handleCharacterSelect(randomChar.id);
+            }
+          }
+          return 0;
+        }
+        return prevTime - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [phase, mySelectedCharacterId, characterSelections, allCharacters, user, allPlayersSelected]);
+
+  useEffect(() => {
+    // allPlayersSelected가 true가 되는 순간 딱 한 번만 실행되도록 수정합니다.
+    if (allPlayersSelected) {
+      setShowCharacterModal(false);
+      setPhase("loading_steps");
+      let step = 0;
+      const steps = ["스토리를 준비하는 중입니다...", "분기점을 설정하는 중입니다...", "게임 환경을 불러오는 중입니다..."];
+      
+      const interval = setInterval(() => {
+        if (step < steps.length) {
+          setLoadingMessage(steps[step]);
+          step++;
+        } else {
+          clearInterval(interval);
+          setPhase("confirm"); // 이제 이 코드가 정상적으로 실행됩니다.
+        }
+      }, 1500);
+
+      return () => clearInterval(interval);
+    }
+  }, [allPlayersSelected]);
+  
   useEffect(() => {
     const images = [
       require("@/assets/images/game/multi_mode/background/loading.png"),
       require("@/assets/images/game/multi_mode/background/loading1.png"),
     ];
-    const randomIndex = Math.floor(Math.random() * images.length);
-    setLoadingImage(images[randomIndex]);
+    setLoadingImage(images[Math.floor(Math.random() * images.length)]);
   }, []);
 
   useEffect(() => {
-    (async () => {
-      const storedUsername = await storage.getItem("username");
-      if (storedUsername) setUsername(storedUsername);
-    })();
-  }, []);
+      console.log("--- 🤔 [4] '모두 선택했는가?' 판단 로직 실행 ---");
+      console.log("실시간 참가자 명단:", realtimeParticipants.map(p => p.username));
+      console.log("캐릭터 선택 현황:", characterSelections);
+      console.log("판단 결과 (allPlayersSelected):", allPlayersSelected);
+      
+      // ✅ [추가] 현재 phase와 isOwner 값을 직접 확인합니다.
+      console.log("현재 Phase:", phase);
+      console.log("방장 여부 (isOwner):", isOwner);
 
-  useEffect(() => {
+      console.log("-------------------------------------------------");
+  }, [realtimeParticipants, characterSelections, allPlayersSelected, phase, isOwner]);
+
+  const handleCharacterSelect = (charId: string) => {
     const ws = wsRef?.current;
-    if (!ws) return;
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "character_selected") {
-        setTakenCharacters((prev) =>
-          prev.includes(data.character) ? prev : [...prev, data.character]
-        );
-      }
-    };
-    return () => { if (ws) ws.onmessage = null; };
-  }, [wsRef]);
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const isDeselecting = mySelectedCharacterId === charId;
+    ws.send(JSON.stringify({
+      action: "select_character", 
+      characterId: isDeselecting ? null : charId,
+    }));
+  };
 
-  useEffect(() => {
-    if (phase === "loading" && !hasShownCharacterModal) {
-      const timer = setTimeout(() => {
-        setShowCharacterModal(true);
-        setPhase("character");
-        setHasShownCharacterModal(true);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [phase, hasShownCharacterModal]);
-
-  const handleCharacterSelect = () => {
-    if (selectedCharacter === null) return;
-    const chosenChar = activeCharacters[selectedCharacter].name;
-    if (takenCharacters.includes(chosenChar)) {
-      alert("이미 선택된 캐릭터입니다!");
-      return;
-    }
-
-    if (wsRef?.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "character_select", character: chosenChar }));
-    }
-
-    setShowCharacterModal(false);
-    setLoadingMessage("캐릭터 선택을 확인 중입니다...");
-    setPhase("loadingSteps");
-
-    setTimeout(() => {
-      setLoadingMessage("캐릭터 선택이 모두 완료되었습니다!");
-      setTimeout(() => {
-        let step = 0;
-        const steps = ["스토리를 준비하는 중입니다...", "분기점을 설정하는 중입니다...", "캐릭터 관계를 설정하는 중입니다...", "게임 환경을 불러오는 중입니다..."];
-        const interval = setInterval(() => {
-          setLoadingMessage(steps[step % steps.length]);
-          step++;
-          if (step > 4) {
-            clearInterval(interval);
-            setShowConfirmModal(true);
-          }
-        }, 2000);
-      }, 2000);
-    }, 2000);
+  const handleGameStart = () => {
+    const ws = wsRef?.current;
+    if (!ws || !mySelectedCharacterId) return;
+    const myChar = allCharacters.find(c => c.id === mySelectedCharacterId);
+    if (!myChar) return;
+    const playerSelectedCharIds = Object.keys(characterSelections);
+    const aiCharacters = allCharacters.filter(c => !playerSelectedCharIds.includes(c.id));
+    const finalSetupData = { myCharacter: myChar, aiCharacters, allCharacters };
+    ws.send(JSON.stringify({
+      action: "confirm_selections",
+      setup_data: finalSetupData,
+    }));
   };
 
   return (
     <View style={{ flex: 1 }}>
-      {(phase === "loading" || phase === "loadingSteps") && (
+      {(phase === "loading" || phase === "loading_steps" || phase === "confirm") && (
         <ImageBackground source={loadingImage} style={styles.loadingBackground} imageStyle={{ opacity: 0.2 }}>
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color="#E2C044" />
-            {selectedCharacter !== null && activeCharacters.length > 0 && (
-              <Text style={styles.selectedInfo}>
-                {topic}에서 당신은 {activeCharacters[selectedCharacter].name}입니다!
-              </Text>
-            )}
             <Text style={styles.loadingText}>{loadingMessage}</Text>
+            {phase === "confirm" && isOwner && (
+              <TouchableOpacity style={styles.finalStartBtn} onPress={handleGameStart}>
+                <Text style={styles.finalStartBtnText}>게임 시작!</Text>
+              </TouchableOpacity>
+            )}
+            {phase === "confirm" && !isOwner && (
+              <Text style={styles.loadingText}>방장이 게임을 시작하기를 기다리고 있습니다...</Text>
+            )}
           </View>
         </ImageBackground>
       )}
@@ -213,77 +289,51 @@ export default function GameSetup({ topic, difficulty, roomId, onStart }: GameSe
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>캐릭터 선택</Text>
-            {/* [수정] 로딩 및 에러 상태에 따른 UI 분기 처리 */}
-            {isCharacterLoading ? (
-              <View style={styles.centeredContent}>
+            {remainingTime > 0 && <Text style={styles.timerText}>{remainingTime}초 안에 캐릭터를 선택하세요!</Text>}
+            {mySelectedCharacterId && !allPlayersSelected && <Text style={styles.timerText}>선택 완료! 다른 플레이어를 기다립니다...</Text>}
+            {allCharacters.length === 0 ? (
+              <View style={{padding: 20}}>
                 <ActivityIndicator size="large" color="#E2C044" />
                 <Text style={styles.loadingText}>캐릭터 목록을 불러오는 중...</Text>
               </View>
-            ) : characterError ? (
-              <View style={styles.centeredContent}>
-                <Text style={styles.errorText}>{characterError}</Text>
-              </View>
             ) : (
-              <>
-                <ScrollView contentContainerStyle={styles.characterGridContainer} showsVerticalScrollIndicator={false}>
-                  <View style={styles.characterGrid}>
-                    {activeCharacters.map((char, idx) => (
-                      <TouchableOpacity
-                        key={char.id} // [수정] key를 index 대신 고유 id로 변경
-                        style={[
-                          styles.characterCard,
-                          selectedCharacter === idx && styles.characterSelected,
-                          takenCharacters.includes(char.name) && styles.characterTaken,
-                        ]}
-                        disabled={takenCharacters.includes(char.name)}
-                        onPress={() => setSelectedCharacter(idx)}
-                      >
-                        {/* [수정] Image source를 API에서 받은 URL로 변경 */}
-                        <Image
-                          source={char.image ? { uri: `${API_BASE_URL}${char.image}` } : require("@/assets/images/game/multi_mode/character/knight.png")}
-                          style={styles.characterImage}
-                          resizeMode="contain"
-                        />
-                        <Text style={styles.characterName}>{char.name}</Text>
-                        <Text style={styles.characterDescription}>{char.description}</Text>
-                        
-                        {/* [수정] stats, skills, items 데이터를 각각의 컴포넌트로 표시 */}
-                        <CharacterStats stats={char.stats} />
-                        <CharacterSkillsAndItems skills={char.skills} items={char.items} />
-
-                        {takenCharacters.includes(char.name) && (
-                          <View style={styles.takenOverlay}>
-                            <Text style={styles.takenText}>선택됨</Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </ScrollView>
-                <TouchableOpacity
-                  style={[styles.selectBtn, { opacity: selectedCharacter !== null ? 1 : 0.5 }]}
-                  disabled={selectedCharacter === null}
-                  onPress={handleCharacterSelect}
-                >
-                  <Text style={styles.selectBtnText}>선택</Text>
-                </TouchableOpacity>
-              </>
+              <ScrollView contentContainerStyle={styles.characterGridContainer} showsVerticalScrollIndicator={false}>
+                <View style={styles.characterGrid}>
+                {allCharacters.map((char) => {
+                  const selectorName = characterSelections[char.id];
+                  const isSelectedByMe = selectorName === user?.name;
+                  const isTakenByOther = !!(selectorName && !isSelectedByMe);
+                  const hasMadeMyChoice = !!mySelectedCharacterId;
+                  return (
+                    <TouchableOpacity
+                      key={char.id}
+                      style={[
+                        styles.characterCard,
+                        isSelectedByMe && styles.characterSelected,
+                        isTakenByOther && styles.characterTaken,
+                        (hasMadeMyChoice && !isSelectedByMe) && styles.characterDisabled,
+                      ]}
+                      disabled={isTakenByOther || (hasMadeMyChoice && !isSelectedByMe)}
+                      onPress={() => handleCharacterSelect(char.id)}
+                    >
+                      <Image
+                        source={char.image ? { uri: `${API_BASE_URL}${char.image}` } : require("@/assets/images/game/multi_mode/character/knight.png")}
+                        style={styles.characterImage}
+                        resizeMode="contain"
+                      />
+                      <Text style={styles.characterName}>{char.name}</Text>
+                      <CharacterDetails char={char} />
+                      {(isSelectedByMe || isTakenByOther) && (
+                      <View style={styles.takenOverlay}>
+                        <Text style={styles.takenText}>{selectorName}</Text>
+                      </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+                </View>
+              </ScrollView>
             )}
-          </View>
-        </View>
-      </Modal>
-
-      <Modal transparent visible={showConfirmModal} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>게임 준비가 모두 완료되었습니다. 시작하시겠습니까?</Text>
-            <TouchableOpacity style={styles.selectBtn} onPress={() => {
-              if (selectedCharacter !== null) {
-                onStart(activeCharacters[selectedCharacter]);
-              }
-            }}>
-              <Text style={styles.selectBtnText}>확인</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -291,33 +341,45 @@ export default function GameSetup({ topic, difficulty, roomId, onStart }: GameSe
   );
 }
 
-// [수정] 새로운 컴포넌트들을 위한 스타일 추가
 const styles = StyleSheet.create({
   loadingBackground: { flex: 1, width: "100%", justifyContent: "center", alignItems: "center" },
-  loadingBox: { alignItems: "center", justifyContent: "center" },
-  loadingText: { marginTop: 16, color: "#fff", fontSize: 16 },
-  selectedInfo: { marginTop: 12, color: "#E2C044", fontSize: 16, fontWeight: "bold", textAlign: "center" },
-  modalOverlay: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.6)" },
-  modalBox: { width: "90%", maxHeight: "80%", backgroundColor: "#222", borderRadius: 12, padding: 20, alignItems: "center" },
-  modalTitle: { fontSize: 20, color: "#fff", marginBottom: 16, textAlign: "center", fontWeight: "bold" },
-  centeredContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { color: 'red', fontSize: 16 },
+  loadingBox: { alignItems: "center", justifyContent: "center", padding: 20 },
+  loadingText: { marginTop: 16, color: "#fff", fontSize: 18, fontWeight: "600", textAlign: 'center' },
+  finalStartBtn: { marginTop: 30, backgroundColor: "#4CAF50", paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30 },
+  finalStartBtnText: { color: "#fff", fontSize: 20, fontWeight: "bold" },
+  modalOverlay: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.8)" },
+  modalBox: { width: "85%", maxHeight: "85%", backgroundColor: "#1E293B", borderRadius: 16, padding: 20, alignItems: "center", borderWidth: 1, borderColor: '#334155' },
+  modalTitle: { fontSize: 24, color: "#E2C044", marginBottom: 8, fontWeight: "bold" },
+  timerText: { fontSize: 16, color: "#A0A0A0", marginBottom: 16, fontStyle: 'italic' },
   characterGridContainer: { paddingBottom: 16 },
-  characterGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around" },
-  characterCard: { width: "45%", backgroundColor: "#333", borderRadius: 10, padding: 12, marginVertical: 8, alignItems: "center", borderWidth: 2, borderColor: 'transparent' },
+  characterGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around",},
+  characterCard: { 
+    width: "45%", 
+    backgroundColor: "#334155", 
+    borderRadius: 12, 
+    padding: 12, 
+    marginVertical: 8, 
+    alignItems: "center", 
+    borderWidth: 3, 
+    borderColor: 'transparent',
+  },
   characterSelected: { borderColor: "#4CAF50", transform: [{ scale: 1.05 }] },
-  characterTaken: { backgroundColor: "#555", opacity: 0.7 },
-  takenOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', borderRadius: 8 },
-  takenText: { color: "red", fontWeight: "bold", fontSize: 18 },
-  characterImage: { width: 80, height: 80, marginBottom: 8, borderRadius: 40 },
-  characterName: { fontSize: 16, fontWeight: "bold", color: "#fff", marginBottom: 6, textAlign: "center" },
-  characterDescription: { fontSize: 13, color: "#ccc", textAlign: "center", marginBottom: 10 },
-  statsContainer: { alignItems: 'flex-start', width: '100%', marginTop: 4, borderTopWidth: 1, borderTopColor: '#444', paddingTop: 8 },
-  statText: { color: "#ddd", fontSize: 14, lineHeight: 20 },
-  listContainer: { width: '100%', marginTop: 10 },
-  subListContainer: { alignItems: 'flex-start', width: '100%', marginTop: 6 },
-  listTitle: { fontSize: 14, fontWeight: 'bold', color: '#E2C044', marginBottom: 4 },
-  listItemText: { color: "#ddd", fontSize: 13, lineHeight: 18 },
-  selectBtn: { backgroundColor: "#7C3AED", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, marginTop: 16 },
-  selectBtnText: { color: "#fff", fontWeight: "bold" },
+  characterTaken: { opacity: 0.5 },
+  characterDisabled: { opacity: 0.4 },
+  takenOverlay: { 
+    ...StyleSheet.absoluteFillObject, 
+    backgroundColor: 'rgba(20,20,20, 0.7)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderRadius: 8 
+  },
+  takenText: { color: "#E2C044", fontWeight: "bold", fontSize: 20 },
+  characterImage: { width: 120, height: 120, marginBottom: 8, borderRadius: 8 },
+  characterName: { fontSize: 18, fontWeight: "bold", color: "#fff", textAlign: "center", marginBottom: 6 },
+  characterDescription: { fontSize: 13, color: '#A0A0A0', textAlign: 'center', marginBottom: 8 },
+  statsContainer: { width: '100%', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#4A5568', alignItems: 'center' },
+  statText: { color: '#CBD5E1', fontSize: 12, textAlign: 'center', lineHeight: 16 },
+  listContainer: { width: '100%', marginTop: 10, alignItems: 'center' },
+  listTitle: { fontSize: 13, fontWeight: 'bold', color: '#E2C044', marginBottom: 4 },
+  listItemText: { color: "#CBD5E1", fontSize: 12, lineHeight: 16 },
 });

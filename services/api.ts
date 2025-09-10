@@ -60,11 +60,21 @@ export const saveRoomOptions = (
   return api.post(`game/${roomId}/options/`, options);
 };
 
-export const fetchCharactersByTopic = async (topic: string): Promise<PaginatedCharacterResponse> => {
-  const response = await api.get("game/characters/", {
-    params: { topic },
-  });
-  return response.data;
+export const fetchCharactersByTopic = async (topic: string): Promise<Character[]> => {
+  let allCharacters: Character[] = [];
+  let url: string | null = `game/characters/?topic=${encodeURIComponent(topic)}`;
+
+  while (url) {
+    const response = await api.get(url);
+    const data: PaginatedCharacterResponse = response.data;
+
+    if (data.results) {
+      allCharacters = [...allCharacters, ...data.results];
+    }
+    url = data.next;
+  }
+
+  return allCharacters;
 };
 
 export default api;

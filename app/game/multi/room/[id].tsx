@@ -9,7 +9,6 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
-  Pressable,
   TextInput,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -18,13 +17,14 @@ import {
   fetchRoomDetail,
   joinRoom,
   getWebSocketNonce,
-  // API: 새로 추가된 API 호출 함수들을 import 합니다.
   fetchScenarios,
   fetchDifficulties,
   fetchModes,
   saveRoomOptions,
   fetchGenres,
   leaveRoom,
+  Character,
+  fetchCharactersByTopic,
 } from "../../../../services/api";
 import ChatBox from "../../../../components/chat/ChatBox";
 import { useWebSocket } from "@//components/context/WebSocketContext";
@@ -49,33 +49,23 @@ interface RoomType {
   room_type: 'public' | 'private';
 }
 
-// API: 서버에서 받아올 게임 옵션 데이터 타입을 정의합니다.
-interface Scenario {
-  id: string;
-  title: string;
-  description: string;
-}
-interface Difficulty {
-  id: string;
-  name: string;
-}
-interface Mode {
-  id: string;
-  name: string;
-}
-interface Genre {
-  id: string;
-  name: string;
-}
-
+interface Scenario { id: string; title: string; description: string; }
+interface Difficulty { id: string; name: string; }
+interface Mode { id: string; name: string; }
+interface Genre { id: string; name: string; }
 
 // --- 컴포넌트 시작 ---
 export default function RoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const roomId = id as string;
 
-  // --- 상태 변수 선언 ---
+  // --- 상태 및 Ref 선언 ---
   const [room, setRoom] = useState<RoomType | null>(null);
+  const roomRef = useRef<RoomType | null>(null);
+  
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const charactersRef = useRef<Character[]>([]);
+
   const [wsMsg, setWsMsg] = useState<string>("");
   const { wsRef } = useWebSocket();
   const { user, loading: authLoading } = useAuth();
@@ -89,108 +79,56 @@ export default function RoomScreen() {
   const [isChatVisible, setIsChatVisible] = useState<boolean>(false);
   const [isLeaveModalVisible, setIsLeaveModalVisible] = useState(false);
 
-  const chatSocketRef = useRef<WebSocket | null>(null);
+  // ✅ [오류 수정 1] 타입을 NodeJS.Timeout에서 number로 변경
   const countdownIntervalRef = useRef<number | null>(null);
+  const isStartingRef = useRef(false);
+  const chatSocketRef = useRef<WebSocket | null>(null);
 
-  // State: 하드코딩된 배열을 제거하고, API로부터 받아올 목록과 유저가 선택한 ID를 저장할 state를 선언합니다.
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [difficulties, setDifficulties] = useState<Difficulty[]>([]);
   const [modes, setModes] = useState<Mode[]>([]);
-  const [genres, setGenres] = useState<Genre[]>([]); // Genre 인터페이스도 추가해야 함
+  const [genres, setGenres] = useState<Genre[]>([]);
 
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   const [selectedDifficultyId, setSelectedDifficultyId] = useState<string | null>(null);
   const [selectedModeId, setSelectedModeId] = useState<string | null>(null);
   const [selectedGenreId, setSelectedGenreId] = useState<string | null>(null);
 
-  // ✅ 비밀방 입장 처리를 위한 별도 함수 추가
-    const handleJoinPrivateRoom = async () => {
-      if (!passwordInput) {
-        Alert.alert("경고", "비밀번호를 입력해주세요.");
-        return;
-      }
-      
-      try {
-        // 비밀번호를 포함하여 API 호출
-        const res = await joinRoom(roomId, { password: passwordInput });
-        setRoom(res.data);
-        setIsPasswordModalVisible(false); // 성공 시 모달 닫기
-        setPasswordInput("");
-      } catch (error: any) {
-        console.error("비밀방 참가 실패:", error);
-        // 백엔드에서 비밀번호 불일치 시 보내는 오류 메시지에 따라 수정
-        Alert.alert("입장 실패", error.response?.data?.detail || "비밀번호가 올바르지 않거나 방에 입장할 수 없습니다.");
-      }
-    };
+  // --- 핵심 로직 함수들 ---
 
-  // --- useEffect Hooks ---
-  useEffect(() => {
-    // API로부터 게임 옵션 목록을 불러오는 함수
-    const loadGameOptions = async () => {
-      try {
-        const [scenariosRes, difficultiesRes, modesRes, genresRes] = await Promise.all([
-          fetchScenarios(),
-          fetchDifficulties(),
-          fetchModes(),
-          fetchGenres(),
-        ]);
-        
-        setScenarios(scenariosRes.data.results || scenariosRes.data);
-        setDifficulties(difficultiesRes.data.results || difficultiesRes.data);
-        setModes(modesRes.data.results || modesRes.data);
-        setGenres(genresRes.data.results || genresRes.data);
+  const connectWebSocket = async () => {
+    try {
+      const nonceResponse = await getWebSocketNonce();
+      const nonce = nonceResponse.data.nonce;
+      const scheme = "ws";
+      const backendHost = "127.0.0.1:8000";
+      const url = `${scheme}://${backendHost}/ws/game/${roomId}/?nonce=${nonce}`;
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
 
-        // 기본값 설정 (첫 번째 항목으로)
-        if (modesRes.data.length > 0 && !selectedModeId) {
-          setSelectedModeId(modesRes.data[0].id);
+      ws.onopen = () => setWsMsg("📡 실시간 연결됨");
+      ws.onclose = () => setWsMsg("🔌 연결 종료");
+      ws.onerror = (e) => console.error("WebSocket Error:", e);
+
+      ws.onmessage = (ev: MessageEvent) => {
+        const data = JSON.parse(ev.data);
+        const message = data.message;
+
+        if (data.type === "room_state") {
+          if (roomRef.current?.status === 'play') {
+            fetchRoomDetail(roomId).then((res) => setRoom(res.data));
+          } else {
+            setRoom((prevRoom) => {
+              if (!prevRoom) return null;
+              return { ...prevRoom, selected_by_room: data.selected_by_room };
+            });
+          }
+          return;
         }
 
-      } catch (error) {
-        console.error("게임 옵션 로딩 실패:", error);
-        Alert.alert("오류", "게임 옵션 정보를 불러오는 데 실패했습니다.");
-      }
-    };
-
-   const joinAndLoadRoom = async () => {
-      if (!roomId) return;
-      try {
-        const roomDetails = await fetchRoomDetail(roomId);
-        
-        if (roomDetails.data.room_type === 'private') {
-            setIsPasswordModalVisible(true);
-            return; // 비밀번호 모달을 띄우고 종료
-        }
-        
-        // 공개방일 경우 바로 입장 시도
-        const res = await joinRoom(roomId);
-        setRoom(res.data);
-      } catch (error: any) {
-        console.error("방 참가 실패:", error);
-        Alert.alert("입장 실패", error.response?.data?.detail || "방에 입장할 수 없습니다.");
-        router.replace("/game/multi");
-      }
-    };
-
-    const connectWebSocket = async () => {
-      try {
-        const nonceResponse = await getWebSocketNonce();
-        const nonce = nonceResponse.data.nonce;
-
-        const scheme = "ws";
-        const backendHost = "127.0.0.1:8000";
-        const url = `${scheme}://${backendHost}/ws/game/${roomId}/?nonce=${nonce}`;
-        const ws = new WebSocket(url);
-        wsRef.current = ws;
-
-        ws.onopen = () => setWsMsg("📡 실시간 연결됨");
-        ws.onclose = () => setWsMsg("🔌 연결 종료");
-        ws.onerror = (e) => console.error("WebSocket Error:", e);
-
-        ws.onmessage = (ev: MessageEvent) => {
-          const data = JSON.parse(ev.data);
-          const message = data.message;
-
-          if (data.type === "room_broadcast" && message?.event === "game_start") {
+        if (data.type === "room_broadcast" && message?.event === "game_start") {
+            if (isStartingRef.current) return;
+            isStartingRef.current = true;
             setWsMsg("⏳ 게임 카운트다운...");
             setIsCountdownModalVisible(true);
             const gameOptions = {
@@ -215,89 +153,148 @@ export default function RoomScreen() {
               } else {
                 if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
                 
-                router.push({
-                  pathname: "/game/multi/play/[id]",
-                  params: {
+                if (roomRef.current) { 
+                  const params = {
                     id: roomId,
                     topic: gameOptions.topic,
                     difficulty: gameOptions.difficulty,
                     mode: gameOptions.mode,
                     genre: gameOptions.genre,
-                  },
-                });
+                    characters: JSON.stringify(charactersRef.current),
+                    participants: JSON.stringify(roomRef.current.selected_by_room), 
+                    isOwner: String(roomRef.current.owner === user?.name),
+                  };
+                  router.push({
+                      pathname: "/game/multi/play/[id]",
+                      params: params,
+                  });
+                }
                 
                 setIsCountdownModalVisible(false);
                 setCountdownModalContent("");
               }
             }, 1000);
             return;
-          }
-
-          if (data.type === "room_deleted") {
-            Alert.alert("알림", "방이 삭제되어 로비로 이동합니다.", [
-              { text: "확인", onPress: () => router.replace("/game/multi") },
-            ]);
-            return;
-          }
-          
-          fetchRoomDetail(roomId).then((res) => setRoom(res.data));
-        };
-      } catch (error) {
-        console.error("웹소켓 nonce 발급 실패:", error);
-        Alert.alert("연결 실패", "안전한 웹소켓 연결 키를 발급받지 못했습니다.");
-      }
-    };
-
-    const initialize = async () => {
-      await Promise.all([
-        joinAndLoadRoom(),
-        loadGameOptions(),
-      ]);
-
-      if (user) {
-        const token = await storage.getItem("access_token");
-        if (token) {
-          connectWebSocket();
-        } else {
-            console.error("로그인된 사용자이지만 토큰을 찾을 수 없습니다.");
-            Alert.alert("인증 오류", "사용자 토큰을 찾을 수 없어 연결에 실패했습니다.");
         }
-      }
-    };
-    
-    if (!authLoading) {
-      initialize();
+
+        if (data.type === "room_deleted") {
+          Alert.alert("알림", "방이 삭제되어 로비로 이동합니다.", [
+            { text: "확인", onPress: () => router.replace("/game/multi") },
+          ]);
+          return;
+        }
+      };
+    } catch (error) {
+      console.error("웹소켓 연결 실패:", error);
+      Alert.alert("연결 실패", "안전한 웹소켓 연결에 실패했습니다.");
     }
+  };
 
-    return () => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.close();
-      }
-      if (countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current);
-      }
-    };
-  }, [roomId, user, authLoading]);
+  const handleJoinPrivateRoom = async () => {
+    if (!passwordInput) {
+      Alert.alert("경고", "비밀번호를 입력해주세요.");
+      return;
+    }
+    try {
+      const res = await joinRoom(roomId, { password: passwordInput });
+      setRoom(res.data);
+      setIsPasswordModalVisible(false);
+      setPasswordInput("");
+      connectWebSocket();
+    } catch (error: any) {
+      Alert.alert("입장 실패", error.response?.data?.detail || "비밀번호가 올바르지 않습니다.");
+    }
+  };
 
-  // --- 메모이제이션 변수 ---
+  // ✅ [오류 수정 2] useMemo 선언들을 useEffect 위로 이동
   const isOwner = useMemo(() => room?.owner === user?.name && !!user?.name, [room, user]);
   const allReady = useMemo(() => room?.selected_by_room?.every((p) => p.is_ready) && (room?.selected_by_room?.length ?? 0) > 0, [room]);
-  const canStart = isOwner && allReady && room?.status === "waiting" && !!selectedScenarioId && !!selectedDifficultyId && !!selectedModeId && !!selectedGenreId;
-  const myParticipant = room?.selected_by_room?.find((p) => p.username === user?.name);
-
   const selectedScenarioTitle = useMemo(() => scenarios.find(s => s.id === selectedScenarioId)?.title, [scenarios, selectedScenarioId]);
+  const canStart = isOwner && allReady && room?.status === "waiting" && !!selectedScenarioTitle && !!selectedDifficultyId && !!selectedModeId && !!selectedGenreId && characters.length > 0;
+  const myParticipant = room?.selected_by_room?.find((p) => p.username === user?.name);
+  
   const selectedDifficultyName = useMemo(() => difficulties.find(d => d.id === selectedDifficultyId)?.name, [difficulties, selectedDifficultyId]);
   const selectedModeName = useMemo(() => modes.find(m => m.id === selectedModeId)?.name, [modes, selectedModeId]);
   const selectedGenreName = useMemo(() => genres.find(g => g.id === selectedGenreId)?.name, [genres, selectedGenreId]);
 
+  useEffect(() => {
+    const loadGameOptions = async () => {
+      try {
+        const [scenariosRes, difficultiesRes, modesRes, genresRes] = await Promise.all([
+          fetchScenarios(),
+          fetchDifficulties(),
+          fetchModes(),
+          fetchGenres(),
+        ]);
+        
+        const scenariosData = scenariosRes.data.results || scenariosRes.data;
+        const difficultiesData = difficultiesRes.data.results || difficultiesRes.data;
+        const modesData = modesRes.data.results || modesRes.data;
+        const genresData = genresRes.data.results || genresRes.data;
 
-  // --- 이벤트 핸들러 ---
+        setScenarios(scenariosData);
+        setDifficulties(difficultiesData);
+        setModes(modesData);
+        setGenres(genresData);
+
+        if (modesData.length > 0 && !selectedModeId) {
+          setSelectedModeId(modesData[0].id);
+        }
+      } catch (error) {
+        console.error("게임 옵션 로딩 실패:", error);
+      }
+    };
+
+    const initialize = async () => {
+      await loadGameOptions();
+      if (!roomId) return;
+      try {
+        const roomDetails = await fetchRoomDetail(roomId);
+        if (roomDetails.data.room_type === 'private') {
+          setIsPasswordModalVisible(true);
+        } else {
+          const res = await joinRoom(roomId);
+          setRoom(res.data);
+          connectWebSocket();
+        }
+      } catch (error) {
+        Alert.alert("오류", "방 정보를 조회하는 데 실패했습니다.");
+        router.replace("/game/multi");
+      }
+    };
+
+    if (!authLoading && user) {
+      initialize();
+    }
+
+    return () => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) wsRef.current.close();
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, [roomId, user, authLoading]);
+  
+  useEffect(() => { roomRef.current = room; }, [room]);
+  useEffect(() => { charactersRef.current = characters; }, [characters]);
+
+  useEffect(() => {
+    const loadCharacters = async () => {
+      if (selectedScenarioTitle) {
+        try {
+          const allCharacterData = await fetchCharactersByTopic(selectedScenarioTitle);
+          setCharacters(allCharacterData);
+        } catch (error) {
+          console.error("캐릭터 목록 사전 로딩 실패:", error);
+        }
+      }
+    };
+    loadCharacters();
+  }, [selectedScenarioTitle]);
+
   const handleLeaveRoom = async () => {
     if (!roomId) return;
     try {
       await leaveRoom(roomId);
       Alert.alert("알림", "방에서 나갔습니다.");
-      // 모달을 닫고 멀티플레이 로비 화면으로 이동
       setIsLeaveModalVisible(false);
       router.replace("/game/multi");
     } catch (error) {
@@ -309,22 +306,17 @@ export default function RoomScreen() {
 
   const handleOptionSelect = async () => {
     if (!isOwner) return;
-
-    // 모든 옵션이 선택되었는지 확인
     if (!selectedScenarioId || !selectedDifficultyId || !selectedModeId || !selectedGenreId) {
-      Alert.alert("알림", "주제, 장르, 난이도, 게임 방식을 모두 선택해야 합니다.");
+      Alert.alert("알림", "모든 게임 옵션을 선택해야 합니다.");
       return;
     }
-
-    const payload = {
-      scenario: selectedScenarioId,
-      difficulty: selectedDifficultyId,
-      mode: selectedModeId,
-      genre: selectedGenreId,
-    };
-    
     try {
-      await saveRoomOptions(roomId, payload);
+      await saveRoomOptions(roomId, {
+        scenario: selectedScenarioId,
+        difficulty: selectedDifficultyId,
+        mode: selectedModeId,
+        genre: selectedGenreId,
+      });
       setIsTopicModalVisible(false);
     } catch (error) {
       console.error("옵션 저장 실패:", error);
@@ -333,25 +325,21 @@ export default function RoomScreen() {
   };
 
   const onStartGame = () => {
-    if (!canStart || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      Alert.alert("시작 불가", "모든 플레이어가 준비하고 게임 옵션을 모두 선택해야 시작할 수 있습니다.");
-      return;
-    }
+    if (!canStart || !wsRef.current) return;
     wsRef.current.send(JSON.stringify({ action: "start_game" }));
   };
 
   const onEndGame = () => {
-    if (!isOwner || room?.status !== 'play' || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (!isOwner || !wsRef.current) return;
     wsRef.current.send(JSON.stringify({ action: "end_game" }));
   };
 
   const onToggleReady = () => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (!wsRef.current) return;
     wsRef.current.send(JSON.stringify({ action: "toggle_ready" }));
   };
   
-  // --- 렌더링 ---
-  if (authLoading || !room) {
+  if (authLoading || (!room && !isPasswordModalVisible)) {
     return (
       <SafeAreaView style={styles.center}>
         <ActivityIndicator size="large" color="#E2C044" />
@@ -362,279 +350,108 @@ export default function RoomScreen() {
   
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.container}
-      >
-        <View style={styles.mainContainer}>
-          {/* 좌측 패널 */}
-          <View style={styles.leftPanel}>
-            <View style={styles.infoBox}>
-              <Text style={styles.title}>#{room.name}</Text>
-              <Text style={styles.desc}>{room.description}</Text>
-              <View style={styles.divider} />
-              <Text style={styles.status}>
-                <Ionicons name="game-controller" size={14} color="#ccc" /> 상태: {room.status}
-              </Text>
-              <Text style={styles.status}>
-                <Ionicons name="book" size={14} color="#ccc" /> 주제: {selectedScenarioTitle || "선택되지 않음"}
-              </Text>
-              <Text style={styles.status}>
-                <Ionicons name="color-palette" size={14} color="#ccc" /> 장르: {selectedGenreName || "선택되지 않음"}
-              </Text>
-              <Text style={styles.status}>
-                <Ionicons name="star" size={14} color="#ccc" /> 난이도: {selectedDifficultyName || "선택되지 않음"}
-              </Text>
-              <Text style={styles.status}>
-                <Ionicons name="swap-horizontal" size={14} color="#ccc" /> 방식: {selectedModeName || "선택되지 않음"}
-              </Text>
-            </View>
+      {room && (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.container}
+        >
+          <View style={styles.mainContainer}>
+            <View style={styles.leftPanel}>
+              <View style={styles.infoBox}>
+                <Text style={styles.title}>#{room.name}</Text>
+                <Text style={styles.desc}>{room.description}</Text>
+                <View style={styles.divider} />
+                <Text style={styles.status}><Ionicons name="game-controller" size={14} color="#ccc" /> 상태: {room.status}</Text>
+                <Text style={styles.status}><Ionicons name="book" size={14} color="#ccc" /> 주제: {selectedScenarioTitle || "선택되지 않음"}</Text>
+                <Text style={styles.status}><Ionicons name="color-palette" size={14} color="#ccc" /> 장르: {selectedGenreName || "선택되지 않음"}</Text>
+                <Text style={styles.status}><Ionicons name="star" size={14} color="#ccc" /> 난이도: {selectedDifficultyName || "선택되지 않음"}</Text>
+                <Text style={styles.status}><Ionicons name="swap-horizontal" size={14} color="#ccc" /> 방식: {selectedModeName || "선택되지 않음"}</Text>
+              </View>
 
-            {isOwner && (
-              <TouchableOpacity
-                style={styles.gameOptionButton}
-                onPress={() => setIsTopicModalVisible(true)}
-              >
-                <Ionicons name="settings-sharp" size={20} color="#E2C044" />
-                <Text style={styles.gameOptionButtonText}>게임 옵션 설정</Text>
-              </TouchableOpacity>
-            )}
-
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={[styles.btn, myParticipant?.is_ready ? styles.unreadyBtn : styles.readyBtn]}
-                onPress={onToggleReady}
-                disabled={room.status !== "waiting"}
-              >
-                <Ionicons name={myParticipant?.is_ready ? "close-circle" : "checkbox"} size={22} color="#fff" />
-                <Text style={styles.btnText}>{myParticipant?.is_ready ? "준비 해제" : "준비 완료"}</Text>
-              </TouchableOpacity>
-              
-              {isOwner && room.status === 'waiting' && (
-                <TouchableOpacity
-                  style={[styles.btn, styles.startBtn, !canStart && styles.btnDisabled]}
-                  onPress={onStartGame}
-                  disabled={!canStart}
-                >
-                  <Ionicons name="play-sharp" size={22} color="#fff" />
-                  <Text style={styles.btnText}>게임 시작</Text>
+              {isOwner && (
+                <TouchableOpacity style={styles.gameOptionButton} onPress={() => setIsTopicModalVisible(true)}>
+                  <Ionicons name="settings-sharp" size={20} color="#E2C044" />
+                  <Text style={styles.gameOptionButtonText}>게임 옵션 설정</Text>
                 </TouchableOpacity>
               )}
 
-              {isOwner && room.status === 'play' && (
+              <View style={styles.buttonContainer}>
                 <TouchableOpacity
-                  style={[styles.btn, styles.endBtn]}
-                  onPress={onEndGame}
+                  style={[styles.btn, myParticipant?.is_ready ? styles.unreadyBtn : styles.readyBtn]}
+                  onPress={onToggleReady}
+                  disabled={room.status !== "waiting"}
                 >
-                  <Ionicons name="stop-circle" size={22} color="#fff" />
-                  <Text style={styles.btnText}>게임 종료</Text>
+                  <Ionicons name={myParticipant?.is_ready ? "close-circle" : "checkbox"} size={22} color="#fff" />
+                  <Text style={styles.btnText}>{myParticipant?.is_ready ? "준비 해제" : "준비 완료"}</Text>
                 </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          {/* 우측 패널 */}
-          <View style={styles.rightPanel}>
-            <View style={styles.participantsHeader}>
-              <Text style={styles.subTitle}>참가자 ({room.selected_by_room?.length || 0}/{room.max_players})</Text>
-              <View style={styles.headerButtonContainer}>
-                {/* 방 나가기 버튼을 이곳으로 이동 */}
-                <TouchableOpacity
-                  style={styles.headerIconBtn}
-                  onPress={() => setIsLeaveModalVisible(true)}
-                >
-                  <Ionicons name="exit-outline" size={24} color="#E0E0E0" />
-                </TouchableOpacity>
-
-                {/* 기존 채팅 버튼 */}
-                <TouchableOpacity
-                  style={styles.headerIconBtn}
-                  onPress={() => setIsChatVisible(prev => !prev)}
-                >
-                  <Ionicons name="chatbubbles" size={20} color="#E2C044" />
-                </TouchableOpacity>
+                
+                {isOwner && room.status === 'waiting' && (
+                  <TouchableOpacity style={[styles.btn, styles.startBtn, !canStart && styles.btnDisabled]} onPress={onStartGame} disabled={!canStart}>
+                    <Ionicons name="play-sharp" size={22} color="#fff" />
+                    <Text style={styles.btnText}>게임 시작</Text>
+                  </TouchableOpacity>
+                )}
+                {isOwner && room.status === 'play' && (
+                  <TouchableOpacity style={[styles.btn, styles.endBtn]} onPress={onEndGame}>
+                    <Ionicons name="stop-circle" size={22} color="#fff" />
+                    <Text style={styles.btnText}>게임 종료</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
-            <View style={styles.participantsBox}>
-              {room.selected_by_room?.map((p) => (
-                <View key={p.id} style={styles.participantRow}>
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    {room.owner === p.username && (
-                      <Ionicons name="key" size={16} color="#E2C044" style={{ marginRight: 8 }} />
-                    )}
-                    <Text style={styles.participantName}>{p.username}</Text>
-                  </View>
-                  <View style={p.is_ready ? styles.ready : styles.notReady}>
-                    <Ionicons name={p.is_ready ? "checkmark-circle" : "hourglass-outline"} size={16} color={p.is_ready ? "#4CAF50" : "#aaa"} />
-                    <Text style={p.is_ready ? styles.readyText : styles.notReadyText}>
-                      {p.is_ready ? "READY" : "WAITING"}
-                    </Text>
-                  </View>
+
+            <View style={styles.rightPanel}>
+              <View style={styles.participantsHeader}>
+                <Text style={styles.subTitle}>참가자 ({room.selected_by_room?.length || 0}/{room.max_players})</Text>
+                <View style={styles.headerButtonContainer}>
+                  <TouchableOpacity style={styles.headerIconBtn} onPress={() => setIsLeaveModalVisible(true)}>
+                    <Ionicons name="exit-outline" size={24} color="#E0E0E0" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.headerIconBtn} onPress={() => setIsChatVisible(prev => !prev)}>
+                    <Ionicons name="chatbubbles" size={20} color="#E2C044" />
+                  </TouchableOpacity>
                 </View>
-              ))}
-            </View>
-            <Text style={styles.wsMsg}>{wsMsg}</Text>
-          </View>
-        </View>
-      </ScrollView>
-      {/* 모달 및 채팅창 */}
-      <Modal
-        transparent={true}
-        visible={isCountdownModalVisible}
-        animationType="fade"
-        onRequestClose={() => {}}
-      >
-        <View style={styles.countdownModalOverlay}>
-          <View style={styles.countdownModalContentBox}>
-            <Text style={styles.countdownModalText}>
-              {countdownModalContent}
-            </Text>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        transparent={true}
-        visible={isTopicModalVisible}
-        animationType="fade"
-        onRequestClose={() => setIsTopicModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>게임 옵션</Text>
-            
-            <ScrollView 
-              style={styles.modalScrollView} 
-              showsVerticalScrollIndicator={false}
-            >
-              <Text style={styles.modalSubTitle}>주제 선택</Text>
-              {scenarios.map((scenario) => (
-                <TouchableOpacity
-                  key={scenario.id}
-                  style={[styles.topicOption, selectedScenarioId === scenario.id && styles.topicSelected]}
-                  onPress={() => setSelectedScenarioId(scenario.id)}
-                >
-                  <Text style={styles.topicText}>{scenario.title}</Text>
-                </TouchableOpacity>
-              ))}
-
-              <Text style={styles.modalSubTitle}>장르 선택</Text>
-              {genres.map((genre) => (
-                <TouchableOpacity
-                  key={genre.id}
-                  style={[styles.topicOption, selectedGenreId === genre.id && styles.topicSelected]}
-                  onPress={() => setSelectedGenreId(genre.id)}
-                >
-                  <Text style={styles.topicText}>{genre.name}</Text>
-                </TouchableOpacity>
-              ))}
-
-              <Text style={styles.modalSubTitle}>난이도 선택</Text>
-              {difficulties.map((dif) => (
-                <TouchableOpacity
-                  key={dif.id}
-                  style={[styles.topicOption, selectedDifficultyId === dif.id && styles.topicSelected]}
-                  onPress={() => setSelectedDifficultyId(dif.id)}
-                >
-                  <Text style={styles.topicText}>{dif.name}</Text>
-                </TouchableOpacity>
-              ))}
-
-              <Text style={styles.modalSubTitle}>게임 방식 선택</Text>
-              {modes.map((mode) => (
-                <TouchableOpacity
-                  key={mode.id}
-                  style={[styles.topicOption, selectedModeId === mode.id && styles.topicSelected]}
-                  onPress={() => setSelectedModeId(mode.id)}
-                >
-                  <Text style={styles.topicText}>{mode.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={handleOptionSelect}
-            >
-              <Text style={styles.topicText}>선택 완료</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-      <Modal
-        transparent={true}
-        visible={isLeaveModalVisible}
-        animationType="fade"
-        onRequestClose={() => setIsLeaveModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.leaveModalBox}>
-            {/* isOwner 값에 따라 다른 문구를 보여줍니다. */}
-            <Text style={styles.leaveModalText}>
-              {isOwner
-                ? "방장이 나가면 방이 삭제됩니다.\n정말 나가시겠습니까?"
-                : "방에서 나가시겠습니까?"}
-            </Text>
-            <View style={styles.modalButtonContainer}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setIsLeaveModalVisible(false)}
-              >
-                <Text style={styles.topicText}>아니요</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.confirmButton]}
-                onPress={handleLeaveRoom}
-              >
-                <Text style={styles.topicText}>예</Text>
-              </TouchableOpacity>
+              </View>
+              <View style={styles.participantsBox}>
+                {room.selected_by_room?.map((p) => (
+                  <View key={p.id} style={styles.participantRow}>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      {room.owner === p.username && <Ionicons name="key" size={16} color="#E2C044" style={{ marginRight: 8 }} />}
+                      <Text style={styles.participantName}>{p.username}</Text>
+                    </View>
+                    <View style={p.is_ready ? styles.ready : styles.notReady}>
+                      <Ionicons name={p.is_ready ? "checkmark-circle" : "hourglass-outline"} size={16} color={p.is_ready ? "#4CAF50" : "#aaa"} />
+                      <Text style={p.is_ready ? styles.readyText : styles.notReadyText}>{p.is_ready ? "READY" : "WAITING"}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+              <Text style={styles.wsMsg}>{wsMsg}</Text>
             </View>
           </View>
-        </View>
+        </ScrollView>
+      )}
+
+      <Modal transparent={true} visible={isCountdownModalVisible} animationType="fade" onRequestClose={() => {}}>
+        <View style={styles.countdownModalOverlay}><View style={styles.countdownModalContentBox}><Text style={styles.countdownModalText}>{countdownModalContent}</Text></View></View>
       </Modal>
-      <Modal
-        transparent={true}
-        visible={isPasswordModalVisible}
-        animationType="fade"
-        onRequestClose={() => setIsPasswordModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.passwordModalBox}>
-            <Text style={styles.modalTitle}>비밀번호를 입력하세요</Text>
-            <TextInput
-              style={styles.input}
-              value={passwordInput}
-              onChangeText={setPasswordInput}
-              secureTextEntry={true}
-              placeholder="비밀번호"
-              placeholderTextColor="#9CA3AF"
-            />
-            <View style={styles.modalButtonContainer}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => {
-                  setIsPasswordModalVisible(false);
-                  router.replace("/game/multi");
-                }}
-              >
-                <Text style={styles.topicText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.confirmButton]}
-                onPress={handleJoinPrivateRoom}
-              >
-                <Text style={styles.topicText}>입장</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+
+      <Modal transparent={true} visible={isTopicModalVisible} animationType="fade" onRequestClose={() => setIsTopicModalVisible(false)}>
+        <View style={styles.modalOverlay}><View style={styles.modalBox}><Text style={styles.modalTitle}>게임 옵션</Text><ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}><Text style={styles.modalSubTitle}>주제 선택</Text>{scenarios.map((scenario)=><TouchableOpacity key={scenario.id} style={[styles.topicOption,selectedScenarioId===scenario.id&&styles.topicSelected]} onPress={()=>setSelectedScenarioId(scenario.id)}><Text style={styles.topicText}>{scenario.title}</Text></TouchableOpacity>)}<Text style={styles.modalSubTitle}>장르 선택</Text>{genres.map((genre)=><TouchableOpacity key={genre.id} style={[styles.topicOption,selectedGenreId===genre.id&&styles.topicSelected]} onPress={()=>setSelectedGenreId(genre.id)}><Text style={styles.topicText}>{genre.name}</Text></TouchableOpacity>)}<Text style={styles.modalSubTitle}>난이도 선택</Text>{difficulties.map((dif)=><TouchableOpacity key={dif.id} style={[styles.topicOption,selectedDifficultyId===dif.id&&styles.topicSelected]} onPress={()=>setSelectedDifficultyId(dif.id)}><Text style={styles.topicText}>{dif.name}</Text></TouchableOpacity>)}<Text style={styles.modalSubTitle}>게임 방식 선택</Text>{modes.map((mode)=><TouchableOpacity key={mode.id} style={[styles.topicOption,selectedModeId===mode.id&&styles.topicSelected]} onPress={()=>setSelectedModeId(mode.id)}><Text style={styles.topicText}>{mode.name}</Text></TouchableOpacity>)}</ScrollView><TouchableOpacity style={styles.modalCloseButton} onPress={handleOptionSelect}><Text style={styles.topicText}>선택 완료</Text></TouchableOpacity></View></View>
+      </Modal>
+
+      <Modal transparent={true} visible={isLeaveModalVisible} animationType="fade" onRequestClose={() => setIsLeaveModalVisible(false)}>
+        <View style={styles.modalOverlay}><View style={styles.leaveModalBox}><Text style={styles.leaveModalText}>{isOwner?"방장이 나가면 방이 삭제됩니다.\n정말 나가시겠습니까?":"방에서 나가시겠습니까?"}</Text><View style={styles.modalButtonContainer}><TouchableOpacity style={[styles.modalButton,styles.cancelButton]} onPress={()=>setIsLeaveModalVisible(false)}><Text style={styles.topicText}>아니요</Text></TouchableOpacity><TouchableOpacity style={[styles.modalButton,styles.confirmButton]} onPress={handleLeaveRoom}><Text style={styles.topicText}>예</Text></TouchableOpacity></View></View></View>
+      </Modal>
+      
+      <Modal transparent={true} visible={isPasswordModalVisible} animationType="fade" onRequestClose={() => setIsPasswordModalVisible(false)}>
+        <View style={styles.modalOverlay}><View style={styles.passwordModalBox}><Text style={styles.modalTitle}>비밀번호를 입력하세요</Text><TextInput style={styles.input} value={passwordInput} onChangeText={setPasswordInput} secureTextEntry={true} placeholder="비밀번호" placeholderTextColor="#9CA3AF" /><View style={styles.modalButtonContainer}><TouchableOpacity style={[styles.modalButton,styles.cancelButton]} onPress={()=>{setIsPasswordModalVisible(false);router.replace("/game/multi");}}><Text style={styles.topicText}>취소</Text></TouchableOpacity><TouchableOpacity style={[styles.modalButton,styles.confirmButton]} onPress={handleJoinPrivateRoom}><Text style={styles.topicText}>입장</Text></TouchableOpacity></View></View></View>
       </Modal>
 
       {isChatVisible && <ChatBox roomId={roomId} chatSocketRef={chatSocketRef} />}
     </SafeAreaView>
   );
 }
-
 
 const styles = StyleSheet.create({
   safeArea: {

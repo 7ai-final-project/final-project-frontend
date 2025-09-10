@@ -88,39 +88,11 @@ export function getSceneTemplate(templates: SceneTemplate[], index: number) {
 
 // 캐릭터의 주제에 따라 올바른 능력치 값을 가져오는 함수
 // `characterData.ts`의 캐릭터 유니온 타입을 사용해야 합니다.
-import { Character, FantasyCharacter, SunMoonCharacter } from "@/data/characterData";
+import { Character } from '@/services/api'
 
-export function getStatValue(character: Character, appliedStat: keyof typeof statMapping): number | undefined {
-    // 선택된 캐릭터의 주제에 따라 능력치 객체를 올바르게 접근합니다.
-    if (character.topic === "해와달") {
-        const stats = (character as SunMoonCharacter).stats;
-        switch (appliedStat) {
-            case 'hp':
-                return character.hp;
-            case 'wisdom':
-                return stats.지혜;
-            case 'luck':
-                return stats.행운;
-            default:
-                return undefined;
-        }
-    } else if (character.topic === "판타지의 어느 세계") {
-        const stats = (character as FantasyCharacter).stats;
-        switch (appliedStat) {
-            case 'strength':
-                return stats.힘;
-            case 'intelligence':
-                return stats.지혜;
-            case 'agility':
-                return stats.민첩;
-            case 'hp':
-                return character.hp;
-            default:
-                return undefined;
-        }
-    }
-    return undefined;
-}
+export const getStatValue = (character: Character, stat: keyof Character['stats']): number => {
+    return character.stats?.[stat] ?? 0;
+};
 
 // summary 문구 생성 규칙
 export function renderSceneFromRound(
