@@ -39,7 +39,6 @@ export default function CharacterScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>{storyId}</Text>
       {isLoading && !gameData ? (
         <View style={styles.content}>
           <ActivityIndicator size="large" color="#61dafb" />
@@ -59,23 +58,15 @@ export default function CharacterScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#3c414e", padding: 15 },
   content: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#61dafb",
-    textAlign: "center",
-    paddingBottom: 15,
-    borderBottomColor: "#61dafb",
-    borderBottomWidth: 1,
-    marginBottom: 15,
-  },
   loadingText: {
     marginTop: 10,
     fontSize: 18,
+    fontFamily: 'neodgm',
     color: "white",
   },
   errorText: {
     fontSize: 18,
+    fontFamily: 'neodgm',
     color: "red",
     textAlign: "center",
     marginBottom: 10,
