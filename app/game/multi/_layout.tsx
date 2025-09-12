@@ -1,3 +1,5 @@
+// app\game\multi\_layout.tsx
+
 import { Stack } from "expo-router";
 import { WebSocketProvider } from "@/components/context/WebSocketContext";
 
