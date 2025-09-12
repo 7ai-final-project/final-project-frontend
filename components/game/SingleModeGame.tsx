@@ -1,24 +1,27 @@
-// final-project/frontend/components/game/SingleModeGame.tsx (통합 최종본)
-
 import React, { useState, useEffect, useRef, ReactNode } from "react";
-import {View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Image,
-  ImageBackground, 
-  Alert,
-  Pressable,
-  Animated,
-  LayoutChangeEvent,
-  ViewStyle
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image, ImageBackground, Pressable, Animated, LayoutChangeEvent, ViewStyle } from "react-native";
 import api from "../../services/api";
 import { Audio } from "expo-av";
 import { Ionicons } from '@expo/vector-icons';
 import OptionsModal from '../OptionsModal'; 
+
+interface GameProps {
+  initialData: {
+    scene: string;
+    choices: string[];
+    story_id: string;
+    story_title: string;
+    current_moment_id: string;
+    current_moment_title: string;
+  };
+}
+
+interface MedievalButtonProps {
+  children: ReactNode;
+  onPress?: () => void;
+  disabled?: boolean;
+  buttonStyle?: ViewStyle; // 동적인 스타일을 받을 수 있도록 추가
+}
 
 const TypingText = ({ text, onFinished }: { text: string, onFinished: () => void }) => {
   const [displayedText, setDisplayedText] = useState('');
@@ -46,14 +49,6 @@ const TypingText = ({ text, onFinished }: { text: string, onFinished: () => void
   return <Text style={styles.sceneDescription}>{displayedText}</Text>;
 };
 
-interface MedievalButtonProps {
-  children: ReactNode;
-  onPress?: () => void;
-  disabled?: boolean;
-  buttonStyle?: ViewStyle; // 동적인 스타일을 받을 수 있도록 추가
-}
-
-// ★★★ 3. MedievalButton 컴포넌트를 여기에 가져옵니다. (index.tsx에서 복사) ★★★
 const MedievalButton: React.FC<MedievalButtonProps> = ({
   children,
   onPress,
@@ -91,31 +86,16 @@ const MedievalButton: React.FC<MedievalButtonProps> = ({
     );
 };
 
-
-// const sceneImages: { [key: string]: any } = {
-//     'MOM_INTRO': require('../../assets/images/game/multi_mode/background/sun_and_moon.jpg')
-//     };
-
-// 컴포넌트가 받을 초기 데이터의 타입을 정의합니다.
-interface GameProps {
-  initialData: {
-    scene: string;
-    choices: string[];
-    story_id: string;
-    current_moment_id: string;
-  };
-}
-
 export default function SingleModeGame({ initialData }: GameProps) {
   // 텍스트 게임 진행 관련 상태 변수들
   const [sceneText, setSceneText] = useState<string | null>(initialData.scene);
   const [choices, setChoices] = useState<string[]>(initialData.choices);
-  const [storyId] = useState<string>(initialData.story_id);
-  const [currentMomentId, setCurrentMomentId] = useState<string>(
-    initialData.current_moment_id
-  );
-  const [scrollWidth, setScrollWidth] = useState(0);
+  const [storyTitle] = useState<string>(initialData.story_title);
+  const [currentMomentId, setCurrentMomentId] = useState<string>(initialData.current_moment_id);
+  const [currentMomentTitle, setCurrentMomentTitle] = useState<string>(initialData.current_moment_title);
   const [error, setError] = useState("");
+
+  const [scrollWidth, setScrollWidth] = useState(0);
   const [isTyping, setIsTyping] = useState(true);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
   const [isBgmOn, setIsBgmOn] = useState(true);
@@ -189,19 +169,18 @@ export default function SingleModeGame({ initialData }: GameProps) {
     };
   }, []);
 
-  // ★★★ 여기가 핵심 기능입니다! ★★★
-  // `currentMomentId`가 변경될 때마다 자동으로 해당 장면에 대한 이미지를 생성합니다.
   useEffect(() => {
-        // `currentMomentId`가 문자열이고, 'END_'로 시작하는지 확인합니다.
-    if (typeof currentMomentId === 'string' && currentMomentId.startsWith('END_')) {
-        
-        // 사용자님의 JSON 구조에 따라 엔딩 ID를 확인합니다.
-        if (currentMomentId === 'END_GOOD_SUN_MOON') {
-            goodEndingMusic?.playAsync();
-        } else if (currentMomentId === 'END_BAD_OPEN_DOOR' || currentMomentId === 'END_BAD_TELL_SECRET') {
-            badEndingMusic?.playAsync();
-        }
-    }})
+    if(currentMomentTitle.startsWith('ENDING_')) {
+      const goodEndings = ['GOOD', 'FUNNY', 'HAPPY', 'SECRET'];
+      const badEndings = ['BAD', 'GIVEUP'];
+      
+      if(goodEndings.some(pattern => currentMomentTitle.includes(pattern))) {
+        goodEndingMusic?.playAsync();
+      } else if (badEndings.some(pattern => currentMomentTitle.includes(pattern))) {
+        badEndingMusic?.playAsync();
+      }
+    }
+  }, [currentMomentId, currentMomentTitle]);
   //   const generateImageForCurrentScene = async () => {
   //     // `currentMomentId`가 없으면 (예: 게임 시작 전) 실행하지 않습니다.
   //     if (!currentMomentId) return;
@@ -223,7 +202,7 @@ export default function SingleModeGame({ initialData }: GameProps) {
   //       const response = await api.post(
   //         "/image-gen/api/generate-scene-image/",
   //         {
-  //           story_id: storyId,
+  //           story_id: storyTitle,
   //           scene_name: currentMomentId, // 현재 장면 ID를 전달
   //         }
   //       );
@@ -261,25 +240,19 @@ export default function SingleModeGame({ initialData }: GameProps) {
  
     try {
       const response = await api.post("game/story/choice/", {
-        story_id: storyId,
+        story_title: storyTitle,
         choice_index: choiceIndex,
         current_moment_id: currentMomentId,
       });
  
       await pageTurnSound?.replayAsync();
-      const {
-        scene,
-        choices: newChoices, // 이 newChoices는 이미 ['선택지1', '선택지2'] 형태의 배열입니다.
-        current_moment_id: nextMomentId,
-      } = response.data;
+      const { scene, choices: newChoices, current_moment_id: nextMomentId, current_moment_title: nextMomentTitle } = response.data;
  
-      // 2. 상태를 업데이트합니다.
       setIsTyping(true);
       setSceneText(scene);
-      // 3. newChoices가 비어있거나 없을 경우를 대비해 || [] 안전장치를 추가합니다.
-      setChoices(newChoices || []); 
+      setChoices(newChoices || []);
       setCurrentMomentId(nextMomentId);
-
+      setCurrentMomentTitle(nextMomentTitle);
     } catch (err) {
       setError("이야기를 이어가는 데 실패했습니다.");
       console.error(err);
@@ -293,98 +266,92 @@ export default function SingleModeGame({ initialData }: GameProps) {
     setScrollWidth(width);
   };
  
-return (
-  
-   <View style={{ flex: 1, backgroundColor: backgroundColor }}>
+  return (
+    <View style={{ flex: 1, backgroundColor: backgroundColor }}>
       <ScrollView contentContainerStyle={styles.container}>
-      {/* --- 1. 헤더 --- */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.headerButton}>
-          <Ionicons name="save-outline" size={28} color="#F4E4BC" />
-          <Text style={styles.headerButtonText}>저장</Text>
-        </TouchableOpacity>
-        <Text style={styles.storyTitle}>해와 달</Text>
-        <TouchableOpacity style={styles.headerButton} onPress={() => setOptionsModalVisible(true)}>
-          <Ionicons name="settings-outline" size={28} color="#F4E4BC" />
-        </TouchableOpacity>
-      </View>
+        {/* --- 1. 헤더 --- */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.headerButton}>
+            <Ionicons name="save-outline" size={28} color="#F4E4BC" />
+            <Text style={styles.headerButtonText}>저장</Text>
+          </TouchableOpacity>
+          <Text style={styles.storyTitle}>{sceneText}</Text>
+          <TouchableOpacity style={styles.headerButton} onPress={() => setOptionsModalVisible(true)}>
+            <Ionicons name="settings-outline" size={28} color="#F4E4BC" />
+          </TouchableOpacity>
+        </View>
 
-      {/* --- 2. 메인 콘텐츠 (좌우 분할) --- */}
-      <View style={styles.mainContent}>
-        
-        {/* --- 2-1. 왼쪽 패널 (이미지) --- */}
-        <View style={styles.leftPanel}>
-          <View style={styles.imageContainer}>
-            {imageUrl ? (
-              <Image
-                source={imageUrl}
-                style={styles.sceneImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <Text style={styles.placeholderText}>
-                장면 이미지가 없습니다.
-              </Text>
-            )}
+        {/* --- 2. 메인 콘텐츠 (좌우 분할) --- */}
+        <View style={styles.mainContent}>
+          {/* --- 2-1. 왼쪽 패널 (이미지) --- */}
+          <View style={styles.leftPanel}>
+            <View style={styles.imageContainer}>
+              {imageUrl ? (
+                <Image source={imageUrl} style={styles.sceneImage} resizeMode="cover" />
+              ) : (
+                <Text style={styles.placeholderText}>
+                  장면 이미지가 없습니다.
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {/* --- 2-2. 오른쪽 패널 (스토리 & 선택지) --- */}
+          <View style={styles.rightPanel}>
+            <ScrollView contentContainerStyle={styles.rightPanelContent}>
+              
+              {/* 두루마리 스타일 스토리 컨테이너 */}
+              <ImageBackground
+                source={require('../../assets/images/game/multi_mode/background/scroll (3).png')}
+                style={styles.sceneContainer}
+                resizeMode="stretch"
+                onLayout={onScrollLayout}
+              >
+                <TypingText text={sceneText || ''} onFinished={() => setIsTyping(false)} />
+              </ImageBackground>
+
+              {/* MedievalButton 선택지 */}
+              <View style={styles.choiceGrid}>
+                {!isTyping && !isChoiceLoading &&
+                  choices.map((choiceText: string, index: number) => (
+                  <MedievalButton
+                    key={index}
+                    onPress={() => handleChoice(index)}
+                    disabled={isChoiceLoading}
+                    // 측정된 두루마리 너비(scrollWidth)가 0보다 클 때만 적용합니다.
+                    buttonStyle={scrollWidth > 0 ? { width: scrollWidth } : {}}
+                  >
+                    {choiceText}
+                  </MedievalButton>
+                  ))
+                }
+                {isChoiceLoading && <ActivityIndicator size="small" color="#fff" />}
+              </View>
+            {error && <Text style={styles.errorMessage}>{error}</Text>}
+          </ScrollView>
           </View>
         </View>
 
-        {/* --- 2-2. 오른쪽 패널 (스토리 & 선택지) --- */}
-        <View style={styles.rightPanel}>
-          <ScrollView contentContainerStyle={styles.rightPanelContent}>
-            
-            {/* 두루마리 스타일 스토리 컨테이너 */}
-            <ImageBackground
-              source={require('../../assets/images/game/multi_mode/background/scroll (3).png')}
-              style={styles.sceneContainer}
-              resizeMode="stretch"
-              onLayout={onScrollLayout}
-            >
-              <TypingText text={sceneText || ''} onFinished={() => setIsTyping(false)} />
-            </ImageBackground>
+        {/* 에러 메시지 (화면 하단에 고정) */}
+        {error && <Text style={styles.errorMessage}>{error}</Text>}
 
-            {/* MedievalButton 선택지 */}
-            <View style={styles.choiceGrid}>
-              {!isTyping && !isChoiceLoading &&
-                choices.map((choiceText: string, index: number) => (
-                <MedievalButton
-                key={index}
-                onPress={() => handleChoice(index)}
-                disabled={isChoiceLoading}
-                // 측정된 두루마리 너비(scrollWidth)가 0보다 클 때만 적용합니다.
-                buttonStyle={scrollWidth > 0 ? { width: scrollWidth } : {}}
-              >
-                    {choiceText}
-                  </MedievalButton>
-                ))
-              }
-              {isChoiceLoading && <ActivityIndicator size="small" color="#fff" />}
-            </View>
-           {error && <Text style={styles.errorMessage}>{error}</Text>}
-        </ScrollView>
-        </View>
-      </View>
-
-      {/* 에러 메시지 (화면 하단에 고정) */}
-      {error && <Text style={styles.errorMessage}>{error}</Text>}
-
-    {/* 설정 모달 컴포넌트를 렌더링합니다. */}
-          <OptionsModal
-            visible={optionsModalVisible}
-            onClose={() => setOptionsModalVisible(false)}
-            isBgmOn={isBgmOn}
-            setIsBgmOn={setIsBgmOn}
-            isSfxOn={isSfxOn}
-            setIsSfxOn={setIsSfxOn}
-            fontSizeMultiplier={fontSizeMultiplier}
-            setFontSizeMultiplier={setFontSizeMultiplier}
-            backgroundColor={backgroundColor}
-            setBackgroundColor={setBackgroundColor}
-          />
-        </ScrollView>
-        </View>
-        );
-      }
+        {/* 설정 모달 컴포넌트를 렌더링합니다. */}
+        <OptionsModal
+              visible={optionsModalVisible}
+              onClose={() => setOptionsModalVisible(false)}
+              isBgmOn={isBgmOn}
+              setIsBgmOn={setIsBgmOn}
+              isSfxOn={isSfxOn}
+              setIsSfxOn={setIsSfxOn}
+              fontSizeMultiplier={fontSizeMultiplier}
+              setFontSizeMultiplier={setFontSizeMultiplier}
+              backgroundColor={backgroundColor}
+              setBackgroundColor={setBackgroundColor}
+        />
+      </ScrollView>
+    </View>
+  );
+}
 
 
 // 스타일 정의
