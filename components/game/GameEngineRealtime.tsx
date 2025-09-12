@@ -18,7 +18,7 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 // [수정] API 서비스에서 Character 타입과 endGame 함수만 import 합니다.
-import { Character, endGame } from "@/services/api";
+import { Character, endGame, getWebSocketNonce } from "@/services/api";
 import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade, renderSceneFromRound } from "@/util/ttrpg";
 import { Audio } from "expo-av";
 
@@ -52,7 +52,7 @@ export default function GameEngineRealtime({
     // [수정] setupData에서 필요한 정보를 구조 분해 할당합니다.
     const { myCharacter, aiCharacters, allCharacters } = setupData;
 
-    const { wsRef } = useWebSocket();
+    const wsRef = useRef<WebSocket | null>(null);
     const ws = wsRef?.current ?? null;
 
     // --- 상태(State) 변수 ---
@@ -79,6 +79,9 @@ export default function GameEngineRealtime({
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [isResultsModalVisible, setIsResultsModalVisible] = useState(false);
 
+    const [isSaveModalVisible, setIsSaveModalVisible] = useState(false);
+    const [saveModalMessage, setSaveModalMessage] = useState("");
+
     const spin = spinValue.interpolate({
         inputRange: [0, 1],
         outputRange: ["0deg", "360deg"],
@@ -101,14 +104,113 @@ export default function GameEngineRealtime({
     const [myChoiceId, setMyChoiceId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
     
-    // [삭제] AI 선택을 프론트에서 관리할 필요가 없으므로 삭제합니다.
-    // const [aiChoices, setAiChoices] = useState<{[role: string]: string}>({});
-    // const [allChoicesReady, setAllChoicesReady] = useState(false);
+    const [aiChoices, setAiChoices] = useState<{[role: string]: string}>({});
 
     const [roundResult, setRoundResult] = useState<RoundResult | null>(null);
     const [cinematicText, setCinematicText] = useState<string>("");
 
     const timerAnim = useRef(new Animated.Value(turnSeconds)).current;
+
+    useEffect(() => {
+        let ws: WebSocket | null = null;
+
+        const connect = async () => {
+            try {
+                const nonceResponse = await getWebSocketNonce();
+                const nonce = nonceResponse.data.nonce;
+                const scheme = "ws";
+                const backendHost = "127.0.0.1:8000";
+                const url = `${scheme}://${backendHost}/ws/multi_game/${roomId}/?nonce=${nonce}`;
+                
+                ws = new WebSocket(url);
+                wsRef.current = ws;
+
+                // --- 1. 웹소켓 이벤트 핸들러 정의 ---
+                ws.onopen = () => {
+                    console.log("✅ GameEngineRealtime WebSocket Connected");
+                    setIsLoading(true); // 로딩 시작
+                    // 연결 성공 후, 첫 장면 요청
+                    ws?.send(JSON.stringify({
+                        type: "request_initial_scene",
+                        topic: Array.isArray(topic) ? topic[0] : topic,
+                        characters: setupData.allCharacters.map(c => ({
+                            name: c.name,
+                            description: c.description
+                        })),
+                    }));
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    console.log("GameEngine received message:", data);
+
+                    if (data.type === "game_update" && data.payload.event === "scene_update") {
+                        setCurrentScene(data.payload.scene);
+                        setPhase("choice");
+                        setMyChoiceId(null);
+                        setRoundResult(null);
+                        setCinematicText("");
+                        setSubmitting(false);
+                        setAiChoices({}); // [수정] 새 씬 시작 시 선택 현황 초기화
+                        setIsLoading(false);
+                        pageTurnSound?.replayAsync();
+
+                        phaseAnim.setValue(0);
+                        Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+                    } 
+                    // [추가] 다른 참여자 선택 정보 수신 로직
+                    else if (data.type === "game_update" && data.payload.event === "choice_update") {
+                        setAiChoices(prev => ({...prev, ...data.payload.choices}));
+                    }
+                    // [추가] 서버로부터 최종 라운드 결과 수신 로직 (3번 기능에 필요)
+                    else if (data.type === "game_update" && data.payload.event === "round_result") {
+                        setRoundResult(data.payload.result);
+                        if (currentScene) {
+                            const text = renderSceneFromRound(currentScene, data.payload.result);
+                            setCinematicText(text);
+                        }
+                        // 모든 결과가 도착했으므로 cinematic으로 전환
+                        setPhase("cinematic");
+                    }
+                    else if (data.type === "save_success") {
+                        setSaveModalMessage(data.message);
+                        setIsSaveModalVisible(true);
+                    }
+                    else if (data.type === "error") {
+                        setError(data.message);
+                        setIsLoading(false);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error("GameEngine WebSocket Error:", error);
+                    setError("웹소켓 연결 중 오류가 발생했습니다.");
+                    setIsLoading(false);
+                };
+
+                ws.onclose = () => {
+                    console.log("❌ GameEngineRealtime WebSocket Disconnected");
+                };
+
+            } catch (error) {
+                console.error("GameEngine WebSocket connection failed:", error);
+                setError("웹소켓 서버에 연결할 수 없습니다.");
+                setIsLoading(false);
+
+            }
+        };
+
+        // --- 2. 연결 실행 ---
+        connect();
+
+        // --- 3. 컴포넌트 종료 시 연결 해제 ---
+        return () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+            stopTimer(); // 타이머도 함께 정리
+        };
+    }, [roomId, topic, setupData]);
 
     // --- 사운드 로딩 Hook (변경 없음) ---
     useEffect(() => {
@@ -129,48 +231,6 @@ export default function GameEngineRealtime({
             diceRollSound?.unloadAsync();
         };
     }, []);
-
-    // --- 데이터 통신 Hook (WebSocket) ---
-    useEffect(() => {
-        if (!ws) {
-            setError("웹소켓이 연결되지 않았습니다.");
-            setIsLoading(false);
-            return;
-        }
-
-        // 서버로부터 메시지 수신
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === "game_update" && data.payload.event === "scene_update") {
-                // LLM이 생성한 새로운 씬 데이터로 상태 업데이트
-                setCurrentScene(data.payload.scene);
-                
-                // 새로운 씬을 받았으므로 게임 상태 초기화
-                setPhase("choice");
-                setMyChoiceId(null);
-                setRoundResult(null);
-                setCinematicText("");
-                setSubmitting(false);
-                setIsLoading(false);
-                pageTurnSound?.replayAsync(); // 새 장면이므로 페이지 넘김 소리 재생
-
-            } else if (data.type === "error") {
-                setError(data.message);
-                setIsLoading(false);
-            }
-        };
-
-        // 게임 시작 시, 백엔드에 첫 씬 데이터를 요청
-        setIsLoading(true);
-        ws.send(JSON.stringify({
-            type: "request_initial_scene",
-            topic: Array.isArray(topic) ? topic[0] : topic,
-            characters: allCharacters.map(c => ({ name: c.name, description: c.description })),
-        }));
-
-        return () => { if (ws) ws.onmessage = null; };
-    }, [ws]);
-
 
     // --- 타이머 로직 Hook ---
     useEffect(() => {
@@ -327,7 +387,7 @@ export default function GameEngineRealtime({
         }));
         
         stopTimer();
-        setPhase("sync"); // 서버 응답 대기
+        setPhase("dice_roll"); // 서버 응답 대기
     };
 
     const autoPickAndSubmit = () => {
@@ -354,6 +414,46 @@ export default function GameEngineRealtime({
                 text: `(다음 장면으로 넘어감)`,
                 sceneIndex: currentScene.index,
             }
+        }));
+    };
+
+    const handleSaveGame = () => {
+        if (!ws || !currentScene || !myRole || !myChoiceId) {
+            setSaveModalMessage("저장할 수 있는 정보가 부족합니다.");
+            setIsSaveModalVisible(true);
+            return;
+        }
+
+        const myCurrentChoices = roundSpec?.choices[myRole] ?? [];
+        const selectedChoiceObj = myCurrentChoices.find(c => c.id === myChoiceId);
+
+        if (!selectedChoiceObj) {
+            setSaveModalMessage("선택한 항목을 찾을 수 없습니다.");
+            setIsSaveModalVisible(true);
+            return;
+        }
+
+        // 백엔드로 보낼 데이터를 지정된 포맷에 맞게 가공
+        const choicesFormatted = myCurrentChoices.reduce((acc, choice, index) => {
+            acc[index] = choice.text;
+            return acc;
+        }, {} as { [key: number]: string });
+        
+        const selectedChoiceFormatted = {
+            [myCurrentChoices.indexOf(selectedChoiceObj)]: selectedChoiceObj.text
+        };
+
+        const saveData = {
+            title: roundSpec?.title,
+            description: roundSpec?.title, // 현재 템플릿에서는 title이 주된 설명이므로 동일하게 사용
+            choices: choicesFormatted,
+            selectedChoice: selectedChoiceFormatted
+        };
+
+        // 웹소켓으로 데이터 전송
+        ws.send(JSON.stringify({
+            type: "save_game_state",
+            data: saveData
         }));
     };
 
@@ -470,9 +570,17 @@ export default function GameEngineRealtime({
                             </View>
                             <Text style={styles.timerText}>남은 시간: {remaining}s</Text>
 
-                            <View style={{ height: 16 }} />
+                            {/* [추가] 다른 참여자 선택 현황 UI */}
+                            {Object.keys(aiChoices).length > 0 && (
+                                <View style={styles.aiStatusBox}>
+                                    <Text style={styles.aiStatusTitle}>다른 참여자 선택 현황:</Text>
+                                    {Object.entries(aiChoices).map(([role]) => (
+                                        <Text key={role} style={styles.aiStatusText}>- {role}: 선택 완료 ✅</Text>
+                                    ))}
+                                </View>
+                            )}
 
-                            <ScrollView>
+                            <ScrollView style={{ flex: 1, width: '100%' }}>
                                 {myChoices.map((c) => (
                                     <TouchableOpacity
                                         key={c.id}
@@ -485,7 +593,7 @@ export default function GameEngineRealtime({
                                     >
                                         <Text style={styles.choiceText}>{c.text}</Text>
                                         <Text style={styles.hint}>
-                                            적용 스탯: {statMapping[c.appliedStat] ?? c.appliedStat} (보정: {c.modifier >= 0 ? `+${c.modifier}` : c.modifier})
+                                            적용 스탯: {statMapping[c.appliedStat as EnglishStat] ?? c.appliedStat} (보정: {c.modifier >= 0 ? `+${c.modifier}` : c.modifier})
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
@@ -537,6 +645,13 @@ export default function GameEngineRealtime({
                                 <Text style={styles.secondaryText}>결과 상세 보기</Text>
                             </TouchableOpacity>
                             
+                            <TouchableOpacity
+                                style={styles.saveButton} // 새로운 스타일 적용 필요
+                                onPress={handleSaveGame}
+                            >
+                                <Text style={styles.primaryText}>지금까지 내용 저장하기</Text>
+                            </TouchableOpacity>
+
                             {/* [수정] 다음 씬으로 넘어가는 버튼 */}
                             <TouchableOpacity
                                 style={styles.primary}
@@ -605,14 +720,13 @@ export default function GameEngineRealtime({
                         <Text style={styles.modalTitle}>라운드 결과 요약</Text>
                         <ScrollView style={styles.resultsScrollView}>
                             {roundResult?.results?.map((result, index) => {
-                                // 나의 결과만 상세히 표시
-                                if (result.role !== myRole) return null;
-
                                 const choiceText = roundSpec?.choices?.[result.role]?.find(c => c.id === result.choiceId)?.text || "선택 정보를 찾을 수 없음";
-                                const appliedStatKr = statMapping[result.appliedStat] ?? result.appliedStat;
+                                const appliedStatKr = statMapping[result.appliedStat as EnglishStat] ?? result.appliedStat;
                                 return (
                                     <View key={index} style={styles.resultItem}>
-                                        <Text style={styles.resultRole}>{result.role} (나)</Text>
+                                        <Text style={styles.resultRole}>
+                                            {result.role} {result.role === myRole ? '(나)' : ''}
+                                        </Text>
                                         <Text style={styles.resultDetails}>
                                             - 선택: "{choiceText}"
                                         </Text>
@@ -631,6 +745,28 @@ export default function GameEngineRealtime({
                             onPress={() => setIsResultsModalVisible(false)}
                         >
                             <Text style={styles.modalButtonText}>닫기</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={isSaveModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsSaveModalVisible(false)}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>알림</Text>
+                        <Text style={styles.modalMessage}>
+                            {saveModalMessage}
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.modalCloseButton} // 기존 닫기 버튼 스타일 재사용
+                            onPress={() => setIsSaveModalVisible(false)}
+                        >
+                            <Text style={styles.modalButtonText}>확인</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -772,12 +908,12 @@ const styles = StyleSheet.create({
         borderColor: "#4CAF50",
     },
     choiceText: {
-        color: "#E0E0E0",
+        color: "#FFFFFF", 
         fontSize: 16,
         fontWeight: "bold",
     },
     hint: {
-        color: "#A0A0A0",
+        color: "#A0A0E0",
         marginTop: 6,
         fontSize: 12,
     },
@@ -804,6 +940,13 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "bold",
         fontSize: 16,
+    },
+    saveButton: { // [추가] 저장 버튼 스타일
+        marginTop: 12,
+        backgroundColor: "#1D4ED8", // 다른 색상으로 구분
+        paddingVertical: 14,
+        borderRadius: 10,
+        alignItems: "center",
     },
     cinematicBox: {
         flex: 1,
