@@ -22,6 +22,7 @@ import {
   fetchModes,
   saveRoomOptions,
   fetchGenres,
+  fetchMySession,
   leaveRoom,
   Character,
   fetchCharactersByTopic,
@@ -47,6 +48,15 @@ interface RoomType {
   status: string;
   selected_by_room: Participant[];
   room_type: 'public' | 'private';
+}
+
+interface LoadedSessionData {
+  choice_history: any[];
+  character_history: {
+    myCharacter: Character;
+    aiCharacters: Character[];
+    allCharacters: Character[];
+  };
 }
 
 interface Scenario { id: string; title: string; description: string; }
@@ -79,6 +89,10 @@ export default function RoomScreen() {
   const [isChatVisible, setIsChatVisible] = useState<boolean>(false);
   const [isLeaveModalVisible, setIsLeaveModalVisible] = useState(false);
 
+  const [loadedSession, setLoadedSession] = useState<LoadedSessionData | null>(null);
+  const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
+  const [notificationModalContent, setNotificationModalContent] = useState({ title: "", message: "" });
+
   // ✅ [오류 수정 1] 타입을 NodeJS.Timeout에서 number로 변경
   const countdownIntervalRef = useRef<number | null>(null);
   const isStartingRef = useRef(false);
@@ -95,6 +109,11 @@ export default function RoomScreen() {
   const [selectedGenreId, setSelectedGenreId] = useState<string | null>(null);
 
   // --- 핵심 로직 함수들 ---
+
+  const loadedSessionRef = useRef<LoadedSessionData | null>(null);
+  useEffect(() => {
+    loadedSessionRef.current = loadedSession;
+  }, [loadedSession]);
 
   const connectWebSocket = async () => {
     try {
@@ -143,6 +162,19 @@ export default function RoomScreen() {
             setCountdownModalContent(countdownText);
             
             if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+
+            const navParams = {
+              id: roomId,
+              topic: message.topic,
+              difficulty: message.difficulty,
+              mode: message.mode,
+              genre: message.genre,
+              characters: loadedSessionRef.current ? undefined : JSON.stringify(charactersRef.current),
+              participants: loadedSessionRef.current ? undefined : JSON.stringify(roomRef.current?.selected_by_room),
+              isOwner: String(roomRef.current?.owner === user?.name),
+              isLoaded: loadedSessionRef.current ? 'true' : 'false',
+              loadedCharacterHistory: loadedSessionRef.current ? JSON.stringify(loadedSessionRef.current.character_history) : undefined,
+            };
             
             countdownIntervalRef.current = setInterval(() => {
               secondsLeft -= 1;
@@ -153,23 +185,11 @@ export default function RoomScreen() {
               } else {
                 if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
                 
-                if (roomRef.current) { 
-                  const params = {
-                    id: roomId,
-                    topic: gameOptions.topic,
-                    difficulty: gameOptions.difficulty,
-                    mode: gameOptions.mode,
-                    genre: gameOptions.genre,
-                    characters: JSON.stringify(charactersRef.current),
-                    participants: JSON.stringify(roomRef.current.selected_by_room), 
-                    isOwner: String(roomRef.current.owner === user?.name),
-                  };
-                  router.push({
-                      pathname: "/game/multi/play/[id]",
-                      params: params,
-                  });
-                }
-                
+                router.push({
+                    pathname: "/game/multi/play/[id]",
+                    params: navParams,
+                });
+                          
                 setIsCountdownModalVisible(false);
                 setCountdownModalContent("");
               }
@@ -324,9 +344,70 @@ export default function RoomScreen() {
     }
   };
 
+  const handleLoadGame = async () => {
+    if (!roomId) return;
+    try {
+      const response = await fetchMySession(roomId);
+      const sessionData = response.data;
+
+      if (sessionData && sessionData.character_history && sessionData.choice_history) {
+        setLoadedSession(sessionData);
+
+        // 불러온 옵션 이름에 해당하는 ID를 찾습니다.
+        const loadedScenario = scenarios.find(s => s.title === sessionData.scenario);
+        const loadedDifficulty = difficulties.find(d => d.name === sessionData.difficulty);
+        const loadedGenre = genres.find(g => g.name === sessionData.genre);
+        const loadedMode = modes.find(m => m.name === sessionData.mode);
+        
+        // 모든 옵션 ID를 찾았는지 확인합니다.
+        if (loadedScenario && loadedDifficulty && loadedGenre && loadedMode) {
+          // 1. 프론트엔드 UI 상태를 업데이트합니다.
+          setSelectedScenarioId(loadedScenario.id);
+          setSelectedDifficultyId(loadedDifficulty.id);
+          setSelectedGenreId(loadedGenre.id);
+          setSelectedModeId(loadedMode.id);
+
+          // ✅ [핵심 수정] 불러온 옵션 ID들을 서버 DB에도 다시 저장합니다.
+          await saveRoomOptions(roomId, {
+            scenario: loadedScenario.id,
+            difficulty: loadedDifficulty.id,
+            mode: loadedMode.id,
+            genre: loadedGenre.id,
+          });
+
+          setNotificationModalContent({
+            title: "불러오기 성공",
+            message: "저장된 게임 설정이 적용되었습니다.\n'준비 완료' 후 게임을 시작하세요.",
+          });
+
+        } else {
+          setNotificationModalContent({
+            title: "불러오기 오류",
+            message: "저장된 게임 옵션 중 일부를 찾을 수 없습니다.",
+          });
+        }
+      } else {
+        setNotificationModalContent({
+          title: "알림",
+          message: "저장된 게임 기록이 없습니다.",
+        });
+        setLoadedSession(null);
+      }
+    } catch (error) {
+      console.error("게임 불러오기 실패:", error);
+      setNotificationModalContent({
+        title: "오류",
+        message: "저장된 게임을 불러오는 데 실패했거나 기록이 없습니다.",
+      });
+      setLoadedSession(null);
+    }
+    setIsNotificationModalVisible(true);
+  };
+
   const onStartGame = () => {
-    if (!canStart || !wsRef.current) return;
-    wsRef.current.send(JSON.stringify({ action: "start_game" }));
+    if (canStart && wsRef.current) {
+      wsRef.current.send(JSON.stringify({ action: "start_game" }));
+    }
   };
 
   const onEndGame = () => {
@@ -369,10 +450,19 @@ export default function RoomScreen() {
               </View>
 
               {isOwner && (
-                <TouchableOpacity style={styles.gameOptionButton} onPress={() => setIsTopicModalVisible(true)}>
-                  <Ionicons name="settings-sharp" size={20} color="#E2C044" />
-                  <Text style={styles.gameOptionButtonText}>게임 옵션 설정</Text>
-                </TouchableOpacity>
+                // ✅ [수정] 버튼들을 감싸는 View 추가
+                <View style={styles.ownerButtonRow}>
+                  <TouchableOpacity style={styles.gameOptionButton} onPress={() => setIsTopicModalVisible(true)}>
+                    <Ionicons name="settings-sharp" size={20} color="#E2C044" />
+                    <Text style={styles.gameOptionButtonText}>옵션 설정</Text>
+                  </TouchableOpacity>
+
+                  {/* ✅ [추가] 불러오기 버튼 */}
+                  <TouchableOpacity style={styles.gameOptionButton} onPress={handleLoadGame}>
+                    <Ionicons name="cloud-download" size={20} color="#E2C044" />
+                    <Text style={styles.gameOptionButtonText}>불러오기</Text>
+                  </TouchableOpacity>
+                </View>
               )}
 
               <View style={styles.buttonContainer}>
@@ -434,6 +524,26 @@ export default function RoomScreen() {
 
       <Modal transparent={true} visible={isCountdownModalVisible} animationType="fade" onRequestClose={() => {}}>
         <View style={styles.countdownModalOverlay}><View style={styles.countdownModalContentBox}><Text style={styles.countdownModalText}>{countdownModalContent}</Text></View></View>
+      </Modal>
+
+      <Modal
+        transparent={true}
+        visible={isNotificationModalVisible}
+        animationType="fade"
+        onRequestClose={() => setIsNotificationModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.notificationModalBox}>
+            <Text style={styles.modalTitle}>{notificationModalContent.title}</Text>
+            <Text style={styles.notificationModalMessage}>{notificationModalContent.message}</Text>
+            <TouchableOpacity
+              style={styles.modalConfirmButton}
+              onPress={() => setIsNotificationModalVisible(false)}
+            >
+              <Text style={styles.topicText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       <Modal transparent={true} visible={isTopicModalVisible} animationType="fade" onRequestClose={() => setIsTopicModalVisible(false)}>
@@ -700,5 +810,33 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     backgroundColor: '#4A5568', // 회색 계열
-  }
+  },
+  ownerButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  // ✅ [추가] 알림 모달을 위한 스타일들
+  notificationModalBox: {
+    width: "30%",
+    backgroundColor: "#161B2E",
+    borderRadius: 12,
+    padding: 25,
+    borderWidth: 1,
+    borderColor: '#2C344E',
+    alignItems: 'center',
+  },
+  notificationModalMessage: {
+    fontSize: 16,
+    color: "#D4D4D4",
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 24,
+  },
+  modalConfirmButton: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#7C3AED',
+  },
 });

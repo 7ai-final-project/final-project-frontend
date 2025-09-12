@@ -19,8 +19,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 // [수정] API 서비스에서 Character 타입과 endGame 함수만 import 합니다.
 import { Character, endGame, getWebSocketNonce } from "@/services/api";
-import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade, renderSceneFromRound } from "@/util/ttrpg";
+import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade } from "@/util/ttrpg";
 import { Audio } from "expo-av";
+
+interface LoadedSessionData {
+  choice_history: any;
+  character_history: any;
+}
 
 // [수정] Props 타입: GameSetup에서 넘겨주는 데이터 구조에 맞게 변경
 type Props = {
@@ -32,6 +37,7 @@ type Props = {
         aiCharacters: Character[];
         allCharacters: Character[];
     };
+    initialSessionData?: LoadedSessionData | null;
     turnSeconds?: number;
 };
 
@@ -46,7 +52,8 @@ export default function GameEngineRealtime({
     roomId,
     topic,
     difficulty = "초급",
-    setupData, // [수정] selectedCharacter 대신 setupData를 받습니다.
+    setupData,
+    initialSessionData = null,
     turnSeconds = 20,
 }: Props) {
     // [수정] setupData에서 필요한 정보를 구조 분해 할당합니다.
@@ -66,6 +73,7 @@ export default function GameEngineRealtime({
     const [currentScene, setCurrentScene] = useState<SceneTemplate | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    
 
     // [수정] 로딩 및 에러 상태 이름을 명확히 변경합니다. (기존 loadingScenes, loadError 대체)
     // const [sceneTemplates, setSceneTemplates] = useState<SceneTemplate[]>([]);
@@ -130,14 +138,25 @@ export default function GameEngineRealtime({
                     console.log("✅ GameEngineRealtime WebSocket Connected");
                     setIsLoading(true); // 로딩 시작
                     // 연결 성공 후, 첫 장면 요청
-                    ws?.send(JSON.stringify({
-                        type: "request_initial_scene",
-                        topic: Array.isArray(topic) ? topic[0] : topic,
-                        characters: setupData.allCharacters.map(c => ({
-                            name: c.name,
-                            description: c.description
-                        })),
-                    }));
+                    if (initialSessionData) {
+                        // 1. 불러온 데이터가 있으면 'continue_game' 액션을 전송
+                        console.log("🚀 게임 이어하기를 요청합니다.");
+                        ws?.send(JSON.stringify({
+                            type: "continue_game",
+                            session_data: initialSessionData,
+                        }));
+                    } else {
+                        // 2. 없으면 기존처럼 'request_initial_scene' 액션을 전송
+                        console.log("🚀 새 게임 시작을 요청합니다.");
+                        ws?.send(JSON.stringify({
+                            type: "request_initial_scene",
+                            topic: Array.isArray(topic) ? topic[0] : topic,
+                            characters: setupData.allCharacters.map(c => ({
+                                name: c.name,
+                                description: c.description
+                            })),
+                        }));
+                    }
                 };
 
                 ws.onmessage = (event) => {
@@ -157,21 +176,16 @@ export default function GameEngineRealtime({
 
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-                    } 
-                    // [추가] 다른 참여자 선택 정보 수신 로직
-                    else if (data.type === "game_update" && data.payload.event === "choice_update") {
-                        setAiChoices(prev => ({...prev, ...data.payload.choices}));
                     }
-                    // [추가] 서버로부터 최종 라운드 결과 수신 로직 (3번 기능에 필요)
-                    else if (data.type === "game_update" && data.payload.event === "round_result") {
-                        setRoundResult(data.payload.result);
-                        if (currentScene) {
-                            const text = renderSceneFromRound(currentScene, data.payload.result);
-                            setCinematicText(text);
-                        }
-                        // 모든 결과가 도착했으므로 cinematic으로 전환
+                    else if (data.type === "game_update" && data.payload.event === "turn_resolved") {
+                        // 서버가 보내준 narration으로 cinematicText를 설정합니다.
+                        setCinematicText(data.payload.narration);
+                        setRoundResult(data.payload.roundResult);
                         setPhase("cinematic");
+                        phaseAnim.setValue(0);
+                        Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
                     }
+
                     else if (data.type === "save_success") {
                         setSaveModalMessage(data.message);
                         setIsSaveModalVisible(true);
@@ -210,7 +224,7 @@ export default function GameEngineRealtime({
             }
             stopTimer(); // 타이머도 함께 정리
         };
-    }, [roomId, topic, setupData]);
+    }, [roomId, topic, setupData, initialSessionData]);
 
     // --- 사운드 로딩 Hook (변경 없음) ---
     useEffect(() => {
@@ -300,7 +314,6 @@ export default function GameEngineRealtime({
         setIsRolling(true);
         setDiceResult(null);
         spinValue.setValue(0);
-
         const spinAnim = Animated.loop(Animated.timing(spinValue, { toValue: 1, duration: 400, useNativeDriver: true }));
         spinAnim.start();
 
@@ -308,7 +321,7 @@ export default function GameEngineRealtime({
             spinAnim.stop();
 
             const myChoice = roundSpec?.choices[myRole!]?.find(c => c.id === myChoiceId);
-            if (!myChoice || !myRole) {
+            if (!myChoice || !myRole || !ws) {
                 setDiceResult("오류: 선택지를 찾을 수 없습니다.");
                 setIsRolling(false);
                 return;
@@ -328,66 +341,46 @@ export default function GameEngineRealtime({
             else if (myDice === 1) { myGrade = "SF"; resultText = "치명적 실패 💀 (Natural 1...)"; }
             else if (myTotal >= DC) { myGrade = "S"; resultText = `성공 ✅ (목표 DC ${DC} 이상 달성)`; }
             else { myGrade = "F"; resultText = `실패 ❌ (목표 DC ${DC} 미달)`; }
+
+            const playerResult: PerRoleResult = {
+                role: myRole!,
+                choiceId: myChoiceId!,
+                grade: myGrade,
+                dice: myDice,
+                appliedStat: myAppliedStatKorean,
+                statValue: myStatValue,
+                modifier: myModifier,
+                total: myTotal,
+                characterName: myCharacter.name, // 내 캐릭터 이름 추가
+            };
             
             setDiceResult(`🎲 d20: ${myDice} + ${myAppliedStatKorean}(${myStatValue}) + 보정(${myModifier}) = ${myTotal} → ${resultText}`);
             setIsRolling(false);
-
-            const myResult: PerRoleResult = {
-                role: myRole,
-                choiceId: myChoiceId!,
-                grade: myGrade,
-                dice: myDice, appliedStat: myChoice.appliedStat, statValue: myStatValue, modifier: myModifier, total: myTotal,
-            };
-
-            // [수정] AI 캐릭터들의 역할 정보만 담아서 전달 (실제 판정값은 LLM이 생성한 fragments에 따름)
-            const aiResults: PerRoleResult[] = aiCharacters.map(aiChar => ({
-                role: currentScene?.roleMap?.[aiChar.name] ?? "unknown",
-                choiceId: "ai_choice", grade: "S",
-                dice: 0, appliedStat: "hp", statValue: 0, modifier: 0, total: 0,
+            
+             ws.send(JSON.stringify({
+                type: "submit_player_choice",
+                player_result: playerResult,
+                all_characters: allCharacters.map(c => ({
+                    ...c,
+                    role_id: currentScene?.roleMap[c.name]
+                })),
             }));
 
-            const finalResult: RoundResult = {
-                sceneIndex: currentScene?.index ?? 0,
-                results: [myResult, ...aiResults],
-                logs: [],
-            };
-            setRoundResult(finalResult);
+            // ✅ [수정] 결과를 기다리는 'sync' 단계로 전환합니다.
+            setPhase("sync");
 
-            if (currentScene) {
-                const text = renderSceneFromRound(currentScene, finalResult);
-                setCinematicText(text);
-            }
-            
-            // 애니메이션과 함께 cinematic 단계로 전환
-            Animated.timing(phaseAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
-                setPhase("cinematic");
-                Animated.timing(phaseAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-            });
         }, 2000);
     };
 
     const submitChoice = (choiceId: string) => {
-        if (!ws || !myRole || !currentScene) return;
-        const choice = roundSpec?.choices[myRole]?.find(c => c.id === choiceId);
+        const choice = roundSpec?.choices[myRole!]?.find(c => c.id === choiceId);
         if (!choice) return;
 
         clickSound?.replayAsync();
-        setSubmitting(true);
         setMyChoiceId(choiceId);
-
-        // [수정] 선택한 내용을 웹소켓으로 서버에 전송
-        ws.send(JSON.stringify({
-            type: "submit_choice",
-            choice: {
-                role: myRole,
-                choiceId: choice.id,
-                text: choice.text,
-                sceneIndex: currentScene.index
-            }
-        }));
-        
         stopTimer();
-        setPhase("dice_roll"); // 서버 응답 대기
+        // 내부 상태만 'dice_roll'로 변경합니다.
+        setPhase("dice_roll");
     };
 
     const autoPickAndSubmit = () => {
@@ -399,19 +392,20 @@ export default function GameEngineRealtime({
     const handleNextScene = () => {
         if (!ws || !myRole || !myChoiceId || !currentScene) return;
 
-        // 로딩 상태로 전환
         setIsLoading(true);
 
         const myLastChoice = myChoices.find(c => c.id === myChoiceId);
         if (!myLastChoice) return;
 
-        // 다음 씬을 요청하기 위해 마지막 선택 정보를 다시 보냅니다.
+        // ✅ 백엔드와 약속한 'request_next_scene' 타입으로 메시지를 보냅니다.
         ws.send(JSON.stringify({
-            type: "submit_choice",
-            choice: {
-                role: myRole,
-                choiceId: myLastChoice.id,
-                text: `(다음 장면으로 넘어감)`,
+            type: "request_next_scene",
+            history: { // history 객체 안에 필요한 정보를 담습니다.
+                lastChoice: {
+                    role: myRole,
+                    text: myLastChoice.text,
+                },
+                lastNarration: cinematicText, // 이전 턴의 결과 텍스트를 함께 보냅니다.
                 sceneIndex: currentScene.index,
             }
         }));
@@ -447,7 +441,8 @@ export default function GameEngineRealtime({
             title: roundSpec?.title,
             description: roundSpec?.title, // 현재 템플릿에서는 title이 주된 설명이므로 동일하게 사용
             choices: choicesFormatted,
-            selectedChoice: selectedChoiceFormatted
+            selectedChoice: selectedChoiceFormatted,
+            sceneIndex: currentScene.index
         };
 
         // 웹소켓으로 데이터 전송
@@ -551,6 +546,11 @@ export default function GameEngineRealtime({
                     {phase === "choice" && (
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
                             <Text style={styles.title}>{title}</Text>
+                            <ScrollView style={styles.descriptionBox}>
+                                <Text style={styles.descriptionText}>
+                                    {roundSpec.description}
+                                </Text>
+                            </ScrollView>
                             <Text style={styles.subtitle}>
                                 {myCharacter.name} — {myRole}
                             </Text>
@@ -725,7 +725,7 @@ export default function GameEngineRealtime({
                                 return (
                                     <View key={index} style={styles.resultItem}>
                                         <Text style={styles.resultRole}>
-                                            {result.role} {result.role === myRole ? '(나)' : ''}
+                                            {result.characterName} {result.characterName === myCharacter.name ? '(나)' : ''}
                                         </Text>
                                         <Text style={styles.resultDetails}>
                                             - 선택: "{choiceText}"
@@ -1109,5 +1109,17 @@ const styles = StyleSheet.create({
         paddingHorizontal: 25,
         borderRadius: 10,
         alignItems: 'center',
+    },
+    descriptionBox: {
+        maxHeight: 100, // 설명이 너무 길 경우를 대비해 최대 높이 설정
+        marginVertical: 12,
+        padding: 12,
+        backgroundColor: "rgba(0,0,0,0.2)",
+        borderRadius: 8,
+    },
+    descriptionText: {
+        color: '#D4D4D4',
+        fontSize: 15,
+        lineHeight: 22,
     },
 });

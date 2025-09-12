@@ -42,6 +42,7 @@ export const leaveRoom = (id: string) => api.post(`game/${id}/leave/`);
 export const toggleReady = (id: string) => api.post(`game/${id}/toggle-ready/`);
 export const startGame = (id: string) => api.post(`game/${id}/start/`);
 export const endGame = (id: string) => api.post(`game/${id}/end/`);
+export const fetchMySession = (roomId: string) => api.get(`game/${roomId}/my-session/`);
 export const getWebSocketNonce = () => api.post("common/websocket-nonce/");
 export const fetchScenarios = () => api.get("game/options/scenarios/");
 export const fetchDifficulties = () => api.get("game/options/difficulties/");
