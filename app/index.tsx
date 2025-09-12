@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 import { useKakaoAuth } from '../hooks/useKakaoAuth';
 import { useFonts } from 'expo-font';
+import OptionsModal from '../components/OptionsModal';
 
 // 텍스트가 영어인지 확인하는 헬퍼 함수를 만듭니다. 
  const isEnglish = (text: string): boolean => {
@@ -162,6 +163,15 @@ const TypingText: React.FC<TypingTextProps> = ({ text, speed = 50, style }) => {
 
 export default function HomeScreen() {
   // 1. 상태 변수 추가 및 이름 명확화
+  const [fontsLoaded, fontError] = useFonts({
+    'neodgm': require('../assets/fonts/neodgm.ttf'),
+  });
+
+   useEffect(() => {
+    if (fontError) throw fontError;
+  }, [fontError]);
+
+
   const [loginModalVisible, setLoginModalVisible] = useState(false);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false); // 옵션 모달 상태
   const [backgroundColor, setBackgroundColor] = useState('#0B1021'); // 배경색 상태
@@ -268,21 +278,14 @@ return (
               </View>
             </>
           )}
-          
-          {/* 멀티 모드 버튼은 로그인했을 때만 보입니다. */}
-          {user && (
-            <View style={styles.modeContainer}>
-              <MedievalButton onPress={() => router.push('/game/single')}>
-                싱글 모드
-              </MedievalButton>
-              {/* 옵션 버튼은 헤더로 이동했으므로 여기서 삭제합니다. */}
-            </View>
-          )}
 
           {user && (
             <View style={styles.modeContainer}>
               <MedievalButton onPress={() => router.push('/game/story')}>
                 스토리 모드
+              </MedievalButton>
+              <MedievalButton onPress={() => router.push('/game/single')}>
+                싱글 모드
               </MedievalButton>
               <MedievalButton onPress={() => router.push('/game/multi')}>
                 멀티 모드
@@ -333,59 +336,20 @@ return (
 
 
       {/* 4. 옵션 모달 UI 구현 */}
-      <Modal visible={optionsModalVisible} animationType="fade" transparent={true} onRequestClose={() => setOptionsModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <TouchableOpacity style={styles.closeIcon} onPress={() => setOptionsModalVisible(false)}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>설정</Text>
-            
-            <View style={styles.optionSection}>
-              <Text style={styles.optionLabel}>바탕화면 색상</Text>
-              <View style={styles.colorOptionsContainer}>
-                {['#0B1021', '#4A148C', '#004D40', '#3E2723'].map(color => (
-                  <TouchableOpacity 
-                    key={color}
-                    style={[styles.colorOption, { backgroundColor: color, borderColor: backgroundColor === color ? '#E2C044' : '#fff' }]} 
-                    onPress={() => setBackgroundColor(color)} 
-                  />
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.optionSection}>
-              <Text style={styles.optionLabel}>사운드</Text>
-              <View style={styles.optionRow}>
-                <Text style={styles.optionText}>배경음악 (BGM)</Text>
-                <Switch trackColor={{ false: "#767577", true: "#E2C044" }} thumbColor={isBgmOn ? "#f4f3f4" : "#f4f3f4"} onValueChange={setIsBgmOn} value={isBgmOn} />
-              </View>
-              <View style={styles.optionRow}>
-                <Text style={styles.optionText}>효과음 (SFX)</Text>
-                <Switch trackColor={{ false: "#767577", true: "#E2C044" }} thumbColor={isSfxOn ? "#f4f3f4" : "#f4f3f4"} onValueChange={setIsSfxOn} value={isSfxOn} />
-              </View>
-            </View>
-
-            <View style={styles.optionSection}>
-              <Text style={styles.optionLabel}>글자 크기</Text>
-              <View style={styles.fontSizeSelector}>
-                <TouchableOpacity onPress={() => setFontSizeMultiplier(0.9)} style={[styles.fontSizeButton, fontSizeMultiplier === 0.9 && styles.fontSizeButtonActive]}>
-                  <Text style={styles.fontSizeButtonText}>작게</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setFontSizeMultiplier(1)} style={[styles.fontSizeButton, fontSizeMultiplier === 1 && styles.fontSizeButtonActive]}>
-                  <Text style={styles.fontSizeButtonText}>보통</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setFontSizeMultiplier(1.1)} style={[styles.fontSizeButton, fontSizeMultiplier === 1.1 && styles.fontSizeButtonActive]}>
-                  <Text style={styles.fontSizeButtonText}>크게</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-          </View>
-        </View>
-      </Modal>
-    </View>
-  </ImageBackground> 
+      <OptionsModal
+          visible={optionsModalVisible}
+          onClose={() => setOptionsModalVisible(false)}
+          isBgmOn={isBgmOn}
+          setIsBgmOn={setIsBgmOn}
+          isSfxOn={isSfxOn}
+          setIsSfxOn={setIsSfxOn}
+          fontSizeMultiplier={fontSizeMultiplier}
+          setFontSizeMultiplier={setFontSizeMultiplier}
+          backgroundColor={backgroundColor}
+          setBackgroundColor={setBackgroundColor}
+        />
+      </View>
+    </ImageBackground> 
   );
 }
 
@@ -395,7 +359,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 40 },
   main: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#fff', fontSize: 18 },
+  loadingText: { color: '#fff', fontSize: 18 , fontFamily: 'neodgm'},
   vt323Font: {fontFamily: 'VT323'},
 
 header: {
@@ -416,14 +380,14 @@ header: {
   settingsButton: {
     padding: 5,
   },
-  logo: { fontSize: 20, fontWeight: 'bold', color: '#E2C044' },
+  logo: { fontSize: 20, fontWeight: 'bold', color: '#E2C044', fontFamily: 'neodgm' },
   loginButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     backgroundColor: '#7C3AED',
     borderRadius: 8,
   },
-  loginText: { color: '#fff', fontWeight: '600' },
+  loginText: { color: '#fff', fontWeight: '600' , fontFamily: 'neodgm' },
   loggedInBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -432,6 +396,7 @@ header: {
   loggedInText: { 
     color: '#fff', 
     fontSize: 16, 
+    fontFamily: 'neodgm',
     fontWeight: '600',
   },
   logoutButton: {
@@ -442,11 +407,11 @@ header: {
   },
 
   // --- 메인 콘텐츠 (환영 메시지 & 소식 창) ---
-  title: { fontSize: 22, fontWeight: 'bold', color: '#F4E1D2', textAlign: 'center', marginBottom: 20 },
-  description: { fontSize: 16, color: '#D1C4E9', textAlign: 'center', lineHeight: 24 },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#F4E1D2', textAlign: 'center', marginBottom: 20 , fontFamily: 'neodgm',},
+  description: { fontSize: 16, fontFamily: 'neodgm', color: '#D1C4E9', textAlign: 'center', lineHeight: 24 },
   newsContainer: { width: '30%', backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: 15, borderRadius: 10, marginTop: 30, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
-  newsTitle: { color: '#E2C044', fontWeight: 'bold', fontSize: 16, textAlign: 'center', marginBottom: 5 },
-  newsText: { color: '#D1C4E9' , textAlign: 'center' },
+  newsTitle: { color: '#E2C044', fontWeight: 'bold', fontSize: 16, fontFamily: 'neodgm', textAlign: 'center', marginBottom: 5 },
+  newsText: { color: '#D1C4E9' , fontFamily: 'neodgm', textAlign: 'center' },
   modeContainer: { flexDirection: 'column', marginTop: 30, gap: 20, alignItems: 'center' },
 
   // ★★★ 여기가 추가된 부분입니다! (중세 버튼 전체) ★★★
@@ -497,8 +462,8 @@ header: {
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
-  mediumButtonText: { fontSize: 20 },
-  largeButtonText: { fontSize: 24 },
+  mediumButtonText: { fontSize: 20,  fontFamily: 'neodgm', },
+  largeButtonText: { fontSize: 24,  fontFamily: 'neodgm', },
   
   // 체인 장식 스타일
   chain: {
@@ -536,7 +501,7 @@ header: {
   // --- 모달 공통 ---
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   modalBox: { width: '85%', maxWidth: 400, backgroundColor: '#2a2d47', borderRadius: 16, padding: 24, alignItems: 'center', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, position: 'relative' },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
+  modalTitle: { fontSize: 20,  fontFamily: 'neodgm', fontWeight: 'bold', color: '#fff', marginBottom: 20 },
   closeIcon: { position: 'absolute', top: 12, right: 12, padding: 6 },
 
   // --- 로그인 모달 (아이콘 포함) ---
@@ -545,21 +510,9 @@ header: {
   kakaoButton: { backgroundColor: '#fee500' },
   socialIconContainer: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   kakaoIconContainer: { backgroundColor: 'transparent' },
-  kakaoIcon: { fontSize: 20, fontWeight: 'bold', color: '#3c1e1e' },
-  socialButtonText: { fontSize: 16, fontWeight: '600', color: '#fff', flex: 1, textAlign: 'center' },
+  kakaoIcon: { fontSize: 20, fontFamily: 'neodgm', fontWeight: 'bold', color: '#3c1e1e' },
+  socialButtonText: { fontSize: 16,  fontFamily: 'neodgm', fontWeight: '600', color: '#fff', flex: 1, textAlign: 'center' },
   kakaoButtonText: { color: '#3c1e1e' },
-
-  // --- 옵션 모달 ---
-  optionSection: { width: '100%', marginBottom: 15, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 15 },
-  optionLabel: { color: '#D1C4E9', fontSize: 16, marginBottom: 15, fontWeight: '600' },
-  optionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 5 },
-  optionText: { color: '#fff', fontSize: 16 },
-  colorOptionsContainer: { flexDirection: 'row', justifyContent: 'space-around', width: '100%' },
-  colorOption: { width: 40, height: 40, borderRadius: 20, borderWidth: 3 },
-  fontSizeSelector: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8 },
-  fontSizeButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
-  fontSizeButtonActive: { backgroundColor: '#7C3AED' },
-  fontSizeButtonText: { color: '#fff', fontWeight: '600' },
 
     // --- 배경 효과 ---
   starContainer: { position: 'absolute', width: '100%', height: '100%', zIndex: 0 },
