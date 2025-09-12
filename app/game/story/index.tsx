@@ -12,17 +12,19 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 interface Story {
   id: string;
-  identifier: string;
   title: string;
+  title_eng: string;
   description: string;
-  image_path: string | null;
-  world: string; 
+  description_eng: string;
+  is_display: boolean;
+  is_deleted: boolean;
 }
-const storyImages = [
-    require('../../../assets/images/game/multi_mode/background/sun_and_moon.jpg'),
-    require('../../../assets/images/game/multi_mode/background/well_ghost.jpg'),
-    require('../../../assets/images/game/multi_mode/background/good_brothers.jpg'),
-];
+
+const storyImages: { [key: string]: any } = {
+    'sun_and_moon': require('../../../assets/images/game/multi_mode/background/sun_and_moon.jpg'),
+    'well_ghost': require('../../../assets/images/game/multi_mode/background/well_ghost.jpg'),
+    'good_brothers': require('../../../assets/images/game/multi_mode/background/good_brothers.jpg'),
+};
 
 export default function StorySelectorScreen() {
   const [stories, setStories] = useState<Story[]>([]);
@@ -36,118 +38,80 @@ export default function StorySelectorScreen() {
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1);
   const [backgroundColor, setBackgroundColor] = useState('#1a202c');
 
-    // 이야기 목록 조회
-    useEffect(() => {
-        const fetchStories = async () => {
-            try {
-                const response = await api.get('game/story/stories/');
-                console.log(response);
-                
-                setStories(Object.values(response.data));
-            } catch (error) {
-                console.error("이야기 목록 로딩 실패:", error);
-                alert("이야기 목록을 불러올 수 없습니다. 서버를 확인해주세요.");
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchStories();
-    }, []);
-
-    // 이야기 선택
-    const handleStorySelect = () => {
-        // 선택된 스토리를 params로 전달하여 play.tsx로 이동
-        router.push({
-          pathname: "/game/story/play",
-          params: { storyId: selectedStoryId },
-        });
+  // 이야기 목록 조회
+  useEffect(() => {
+    const fetchStories = async () => {
+      try {
+        const response = await api.get('game/story/stories/');
+        const data = response.data;
+        // console.log('Fetched stories: ', data.stories);
+        setStories(data.stories);
+      } catch(error: any) {
+        console.error('스토리 로드 중 오류 발생: ', error);
+        alert("이야기 목록을 불러올 수 없습니다. 서버를 확인해주세요.");
+      } finally {
+        setLoading(false);
+      }
     };
+    fetchStories();
+  }, []);
+
+  // 이야기 선택
+  const handleStorySelect = () => {
+    const selectedStory = stories.find(story => story.id === selectedStoryId);
+
+    if(selectedStory) {
+      // 선택된 스토리를 params로 전달하여 play.tsx로 이동
+      router.push({
+        pathname: "/game/story/play",
+        params: { story: selectedStory.title },
+      });
+    }
+  };
     
-  // ★★★ 4. 카드 선택 시 애니메이션과 함께 상태를 업데이트하는 함수 ★★★
+  // 카드 선택 애니메이션
   const handleCardPress = (storyId: string) => {
-    // 부드러운 애니메이션 효과를 적용합니다.
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    // 이미 선택된 카드를 다시 누르면 선택을 해제하고, 다른 카드를 누르면 선택을 변경합니다.
     setSelectedStoryId(prevId => prevId === storyId ? null : storyId);
   };
 
-const renderStoryCard = (story: Story, index: number) => { // ★★★ 2. map의 index를 인자로 받습니다. ★★★
+  const renderStoryCard = (story: Story) => {
     const isSelected = selectedStoryId === story.id;
-    // ★★★ 3. 백엔드 데이터 대신, 우리 배열의 index를 사용하여 이미지를 가져옵니다. ★★★
-    // 만약 stories 개수가 이미지 개수보다 많아도, 나머지는 undefined가 되어 이미지가 표시되지 않습니다.
-    const imageSource = storyImages[index];
-
-    return (
-        <TouchableOpacity
-            key={story.id}
-            style={[
-            Platform.OS === 'web' ? styles.cardWrapperWeb : styles.cardWrapperMobile,
-            isSelected && styles.selectedCardWrapper
-            ]}
-            onPress={() => handleCardPress(story.id)}
-            activeOpacity={0.9}
-        >
-    {/* ★★★ 여기가 수정된 부분입니다! ★★★ */}
-            {/* 1. ImageBackground 대신, 배경색을 가진 View를 사용합니다. */}
-            <View style={styles.cardBackground}>
-            {/* 2. 그 안에 Image 컴포넌트를 넣고, resizeMode를 'contain'으로 설정합니다. */}
-            <Image 
-                source={imageSource}
-                style={styles.cardImage}
-                resizeMode="contain" 
-            />
-            {/* 3. 이미지 위에 텍스트를 올리는 부분은 그대로 유지됩니다. */}
-            <View style={styles.cardTitleContainer}>
-                <Text style={styles.cardTitle}>{story.id}</Text>
-            </View>
-            </View>
-            
-            {isSelected && (
-            <View style={styles.cardContent}>
-                <Text style={styles.cardWorld}>{story.world}</Text>
-                <Text style={styles.cardDesc}>{story.description}</Text>
-            </View>
-            )}
-        </TouchableOpacity>
-        );
-  };
-
-  // ★★★ 5. FlatList의 각 아이템을 렌더링하는 함수를 분리합니다. ★★★
-  const renderStoryItem = ({ item }: { item: Story }) => {
-    const isSelected = selectedStoryId === item.id;
+    const imageSource = storyImages[story.title_eng] || require('../../../assets/images/game/multi_mode/background/sun_and_moon.jpg');
 
     return (
       <TouchableOpacity
-        key={item.id}
-        style={[
-          Platform.OS === 'web' ? styles.cardWrapperWeb : styles.cardWrapperMobile,
-          isSelected && styles.selectedCardWrapper
-        ]}
-        onPress={() => handleCardPress(item.id)}
+        key={story.id}
+        style={
+          [
+            Platform.OS === 'web' ? styles.cardWrapperWeb : styles.cardWrapperMobile,
+            isSelected && styles.selectedCardWrapper
+          ]
+        }
+        onPress={() => handleCardPress(story.id)}
         activeOpacity={0.9}
       >
-        <ImageBackground 
-          style={styles.cardBackground}
-          resizeMode="cover"
-          borderRadius={12}
-        >
-          <View style={styles.cardOverlay} />
-          <View style={styles.cardTitleContainer}>
-            <Text style={styles.cardTitle}>{item.title}</Text>
-          </View>
-        </ImageBackground>
-        
-        {isSelected && (
-          <View style={styles.cardContent}>
-            <Text style={styles.cardWorld}>{item.world}</Text>
-            <Text style={styles.cardDesc}>{item.description}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
+
+      <View style={styles.cardBackground}>
+        {imageSource && <Image source={imageSource} style={styles.cardImage} resizeMode="contain" />}
+        {!imageSource && <View style={styles.placeholderImage}><Text style={{color: 'white'}}>No Image</Text></View>}
+        <View style={styles.cardTitleContainer}>
+          <Text style={styles.cardTitle}>{story.title}</Text>
+        </View>
+      </View>
+      
+      {isSelected && (
+        <View style={styles.cardContent}>
+          <Text style={styles.cardWorld}>{story.title}</Text>
+          <Text style={styles.cardDesc}>{story.description}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
     );
   };
-    // 로딩 뷰
-    if(loading) {
+
+  // 로딩 뷰
+  if(loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#61dafb" />
@@ -156,77 +120,70 @@ const renderStoryCard = (story: Story, index: number) => { // ★★★ 2. map�
     );
   }
 
-    // 스토리 선택 뷰
-return (
+  // 스토리 선택 뷰
+  return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
           <ArrowLeft size={20} color="white" />
           <Text style={styles.headerButtonText}>Back</Text>
         </TouchableOpacity>
+        
         <Text style={styles.headerTitle}>스토리 선택</Text>
-        <View style={styles.headerIcons}>
-          <Wifi color="#4CAF50" size={24} />
-          <TouchableOpacity onPress={() => setOptionsModalVisible(true)}>
-            <Settings size={24} color="white" />
+          <View style={styles.headerIcons}>
+            <TouchableOpacity onPress={() => setOptionsModalVisible(true)}>
+              <Settings size={24} color="white" />
+            </TouchableOpacity>
+          </View>
+
+        <OptionsModal
+          visible={optionsModalVisible}
+          onClose={() => setOptionsModalVisible(false)}
+          isBgmOn={isBgmOn}
+          setIsBgmOn={setIsBgmOn}
+          isSfxOn={isSfxOn}
+          setIsSfxOn={setIsSfxOn}
+          fontSizeMultiplier={fontSizeMultiplier}
+          setFontSizeMultiplier={setFontSizeMultiplier}
+          backgroundColor={backgroundColor}
+          setBackgroundColor={setBackgroundColor}
+        />
+        </View>
+
+        {Platform.OS === 'web' ? (
+          <ScrollView 
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.listContainerWeb}
+          >
+            {stories.map(story => renderStoryCard(story))}
+          </ScrollView>
+        ) : (
+          <FlatList
+            data={stories}
+            renderItem={({ item }) => renderStoryCard(item)}
+            keyExtractor={(item) => item.id.toString()}
+            contentContainerStyle={styles.listContainerMobile}
+            ItemSeparatorComponent={() => <View style={{ height: 20 }} />}
+          />
+        )}
+
+        <View style={styles.bottomActions}>
+          <TouchableOpacity 
+            style={[
+              styles.actionButton, 
+              styles.startButton,
+              selectedStoryId === null && styles.disabledButton
+            ]} 
+            onPress={handleStorySelect}
+            disabled={selectedStoryId === null}
+          >
+            <Text style={[styles.actionButtonText, styles.startButtonText]}>
+              Start Story
+            </Text>
           </TouchableOpacity>
         </View>
-      <OptionsModal
-        visible={optionsModalVisible}
-        onClose={() => setOptionsModalVisible(false)}
-        isBgmOn={isBgmOn}
-        setIsBgmOn={setIsBgmOn}
-        isSfxOn={isSfxOn}
-        setIsSfxOn={setIsSfxOn}
-        fontSizeMultiplier={fontSizeMultiplier}
-        setFontSizeMultiplier={setFontSizeMultiplier}
-        backgroundColor={backgroundColor}
-        setBackgroundColor={setBackgroundColor}
-      />
       </View>
-
-       {/* ★★★ 1. ScrollView를 FlatList로 교체합니다. ★★★ */}
-        {/* ★★★ 3. Platform.OS 값에 따라 다른 컴포넌트를 렌더링합니다. ★★★ */}
-      {Platform.OS === 'web' ? (
-        // 웹 환경일 경우: 가로 ScrollView 사용
-        <ScrollView 
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.listContainerWeb}
-        >
-         {stories.map((story, index) => renderStoryCard(story, index))}
-        </ScrollView>
-      ) : (
-        // 모바일 환경일 경우: 세로 FlatList 사용
-        <FlatList
-          data={stories}
-          renderItem={({ item, index }) => renderStoryCard(item, index)}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainerMobile}
-          ItemSeparatorComponent={() => <View style={{ height: 20 }} />}
-        />
-      )}
-
-
-      {/* ★★★ 2 & 3. 하단 액션 버튼 수정 ★★★ */}
-      <View style={styles.bottomActions}>
-        {/* Cancel 버튼을 삭제했습니다. */}
-        <TouchableOpacity 
-          style={[
-            styles.actionButton, 
-            styles.startButton,
-            // selectedStoryId가 null이면 (선택된 스토리가 없으면) 버튼을 비활성화합니다.
-            selectedStoryId === null && styles.disabledButton
-          ]} 
-          onPress={handleStorySelect}
-          disabled={selectedStoryId === null}
-        >
-          <Text style={[styles.actionButtonText, styles.startButtonText]}>
-            Start Story
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
   );
 }
 
@@ -324,10 +281,16 @@ cardWrapperWeb: {
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 12,
   },
-
   cardImage: {
     width: '100%',
     height: '100%',
+  },
+  placeholderImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#4a5568',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
  cardTitleContainer: {
     position: 'absolute',
