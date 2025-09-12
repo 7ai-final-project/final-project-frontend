@@ -3,6 +3,8 @@ import { ArrowLeft, X, Wifi, Settings } from 'lucide-react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, ImageBackground, LayoutAnimation, UIManager, Platform, ScrollView, Image } from 'react-native';
 import { router } from 'expo-router';
 import api from '../../../services/api';
+import OptionsModal from '../../../components/OptionsModal'; 
+
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -26,6 +28,13 @@ export default function StorySelectorScreen() {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
+
+  const [optionsModalVisible, setOptionsModalVisible] = useState(false);
+
+  const [isBgmOn, setIsBgmOn] = useState(true);
+  const [isSfxOn, setIsSfxOn] = useState(true);
+  const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1);
+  const [backgroundColor, setBackgroundColor] = useState('#1a202c');
 
     // 이야기 목록 조회
     useEffect(() => {
@@ -158,10 +167,22 @@ return (
         <Text style={styles.headerTitle}>스토리 선택</Text>
         <View style={styles.headerIcons}>
           <Wifi color="#4CAF50" size={24} />
-          <TouchableOpacity onPress={() => router.replace('/')}>
-            <X size={24} color="white" />
+          <TouchableOpacity onPress={() => setOptionsModalVisible(true)}>
+            <Settings size={24} color="white" />
           </TouchableOpacity>
         </View>
+      <OptionsModal
+        visible={optionsModalVisible}
+        onClose={() => setOptionsModalVisible(false)}
+        isBgmOn={isBgmOn}
+        setIsBgmOn={setIsBgmOn}
+        isSfxOn={isSfxOn}
+        setIsSfxOn={setIsSfxOn}
+        fontSizeMultiplier={fontSizeMultiplier}
+        setFontSizeMultiplier={setFontSizeMultiplier}
+        backgroundColor={backgroundColor}
+        setBackgroundColor={setBackgroundColor}
+      />
       </View>
 
        {/* ★★★ 1. ScrollView를 FlatList로 교체합니다. ★★★ */}
@@ -240,6 +261,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: 'white',
     fontSize: 24,
+    fontFamily: 'neodgm',
     fontWeight: 'bold',
   },
   headerIcons: {
@@ -319,6 +341,7 @@ cardWrapperWeb: {
   cardTitle: {
     color: 'white',
     fontSize: 20,
+    fontFamily: 'neodgm',
     fontWeight: 'bold',
     textAlign: 'center', // 제목을 중앙 정렬
   },
@@ -331,6 +354,7 @@ cardWrapperWeb: {
   cardWorld: {
     color: '#a0aec0',
     fontSize: 17,
+    fontFamily: 'neodgm',
     fontStyle: 'italic',
     marginBottom: 8,
   },
@@ -338,6 +362,7 @@ cardWrapperWeb: {
   cardDesc: {
     color: '#e2e8f0',
     fontSize: 14,
+    fontFamily: 'neodgm',
     lineHeight: 20,
   },
   selectionIndicator: {
@@ -356,6 +381,7 @@ cardWrapperWeb: {
   selectionCheck: {
     color: 'white',
     fontSize: 12,
+    fontFamily: 'neodgm',
     fontWeight: 'bold',
   },
   bottomActions: {
@@ -379,6 +405,7 @@ cardWrapperWeb: {
   actionButtonText: {
     color: 'white',
     fontSize: 16,
+    fontFamily: 'neodgm',
   },
   startButtonText: {
     fontWeight: '600',
