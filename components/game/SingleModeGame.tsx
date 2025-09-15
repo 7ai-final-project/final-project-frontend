@@ -4,6 +4,7 @@ import api from "../../services/api";
 import { Audio } from "expo-av";
 import { Ionicons } from '@expo/vector-icons';
 import OptionsModal from '../OptionsModal'; 
+import { router } from 'expo-router';
 
 interface GameProps {
   initialData: {
@@ -34,20 +35,29 @@ const TypingText = ({ text, onFinished }: { text: string, onFinished: () => void
     const processedText = text.replace(/\. ([가-힣A-Za-z])/g, '.\n$1');
     
     let i = 0;
-    const typingInterval = setInterval(() => {
-      if (i < processedText.length) {
-        setDisplayedText(prev => prev + processedText.charAt(i));
-        i++;
-      } else {
-        clearInterval(typingInterval);
+      const intervalId = setInterval(() => {
+      // 한 글자씩 추가하는 대신, substring을 사용하여 항상 올바른 길이의 텍스트를 보장합니다.
+      // 이것이 상태 업데이트 지연으로 인한 문제를 방지합니다.
+      setDisplayedText(text.substring(0, i + 1));
+      i++;
+
+      if (i > text.length) {
+        clearInterval(intervalId);
         onFinished();
       }
-    }, 40);
+    }, 40); // 타이핑 속도 (ms)
 
-    return () => clearInterval(typingInterval);
-  }, [text]);
+    // 컴포넌트가 업데이트되거나 사라질 때, 이전의 인터벌을 반드시 정리합니다.
+    return () => clearInterval(intervalId);
+  }, [text]); // text prop이 바뀔 때만 이 효과를 다시 실행합니다.
 
-  return <Text style={styles.sceneDescription}>{displayedText}</Text>;
+  return (
+      <Text style={styles.sceneDescription}>
+          {displayedText}
+          {/* 타이핑이 끝났는지 여부는 onFinished 콜백으로 관리되므로, 커서는 displayedText 길이로 판단합니다. */}
+          {displayedText.length < text.length && <Text style={{ opacity: 0.5 }}>|</Text>}
+      </Text>
+  );
 };
 
 const MedievalButton: React.FC<MedievalButtonProps> = ({
@@ -152,6 +162,7 @@ export default function SingleModeGame({ initialData }: GameProps) {
       }
     };
     loadSounds();
+    console.log(initialData);
 
     // 컴포넌트가 사라질 때 모든 사운드 리소스 정리
     return () => {
@@ -181,53 +192,6 @@ export default function SingleModeGame({ initialData }: GameProps) {
       }
     }
   }, [currentMomentId, currentMomentTitle]);
-  
-  //   const generateImageForCurrentScene = async () => {
-  //     // `currentMomentId`가 없으면 (예: 게임 시작 전) 실행하지 않습니다.
-  //     if (!currentMomentId) return;
-
-  //     // 이미지 로딩 상태 초기화
-  //     setIsImageLoading(true);
-  //     setImageUrl(null);
-  //     setDuration(null);
-  //     setElapsedTime(0);
-
-  //     // 실시간 타이머 시작
-  //     if (intervalRef.current) clearInterval(intervalRef.current as any);
-  //     intervalRef.current = setInterval(() => {
-  //       setElapsedTime((prevTime) => prevTime + 0.1);
-  //     }, 100);
-
-  //     try {
-  //       // 백엔드의 이미지 생성 API를 호출합니다.
-  //       const response = await api.post(
-  //         "/image-gen/api/generate-scene-image/",
-  //         {
-  //           story_id: storyTitle,
-  //           scene_name: currentMomentId, // 현재 장면 ID를 전달
-  //         }
-  //       );
-
-  //       if (response.data) {
-  //         setImageUrl(response.data.image_url);
-  //         setDuration(response.data.duration);
-  //       } else {
-  //         Alert.alert("오류", "이미지 데이터를 받아오지 못했습니다.");
-  //       }
-  //     } catch (error: any) {
-  //       console.error("이미지 생성 실패:", error);
-  //       // (선택사항) 사용자에게 에러 알림
-  //       // Alert.alert("이미지 생성 실패", error.response?.data?.error || "알 수 없는 오류");
-  //     } finally {
-  //       // 이미지 로딩이 성공하든 실패하든 로딩 상태를 종료하고 타이머를 멈춥니다.
-  //       setIsImageLoading(false);
-  //       if (intervalRef.current) clearInterval(intervalRef.current as any);
-  //     }
-  //   };
-
-  //   // 컴포넌트가 처음 렌더링될 때, 그리고 `currentMomentId`가 바뀔 때마다 이 함수가 실행됩니다.
-  //   generateImageForCurrentScene();
-  // }, [currentMomentId]); // `currentMomentId`의 변화를 감지합니다.
 
   // 사용자가 선택지를 눌렀을 때의 처리 (텍스트 업데이트 및 이미지 생성 트리거)
   const handleChoice = async (choiceIndex: number) => {
@@ -270,18 +234,29 @@ export default function SingleModeGame({ initialData }: GameProps) {
  
   return (
     <View style={{ flex: 1, backgroundColor: backgroundColor }}>
-      <ScrollView contentContainerStyle={styles.container}>
+     <ScrollView contentContainerStyle={styles.container}>
         {/* --- 1. 헤더 --- */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="save-outline" size={28} color="#F4E4BC" />
-            <Text style={styles.headerButtonText}>저장</Text>
+         <View style={styles.header}>
+          {/* 1. 왼쪽: 뒤로가기 버튼 */}
+          <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={28} color="#F4E4BC" />
+            {/* <Text style={styles.headerButtonText}>Back</Text> */}
           </TouchableOpacity>
+
+          {/* 2. 가운데: 스토리 제목 */}
           <Text style={styles.storyTitle}>{storyTitle}</Text>
-          <TouchableOpacity style={styles.headerButton} onPress={() => setOptionsModalVisible(true)}>
-            <Ionicons name="settings-outline" size={28} color="#F4E4BC" />
-          </TouchableOpacity>
-        </View>
+
+          {/* 3. 오른쪽: 저장 & 설정 버튼 그룹 */}
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.headerButton}>
+              <Ionicons name="save-outline" size={28} color="#F4E4BC" />
+              <Text style={styles.headerButtonText}>저장</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerButton} onPress={() => setOptionsModalVisible(true)}>
+              <Ionicons name="settings-outline" size={28} color="#F4E4BC" />
+            </TouchableOpacity>
+          </View>
+          </View>
 
         {/* --- 2. 메인 콘텐츠 (좌우 분할) --- */}
         <View style={styles.mainContent}>
@@ -298,20 +273,18 @@ export default function SingleModeGame({ initialData }: GameProps) {
 
           {/* --- 2-2. 오른쪽 패널 (스토리 & 선택지) --- */}
           <View style={styles.rightPanel}>
-            <ScrollView contentContainerStyle={styles.rightPanelContent}>
-              
-              {/* 두루마리 스타일 스토리 컨테이너 */}
-              <ImageBackground
-                source={require('../../assets/images/game/multi_mode/background/scroll (3).png')}
-                style={styles.sceneContainer}
-                resizeMode="stretch"
-                onLayout={onScrollLayout}
-              >
-                <TypingText text={sceneText || ''} onFinished={() => setIsTyping(false)} />
-              </ImageBackground>
+           {/*<ScrollView contentContainerStyle={styles.rightPanelContent}>*/}
+          
+          <View style={styles.topCell}>
+            {/* 이제 ImageBackground 대신, 스타일로 꾸민 View를 사용합니다. */}
+            <ScrollView contentContainerStyle={styles.sceneContainer}>
+              <TypingText text={sceneText || ''} onFinished={() => setIsTyping(false)} />
+            </ScrollView>
+          </View>
 
               {/* MedievalButton 선택지 */}
-              <View style={styles.choiceGrid}>
+            <View style={styles.bottomCell}>
+            <ScrollView contentContainerStyle={styles.choiceGrid}>
                 {!isTyping && !isChoiceLoading &&
                   choices.map((choiceText: string, index: number) => (
                   <MedievalButton
@@ -326,9 +299,9 @@ export default function SingleModeGame({ initialData }: GameProps) {
                   ))
                 }
                 {isChoiceLoading && <ActivityIndicator size="small" color="#fff" />}
+              </ScrollView>
               </View>
             {error && <Text style={styles.errorMessage}>{error}</Text>}
-          </ScrollView>
           </View>
         </View>
 
@@ -382,6 +355,11 @@ const styles = StyleSheet.create({
     fontSize: 16, // neodgm 폰트는 크기가 작으므로 키워줍니다.
     fontFamily: 'neodgm',
   },
+    headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   storyTitle: {
     color: '#F4E4BC',
     fontSize: 28, // neodgm 폰트는 크기가 작으므로 키워줍니다.
@@ -399,10 +377,11 @@ const styles = StyleSheet.create({
     flex: 1, // 가로 비율 1
     justifyContent: 'center',
     alignItems: 'center',
+    color: '#1e1e1e', 
   },
  imageContainer: {
     width: "100%",
-    height: 800,
+    height: 700,
     backgroundColor: "#20232a",
     borderRadius: 15,
     justifyContent: "center",
@@ -439,19 +418,33 @@ const styles = StyleSheet.create({
   // 오른쪽 패널 (스토리 & 선택지)
   rightPanel: {
     flex: 1, // 가로 비율 1
+    flexDirection: 'column', 
+    borderColor: 'black',
+    borderRadius: 15, 
+    backgroundColor: '#1e1e1e', 
+    padding: 10, 
   },
-  rightPanelContent: {
-    flexGrow: 1, // 내용이 적어도 패널을 꽉 채우도록
+  // 위쪽 셀 (흰색 종이)
+  topCell: {
+    flex: 1, // ★★★ 공간을 1의 비율 (50%)로 차지 ★★★
+    justifyContent: 'center',
+  },
+  // 아래쪽 셀 (선택지)
+  bottomCell: {
+    flex: 1, // ★★★ 공간을 1의 비율 (50%)로 차지 ★★★
+    justifyContent: 'center',
+    paddingTop: 15, // 위쪽 셀과의 간격
   },
   sceneContainer: {
-    paddingVertical: 50,
-    paddingHorizontal: 70,
-    minHeight: 300,
-    top: -50,
-    width: 800,
-    marginBottom: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#F4E4BC', 
+    borderRadius: 10,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+
   },
   sceneDescription: { 
     color: "#000000ff",
@@ -476,15 +469,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 20,
     fontWeight: "bold",
+    fontFamily: 'neodgm',
   },
 
   // --- MedievalButton 관련 스타일을 index.tsx에서 복사해옵니다. ---
-  buttonContainer: { justifyContent: 'center', alignItems: 'center', marginVertical: 12, height: 80 },
-  mediumButton: { width: '100%', height: 70 },
-  largeButton: { width: 320, height: 80 },
+  buttonContainer: { justifyContent: 'center', alignItems: 'center', marginVertical: 12, height: 300 },
+  mediumButton: { width: '100%', height: 70, },
+  largeButton: { width: '150%', height: 80 },
   outerBorder: { position: 'absolute', width: '100%', height: '100%', backgroundColor: '#4a2c1a', borderRadius: 18, borderWidth: 2, borderColor: '#2a180e' },
-  innerBorder: { position: 'absolute', width: '95%', height: '90%', backgroundColor: '#8B4513', borderRadius: 14, borderWidth: 2, borderColor: '#c88a5a' },
-  buttonBody: { width: '90%', height: '80%', backgroundColor: '#6a381a', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 2, elevation: 5 },
+  innerBorder: { position: 'absolute', width: '102%', height: '100%', backgroundColor: '#8B4513', borderRadius: 14, borderWidth: 2, borderColor: '#c88a5a' },
+  buttonBody: { width: '100%', height: '80%', backgroundColor: '#6a381a', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 2, elevation: 5 },
   pressed: { backgroundColor: '#4a2c1a' },
   buttonText: {
     fontFamily: 'neodgm',
