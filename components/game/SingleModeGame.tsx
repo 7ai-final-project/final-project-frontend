@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
   },
  imageContainer: {
     width: "100%",
-    height: 800,
+    height: 700,
     backgroundColor: "#20232a",
     borderRadius: 15,
     justifyContent: "center",
