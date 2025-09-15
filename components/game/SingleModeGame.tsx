@@ -13,6 +13,7 @@ interface GameProps {
     story_title: string;
     current_moment_id: string;
     current_moment_title: string;
+    image_path: string;
   };
 }
 
@@ -93,6 +94,7 @@ export default function SingleModeGame({ initialData }: GameProps) {
   const [storyTitle] = useState<string>(initialData.story_title);
   const [currentMomentId, setCurrentMomentId] = useState<string>(initialData.current_moment_id);
   const [currentMomentTitle, setCurrentMomentTitle] = useState<string>(initialData.current_moment_title);
+  const [currentMomentImage, setCurrentMomentImage] = useState<string>(initialData.image_path);
   const [error, setError] = useState("");
 
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -105,11 +107,9 @@ export default function SingleModeGame({ initialData }: GameProps) {
   
 
   // 이미지 생성 및 로딩 관련 상태 변수들
+  const defaultImagePath = require('../../assets/images/game/multi_mode/background/scene_door.png');
   const [isImageLoading, setIsImageLoading] = useState(false); // 이미지 생성 중 로딩
   const [isChoiceLoading, setIsChoiceLoading] = useState(false); // 다음 장면 텍스트 로딩
-  const [imageUrl, setImageUrl] = useState<any>(
-    require('../../assets/images/game/multi_mode/background/scene_door.png')
-  );  
   
   const [duration, setDuration] = useState<string | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -181,6 +181,7 @@ export default function SingleModeGame({ initialData }: GameProps) {
       }
     }
   }, [currentMomentId, currentMomentTitle]);
+  
   //   const generateImageForCurrentScene = async () => {
   //     // `currentMomentId`가 없으면 (예: 게임 시작 전) 실행하지 않습니다.
   //     if (!currentMomentId) return;
@@ -246,13 +247,14 @@ export default function SingleModeGame({ initialData }: GameProps) {
       });
  
       await pageTurnSound?.replayAsync();
-      const { scene, choices: newChoices, current_moment_id: nextMomentId, current_moment_title: nextMomentTitle } = response.data;
+      const { scene, choices: newChoices, current_moment_id: nextMomentId, current_moment_title: nextMomentTitle, image_path: nextImagePath } = response.data;
  
       setIsTyping(true);
       setSceneText(scene);
       setChoices(newChoices || []);
       setCurrentMomentId(nextMomentId);
       setCurrentMomentTitle(nextMomentTitle);
+      setCurrentMomentImage(nextImagePath);
     } catch (err) {
       setError("이야기를 이어가는 데 실패했습니다.");
       console.error(err);
@@ -286,13 +288,11 @@ export default function SingleModeGame({ initialData }: GameProps) {
           {/* --- 2-1. 왼쪽 패널 (이미지) --- */}
           <View style={styles.leftPanel}>
             <View style={styles.imageContainer}>
-              {imageUrl ? (
-                <Image source={imageUrl} style={styles.sceneImage} resizeMode="cover" />
-              ) : (
-                <Text style={styles.placeholderText}>
-                  장면 이미지가 없습니다.
-                </Text>
-              )}
+              <Image 
+                source={currentMomentImage ? { uri: currentMomentImage } : defaultImagePath} 
+                style={styles.sceneImage} 
+                resizeMode="cover" 
+              />
             </View>
           </View>
 
