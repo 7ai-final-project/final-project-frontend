@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,24 +10,18 @@ import SingleModeGame from "../../../components/game/SingleModeGame";
 import api from "../../../services/api";
 
 export default function CharacterScreen() {
-  const { storyId } = useLocalSearchParams<{ storyId: string }>();
-
+  const { story } = useLocalSearchParams();
   const [gameData, setGameData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // storyId가 있을 때 바로 게임 시작
-  useEffect(() => {
-    if (storyId) {
-      handleStartGame(storyId);
-    }
-  }, [storyId]);
-
-  const handleStartGame = async (selectedStoryId: string) => {
+  // storymode 데이터 조회
+  const handleStartGame = useCallback(async (title: string) => {
     setIsLoading(true);
     try {
       const response = await api.post('game/story/start/', {
-        story_id: selectedStoryId,
+        story_title: story,
       });
+      // console.log(response);
       setGameData(response.data);
     } catch (error: any) {
       console.error("게임 시작 에러:", error);
@@ -35,11 +29,17 @@ export default function CharacterScreen() {
       alert("게임을 시작할 수 없습니다. 서버 연결을 확인해주세요.");
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  // story가 있을때 바로 게임 시작
+  useEffect(() => {
+    if(story) {
+      handleStartGame(story as string);
+    }
+  }, [story, handleStartGame]);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>{storyId}</Text>
       {isLoading && !gameData ? (
         <View style={styles.content}>
           <ActivityIndicator size="large" color="#61dafb" />
@@ -59,23 +59,15 @@ export default function CharacterScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#3c414e", padding: 15 },
   content: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#61dafb",
-    textAlign: "center",
-    paddingBottom: 15,
-    borderBottomColor: "#61dafb",
-    borderBottomWidth: 1,
-    marginBottom: 15,
-  },
   loadingText: {
     marginTop: 10,
     fontSize: 18,
+    fontFamily: 'neodgm',
     color: "white",
   },
   errorText: {
     fontSize: 18,
+    fontFamily: 'neodgm',
     color: "red",
     textAlign: "center",
     marginBottom: 10,

@@ -1,3 +1,5 @@
+// frontend\components\game\GameEngineRealtime.tsx
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     SafeAreaView,
@@ -12,24 +14,34 @@ import {
     Animated,
     Alert,
 } from "react-native";
-import { Character, charactersByTopic } from "@/data/characterData";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useWebSocket } from "@/components/context/WebSocketContext";
-import { getSceneTemplate, renderSceneFromRound, getStatValue, statMapping,RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade } from "@/util/ttrpg";
-import { endGame } from "@/services/api";
+// [수정] API 서비스에서 Character 타입과 endGame 함수만 import 합니다.
+import { Character, endGame, getWebSocketNonce } from "@/services/api";
+import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade } from "@/util/ttrpg";
 import { Audio } from "expo-av";
 
+interface LoadedSessionData {
+  choice_history: any;
+  character_history: any;
+}
+
+// [수정] Props 타입: GameSetup에서 넘겨주는 데이터 구조에 맞게 변경
 type Props = {
     roomId: string | string[];
     topic: string | string[];
     difficulty?: string | string[];
-    selectedCharacter: Character;
+    setupData: {
+        myCharacter: Character;
+        aiCharacters: Character[];
+        allCharacters: Character[];
+    };
+    initialSessionData?: LoadedSessionData | null;
     turnSeconds?: number;
 };
 
 type Phase = "intro" | "choice" | "sync" | "dice_roll" | "cinematic" | "end";
-
 type EnglishStat = keyof typeof statMapping;
 
 const statKrToEn = Object.fromEntries(
@@ -40,55 +52,33 @@ export default function GameEngineRealtime({
     roomId,
     topic,
     difficulty = "초급",
-    selectedCharacter,
+    setupData,
+    initialSessionData = null,
     turnSeconds = 20,
 }: Props) {
-    const { wsRef } = useWebSocket();
+    // [수정] setupData에서 필요한 정보를 구조 분해 할당합니다.
+    const { myCharacter, aiCharacters, allCharacters } = setupData;
+
+    const wsRef = useRef<WebSocket | null>(null);
     const ws = wsRef?.current ?? null;
 
+    // --- 상태(State) 변수 ---
     const [phase, setPhase] = useState<Phase>("intro");
 
     const [clickSound, setClickSound] = useState<Audio.Sound | null>(null);
     const [pageTurnSound, setPageTurnSound] = useState<Audio.Sound | null>(null);
     const [diceRollSound, setDiceRollSound] = useState<Audio.Sound | null>(null);
-
-    useEffect(() => {
-        const loadSounds = async () => {
-            try {
-                const { sound: loadedClickSound } = await Audio.Sound.createAsync(
-                    require('../../assets/sounds/click.mp3')
-                );
-                setClickSound(loadedClickSound);
-
-                const { sound: loadedPageTurnSound } = await Audio.Sound.createAsync(
-                    require('../../assets/sounds/page_turn.mp3')
-                );
-                setPageTurnSound(loadedPageTurnSound);
-
-                const { sound: loadedDiceRollSound } = await Audio.Sound.createAsync(
-                    require('@/assets/sounds/dice_roll.mp3')
-                );
-                setDiceRollSound(loadedDiceRollSound);
-
-            } catch (error) {
-                console.error("사운드 로딩 실패:", error);
-            }
-        };
-
-        loadSounds();
-
-        return () => {
-            clickSound?.unloadAsync();
-            pageTurnSound?.unloadAsync();
-            diceRollSound?.unloadAsync();
-        };
-    }, []);
+    
+    // [수정] sceneTemplates 배열 대신, 현재 씬 객체 하나만 관리합니다.
+    const [currentScene, setCurrentScene] = useState<SceneTemplate | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     
 
-    const [sceneIndex, setSceneIndex] = useState(0);
-    const [sceneTemplates, setSceneTemplates] = useState<SceneTemplate[]>([]);
-    const [loadingScenes, setLoadingScenes] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
+    // [수정] 로딩 및 에러 상태 이름을 명확히 변경합니다. (기존 loadingScenes, loadError 대체)
+    // const [sceneTemplates, setSceneTemplates] = useState<SceneTemplate[]>([]);
+    // const [loadingScenes, setLoadingScenes] = useState(true);
+    // const [loadError, setLoadError] = useState<string | null>(null);
 
     const [diceResult, setDiceResult] = useState<string | null>(null);
     const [isRolling, setIsRolling] = useState(false);
@@ -97,6 +87,9 @@ export default function GameEngineRealtime({
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [isResultsModalVisible, setIsResultsModalVisible] = useState(false);
 
+    const [isSaveModalVisible, setIsSaveModalVisible] = useState(false);
+    const [saveModalMessage, setSaveModalMessage] = useState("");
+
     const spin = spinValue.interpolate({
         inputRange: [0, 1],
         outputRange: ["0deg", "360deg"],
@@ -104,49 +97,178 @@ export default function GameEngineRealtime({
 
     const phaseAnim = useRef(new Animated.Value(0)).current;
 
+    // [수정] useMemo 의존성 배열을 sceneTemplates에서 currentScene으로 변경합니다.
     const roundSpec: SceneRoundSpec | null = useMemo(() => {
-        if (!sceneTemplates || sceneTemplates.length === 0) return null;
-        const tpl = getSceneTemplate(sceneTemplates, sceneIndex);
-        return tpl?.round ?? null;
-    }, [sceneTemplates, sceneIndex]);
+        return currentScene?.round ?? null;
+    }, [currentScene]);
 
     const myRole = useMemo(() => {
-        if (!sceneTemplates || sceneTemplates.length === 0) return null;
-        const tpl = getSceneTemplate(sceneTemplates, sceneIndex);
-        if (!tpl) return null;
-        return tpl.roleMap?.[selectedCharacter.name] ?? null;
-    }, [sceneTemplates, sceneIndex, selectedCharacter.name]);
+        if (!currentScene) return null;
+        return currentScene.roleMap?.[myCharacter.name] ?? null;
+    }, [currentScene, myCharacter.name]);
 
     const [remaining, setRemaining] = useState(turnSeconds);
-    const timerRef = useRef<NodeJS.Timeout | number | null>(null);
+    const timerRef = useRef<number | null>(null);
     const [myChoiceId, setMyChoiceId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
-
+    
     const [aiChoices, setAiChoices] = useState<{[role: string]: string}>({});
-    const [allChoicesReady, setAllChoicesReady] = useState(false);
 
     const [roundResult, setRoundResult] = useState<RoundResult | null>(null);
     const [cinematicText, setCinematicText] = useState<string>("");
 
     const timerAnim = useRef(new Animated.Value(turnSeconds)).current;
 
-    const handleReturnToRoom = () => {
-        setIsModalVisible(true);
-    };
+    useEffect(() => {
+        let ws: WebSocket | null = null;
+
+        const connect = async () => {
+            try {
+                const nonceResponse = await getWebSocketNonce();
+                const nonce = nonceResponse.data.nonce;
+                const scheme = "ws";
+                const backendHost = "127.0.0.1:8000";
+                const url = `${scheme}://${backendHost}/ws/multi_game/${roomId}/?nonce=${nonce}`;
+                
+                ws = new WebSocket(url);
+                wsRef.current = ws;
+
+                // --- 1. 웹소켓 이벤트 핸들러 정의 ---
+                ws.onopen = () => {
+                    console.log("✅ GameEngineRealtime WebSocket Connected");
+                    setIsLoading(true); // 로딩 시작
+                    // 연결 성공 후, 첫 장면 요청
+                    if (initialSessionData) {
+                        // 1. 불러온 데이터가 있으면 'continue_game' 액션을 전송
+                        console.log("🚀 게임 이어하기를 요청합니다.");
+                        ws?.send(JSON.stringify({
+                            type: "continue_game",
+                            session_data: initialSessionData,
+                        }));
+                    } else {
+                        // 2. 없으면 기존처럼 'request_initial_scene' 액션을 전송
+                        console.log("🚀 새 게임 시작을 요청합니다.");
+                        ws?.send(JSON.stringify({
+                            type: "request_initial_scene",
+                            topic: Array.isArray(topic) ? topic[0] : topic,
+                            characters: setupData.allCharacters.map(c => ({
+                                name: c.name,
+                                description: c.description
+                            })),
+                        }));
+                    }
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    console.log("GameEngine received message:", data);
+
+                    if (data.type === "game_update" && data.payload.event === "scene_update") {
+                        setCurrentScene(data.payload.scene);
+                        setPhase("choice");
+                        setMyChoiceId(null);
+                        setRoundResult(null);
+                        setCinematicText("");
+                        setSubmitting(false);
+                        setAiChoices({}); // [수정] 새 씬 시작 시 선택 현황 초기화
+                        setIsLoading(false);
+                        pageTurnSound?.replayAsync();
+
+                        phaseAnim.setValue(0);
+                        Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+                    }
+                    else if (data.type === "game_update" && data.payload.event === "turn_resolved") {
+                        // 서버가 보내준 narration으로 cinematicText를 설정합니다.
+                        setCinematicText(data.payload.narration);
+                        setRoundResult(data.payload.roundResult);
+                        setPhase("cinematic");
+                        phaseAnim.setValue(0);
+                        Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+                    }
+
+                    else if (data.type === "save_success") {
+                        setSaveModalMessage(data.message);
+                        setIsSaveModalVisible(true);
+                    }
+                    else if (data.type === "error") {
+                        setError(data.message);
+                        setIsLoading(false);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error("GameEngine WebSocket Error:", error);
+                    setError("웹소켓 연결 중 오류가 발생했습니다.");
+                    setIsLoading(false);
+                };
+
+                ws.onclose = () => {
+                    console.log("❌ GameEngineRealtime WebSocket Disconnected");
+                };
+
+            } catch (error) {
+                console.error("GameEngine WebSocket connection failed:", error);
+                setError("웹소켓 서버에 연결할 수 없습니다.");
+                setIsLoading(false);
+
+            }
+        };
+
+        // --- 2. 연결 실행 ---
+        connect();
+
+        // --- 3. 컴포넌트 종료 시 연결 해제 ---
+        return () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+            stopTimer(); // 타이머도 함께 정리
+        };
+    }, [roomId, topic, setupData, initialSessionData]);
+
+    // --- 사운드 로딩 Hook (변경 없음) ---
+    useEffect(() => {
+        const loadSounds = async () => {
+            try {
+                const { sound: loadedClickSound } = await Audio.Sound.createAsync(require('../../assets/sounds/click.mp3'));
+                setClickSound(loadedClickSound);
+                const { sound: loadedPageTurnSound } = await Audio.Sound.createAsync(require('../../assets/sounds/page_turn.mp3'));
+                setPageTurnSound(loadedPageTurnSound);
+                const { sound: loadedDiceRollSound } = await Audio.Sound.createAsync(require('@/assets/sounds/dice_roll.mp3'));
+                setDiceRollSound(loadedDiceRollSound);
+            } catch (error) { console.error("사운드 로딩 실패:", error); }
+        };
+        loadSounds();
+        return () => {
+            clickSound?.unloadAsync();
+            pageTurnSound?.unloadAsync();
+            diceRollSound?.unloadAsync();
+        };
+    }, []);
+
+    // --- 타이머 로직 Hook ---
+    useEffect(() => {
+        if (phase === "choice" && !myChoiceId) {
+            startTimer();
+        } else {
+            stopTimer();
+        }
+        return () => stopTimer();
+    }, [phase, myChoiceId]);
+
+
+    // --- 이벤트 핸들러 및 유틸 함수 ---
+
+    const handleReturnToRoom = () => setIsModalVisible(true);
 
     const confirmReturnToRoom = async () => {
         setIsModalVisible(false);
         const id = Array.isArray(roomId) ? roomId[0] : roomId;
-        if (!id) {
-            Alert.alert("알림", "방 ID가 유효하지 않습니다.");
-            return;
-        }
         try {
             await endGame(id);
             router.replace(`/game/multi/room/${id}`);
         } catch (error) {
-            console.error("방으로 돌아가는 중 오류 발생:", error);
-            Alert.alert("오류", "오류가 발생하여 방으로 돌아갈 수 없습니다.");
+            router.replace(`/game/multi`);
         }
     };
 
@@ -154,17 +276,12 @@ export default function GameEngineRealtime({
         stopTimer();
         setRemaining(turnSeconds);
         timerAnim.setValue(turnSeconds);
-        Animated.timing(timerAnim, {
-            toValue: 0,
-            duration: turnSeconds * 1000,
-            useNativeDriver: false,
-        }).start();
-
+        Animated.timing(timerAnim, { toValue: 0, duration: turnSeconds * 1000, useNativeDriver: false }).start();
         timerRef.current = setInterval(() => {
             setRemaining((r) => {
                 if (r <= 1) {
-                    autoPickAndSubmit();
                     stopTimer();
+                    autoPickAndSubmit();
                     return 0;
                 }
                 return r - 1;
@@ -183,292 +300,157 @@ export default function GameEngineRealtime({
     const getDC = (difficulty?: string | string[]) => {
         const diffStr = Array.isArray(difficulty) ? difficulty[0] : difficulty;
         switch (diffStr) {
-            case "초급":
-                return 10;
-            case "중급":
-                return 13;
-            case "상급":
-                return 16;
-            default:
-                return 10;
+            case "초급": return 10;
+            case "중급": return 13;
+            case "상급": return 16;
+            default: return 10;
         }
     };
 
-    const rollDice = (sides: number = 20) => {
-        return Math.floor(Math.random() * sides) + 1;
-    };
+    const rollDice = (sides: number = 20) => Math.floor(Math.random() * sides) + 1;
 
     const startDiceRoll = () => {
         diceRollSound?.replayAsync();
         setIsRolling(true);
         setDiceResult(null);
         spinValue.setValue(0);
-
-        const spinAnim = Animated.loop(
-            Animated.timing(spinValue, {
-                toValue: 1,
-                duration: 400,
-                useNativeDriver: true,
-            })
-        );
+        const spinAnim = Animated.loop(Animated.timing(spinValue, { toValue: 1, duration: 400, useNativeDriver: true }));
         spinAnim.start();
 
         setTimeout(() => {
             spinAnim.stop();
 
             const myChoice = roundSpec?.choices[myRole!]?.find(c => c.id === myChoiceId);
-            if (!myChoice) {
+            if (!myChoice || !myRole || !ws) {
                 setDiceResult("오류: 선택지를 찾을 수 없습니다.");
                 setIsRolling(false);
                 return;
             }
 
             const myDice = rollDice(20);
-            const myAppliedStat = myChoice.appliedStat;
             const myAppliedStatKorean = myChoice.appliedStat;
-            const myAppliedStatEnglish = statKrToEn[myAppliedStatKorean];
-            const myStatValue = getStatValue(selectedCharacter, myAppliedStatEnglish as EnglishStat) ?? 0;
+            const myAppliedStatEnglish = statKrToEn[myAppliedStatKorean] as EnglishStat;
+            const myStatValue = getStatValue(myCharacter, myAppliedStatEnglish) ?? 0;
             const myModifier = myChoice.modifier;
             const myTotal = myDice + myStatValue + myModifier;
             const DC = getDC(difficulty);
 
             let myGrade: Grade = "F";
             let resultText = "";
-            if (myDice === 20) {
-                myGrade = "SP";
-                resultText = "치명적 대성공 🎉 (Natural 20!)";
-            } else if (myDice === 1) {
-                myGrade = "SF";
-                resultText = "치명적 실패 💀 (Natural 1...)";
-            } else if (myTotal >= DC) {
-                myGrade = "S";
-                resultText = `성공 ✅ (목표 DC ${DC} 이상 달성)`;
-            } else {
-                myGrade = "F";
-                resultText = `실패 ❌ (목표 DC ${DC} 미달)`;
-            }
+            if (myDice === 20) { myGrade = "SP"; resultText = "치명적 대성공 🎉 (Natural 20!)"; } 
+            else if (myDice === 1) { myGrade = "SF"; resultText = "치명적 실패 💀 (Natural 1...)"; }
+            else if (myTotal >= DC) { myGrade = "S"; resultText = `성공 ✅ (목표 DC ${DC} 이상 달성)`; }
+            else { myGrade = "F"; resultText = `실패 ❌ (목표 DC ${DC} 미달)`; }
 
-            // ✅ 수정: 표시되는 스탯 이름을 영문 키가 아닌 한글로 변경
-            const myAppliedStatKr = statMapping[myAppliedStat] ?? myAppliedStat;
-            setDiceResult(`🎲 d20: ${myDice} + ${myAppliedStatKorean}(${myStatValue}) + 보정(${myModifier}) = ${myTotal} → ${resultText}`);
-            setIsRolling(false);
-
-            const myResult: PerRoleResult = {
+            const playerResult: PerRoleResult = {
                 role: myRole!,
                 choiceId: myChoiceId!,
                 grade: myGrade,
                 dice: myDice,
-                appliedStat: myAppliedStat,
+                appliedStat: myAppliedStatKorean,
                 statValue: myStatValue,
                 modifier: myModifier,
                 total: myTotal,
+                characterName: myCharacter.name, // 내 캐릭터 이름 추가
             };
+            
+            setDiceResult(`🎲 d20: ${myDice} + ${myAppliedStatKorean}(${myStatValue}) + 보정(${myModifier}) = ${myTotal} → ${resultText}`);
+            setIsRolling(false);
+            
+             ws.send(JSON.stringify({
+                type: "submit_player_choice",
+                player_result: playerResult,
+                all_characters: allCharacters.map(c => ({
+                    ...c,
+                    role_id: currentScene?.roleMap[c.name]
+                })),
+            }));
 
-            // ✅ 수정: AI 결과 판정 로직
-            const aiResults: PerRoleResult[] = Object.entries(aiChoices).map(([role, choiceId]) => {
-                const choice = roundSpec?.choices[role]?.find(c => c.id === choiceId);
-                if (!choice) {
-                    return {
-                        role: role, choiceId: choiceId, grade: "F",
-                        dice: 1, appliedStat: "hp", statValue: 0, modifier: 0, total: 1,
-                    };
-                }
-
-                const dice = rollDice(20);
-                // ✅ 수정: AI 캐릭터의 스탯을 가져오는 로직 (임시)
-                const aiCharacter = Object.values(charactersByTopic).flat().find(c => c.id === role);
-                const appliedStatKorean = choice.appliedStat;
-                const appliedStatEnglish = statKrToEn[appliedStatKorean];
-                const statValue = aiCharacter ? getStatValue(aiCharacter, appliedStatEnglish as EnglishStat) ?? 0 : 2;
-                const modifier = choice.modifier;
-                const total = dice + statValue + modifier;
-
-                let grade: Grade = "F";
-                if (dice === 20) grade = "SP";
-                else if (dice === 1) grade = "SF";
-                else if (total >= DC) grade = "S";
-                else grade = "F";
-
-                return {
-                    role: role,
-                    choiceId: choiceId,
-                    grade: grade,
-                    dice: dice,
-                    appliedStat: appliedStatKorean,
-                    statValue: statValue,
-                    modifier: modifier,
-                    total: total,
-                };
-            });
-
-            const finalResult: RoundResult = {
-                sceneIndex: sceneIndex,
-                results: [myResult, ...aiResults],
-                logs: [`${myRole}이(가) 주사위 판정을 했습니다. 결과: ${resultText}`],
-            };
-
-            setRoundResult(finalResult);
-
-            const tpl = getSceneTemplate(sceneTemplates, sceneIndex);
-            if (tpl) {
-                const text = renderSceneFromRound(tpl, finalResult);
-                setCinematicText(text);
-            }
-
-            Animated.timing(phaseAnim, {
-                toValue: 0,
-                duration: 300,
-                useNativeDriver: true,
-            }).start(() => {
-                setPhase("cinematic");
-                Animated.timing(phaseAnim, {
-                    toValue: 1,
-                    duration: 300,
-                    useNativeDriver: true,
-                }).start();
-            });
+            // ✅ [수정] 결과를 기다리는 'sync' 단계로 전환합니다.
+            setPhase("sync");
 
         }, 2000);
     };
 
-    const autoPickAndSubmit = () => {
-        if (!roundSpec || !myRole || submitting) return;
-        const choices = roundSpec.choices[myRole] ?? [];
-        if (choices.length === 0) return;
-        const rnd = choices[Math.floor(Math.random() * choices.length)];
-        submitChoice(rnd.id);
-    };
-
-    const generateAIChoices = () => {
-        if (!roundSpec || !myRole) return;
-        const newAiChoices: {[role: string]: string} = {};
-        Object.keys(roundSpec.choices).forEach(role => {
-            if (role !== myRole) {
-                const choices = roundSpec.choices[role] ?? [];
-                if (choices.length > 0) {
-                    const randomChoice = choices[Math.floor(Math.random() * choices.length)];
-                    newAiChoices[role] = randomChoice.id;
-                }
-            }
-        });
-        setAiChoices(newAiChoices);
-        console.log("AI 자동 선택 완료:", newAiChoices);
-    };
-
     const submitChoice = (choiceId: string) => {
+        const choice = roundSpec?.choices[myRole!]?.find(c => c.id === choiceId);
+        if (!choice) return;
+
         clickSound?.replayAsync();
-        setSubmitting(true);
         setMyChoiceId(choiceId);
-        console.log(`${myRole}이(가) ${choiceId} 선택함`);
-        setTimeout(() => {
-            setAllChoicesReady(true);
-        }, 1000);
+        stopTimer();
+        // 내부 상태만 'dice_roll'로 변경합니다.
+        setPhase("dice_roll");
     };
 
-    useEffect(() => {
-        if (allChoicesReady) {
-            stopTimer();
-            Animated.timing(phaseAnim, {
-                toValue: 0,
-                duration: 300,
-                useNativeDriver: true,
-            }).start(() => {
-                setPhase("dice_roll");
-                setSubmitting(false);
-                Animated.timing(phaseAnim, {
-                    toValue: 1,
-                    duration: 300,
-                    useNativeDriver: true,
-                }).start();
-            });
-        }
-    }, [allChoicesReady]);
+    const autoPickAndSubmit = () => {
+        if (submitting || myChoices.length === 0) return;
+        const randomChoice = myChoices[Math.floor(Math.random() * myChoices.length)];
+        submitChoice(randomChoice.id);
+    };
+    
+    const handleNextScene = () => {
+        if (!ws || !myRole || !myChoiceId || !currentScene) return;
 
-    const fetchScenes = async () => {
-        let timeoutId: NodeJS.Timeout | number | null = null;
-        try {
-            console.log("Fetching scenes...");
-            setLoadingScenes(true);
-            setLoadError(null);
-            const controller = new AbortController();
-            timeoutId = setTimeout(() => controller.abort(), 10000);
-            const response = await fetch("http://localhost:8000/game/api/scenes/", {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
+        setIsLoading(true);
+
+        const myLastChoice = myChoices.find(c => c.id === myChoiceId);
+        if (!myLastChoice) return;
+
+        // ✅ 백엔드와 약속한 'request_next_scene' 타입으로 메시지를 보냅니다.
+        ws.send(JSON.stringify({
+            type: "request_next_scene",
+            history: { // history 객체 안에 필요한 정보를 담습니다.
+                lastChoice: {
+                    role: myRole,
+                    text: myLastChoice.text,
                 },
-                signal: controller.signal,
-            });
-            if (timeoutId) clearTimeout(timeoutId);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                lastNarration: cinematicText, // 이전 턴의 결과 텍스트를 함께 보냅니다.
+                sceneIndex: currentScene.index,
             }
-            const data = await response.json();
-            console.log("Scenes received:", data);
-            if (data && data.scenes && Array.isArray(data.scenes)) {
-                setSceneTemplates(data.scenes);
-            } else if (Array.isArray(data)) {
-                setSceneTemplates(data);
-            } else {
-                throw new Error("Invalid scene data format");
-            }
-        } catch (error: unknown) {
-            if (timeoutId) clearTimeout(timeoutId);
-            if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') {
-                console.error("Request timed out");
-                setLoadError("요청 시간이 초과되었습니다. 서버 연결을 확인해주세요.");
-            } else {
-                console.error("Failed to load scenes:", error);
-                setLoadError(error instanceof Error ? error.message : "서버 연결에 실패했습니다.");
-            }
-            setSceneTemplates([]);
-        } finally {
-            setLoadingScenes(false);
-        }
+        }));
     };
 
-    useEffect(() => {
-        fetchScenes();
-    }, []);
-
-    useEffect(() => {
-        if (loadingScenes || loadError) return;
-        pageTurnSound?.replayAsync();
-        const currentScene = getSceneTemplate(sceneTemplates, sceneIndex);
-        if (!currentScene) {
-            setPhase("end");
-            return;
-        }
-        const currentMyRole = currentScene.roleMap?.[selectedCharacter.name] ?? null;
-        const currentRoundSpec = currentScene.round ?? null;
-        if (!currentRoundSpec || !currentMyRole) {
-            setPhase("end");
+    const handleSaveGame = () => {
+        if (!ws || !currentScene || !myRole || !myChoiceId) {
+            setSaveModalMessage("저장할 수 있는 정보가 부족합니다.");
+            setIsSaveModalVisible(true);
             return;
         }
 
-        Animated.timing(phaseAnim, {
-            toValue: 0,
-            duration: 300,
-            useNativeDriver: true,
-        }).start(() => {
-            setPhase("choice");
-            setMyChoiceId(null);
-            setRoundResult(null);
-            setCinematicText("");
-            setAiChoices({});
-            setAllChoicesReady(false);
-            setDiceResult(null);
-            generateAIChoices();
-            startTimer();
-            Animated.timing(phaseAnim, {
-                toValue: 1,
-                duration: 300,
-                useNativeDriver: true,
-            }).start();
-        });
+        const myCurrentChoices = roundSpec?.choices[myRole] ?? [];
+        const selectedChoiceObj = myCurrentChoices.find(c => c.id === myChoiceId);
 
-        return stopTimer;
-    }, [sceneIndex, loadingScenes]);
+        if (!selectedChoiceObj) {
+            setSaveModalMessage("선택한 항목을 찾을 수 없습니다.");
+            setIsSaveModalVisible(true);
+            return;
+        }
+
+        // 백엔드로 보낼 데이터를 지정된 포맷에 맞게 가공
+        const choicesFormatted = myCurrentChoices.reduce((acc, choice, index) => {
+            acc[index] = choice.text;
+            return acc;
+        }, {} as { [key: number]: string });
+        
+        const selectedChoiceFormatted = {
+            [myCurrentChoices.indexOf(selectedChoiceObj)]: selectedChoiceObj.text
+        };
+
+        const saveData = {
+            title: roundSpec?.title,
+            description: roundSpec?.title, // 현재 템플릿에서는 title이 주된 설명이므로 동일하게 사용
+            choices: choicesFormatted,
+            selectedChoice: selectedChoiceFormatted,
+            sceneIndex: currentScene.index
+        };
+
+        // 웹소켓으로 데이터 전송
+        ws.send(JSON.stringify({
+            type: "save_game_state",
+            data: saveData
+        }));
+    };
 
     const getGradeColor = (grade: Grade) => {
         switch (grade) {
@@ -489,42 +471,42 @@ export default function GameEngineRealtime({
             default: return "알 수 없음";
         }
     };
-    
-    // (이하 렌더링 로직은 수정사항 없음)
-    if (loadingScenes) {
+    if (isLoading && !currentScene) {
         return (
             <View style={styles.center}>
                 <ActivityIndicator size="large" color="#E2C044" />
-                <Text style={styles.subtitle}>씬 데이터를 불러오는 중...</Text>
+                <Text style={styles.subtitle}>LLM이 새로운 세계를 창조하는 중...</Text>
             </View>
         );
     }
-    if (loadError) {
+    if (error) {
         return (
             <View style={styles.center}>
-                <Text style={styles.warn}>씬 데이터 로딩 실패</Text>
-                <Text style={styles.subtitle}>{loadError}</Text>
+                <Text style={styles.warn}>오류 발생</Text>
+                <Text style={styles.subtitle}>{error}</Text>
                 <TouchableOpacity
                     style={styles.retryBtn}
-                    onPress={fetchScenes}
+                    onPress={confirmReturnToRoom} // 오류 시 방으로 돌아가기
                 >
-                    <Text style={styles.retryText}>다시 시도</Text>
+                    <Text style={styles.retryText}>대기실로 돌아가기</Text>
                 </TouchableOpacity>
             </View>
         );
     }
+    
+    // [수정] roundSpec과 myRole을 currentScene 기반으로 확인합니다.
     if (!roundSpec || !myRole) {
         return (
             <View style={styles.center}>
                 <Text style={styles.warn}>게임 데이터를 불러올 수 없습니다.</Text>
                 <Text style={styles.subtitle}>
-                    {sceneTemplates.length === 0 ? "씬 템플릿이 없습니다." : "현재 씬에 대한 역할을 찾을 수 없습니다."}
+                    현재 씬에 대한 정보를 받지 못했거나, 당신의 역할이 지정되지 않았습니다.
                 </Text>
                 <TouchableOpacity
                     style={styles.retryBtn}
-                    onPress={fetchScenes}
+                    onPress={confirmReturnToRoom}
                 >
-                    <Text style={styles.retryText}>다시 시도</Text>
+                    <Text style={styles.retryText}>대기실로 돌아가기</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -536,22 +518,23 @@ export default function GameEngineRealtime({
     return (
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.mainContainer}>
+                {/* [수정] selectedCharacter 대신 myCharacter 사용 */}
                 <View style={styles.characterPanel}>
-                    <Text style={styles.characterName}>{selectedCharacter.name}</Text>
+                    <Text style={styles.characterName}>{myCharacter.name}</Text>
                     <Image
-                        source={selectedCharacter.image}
+                        source={myCharacter.image}
                         style={styles.characterImage}
                         resizeMode="contain"
                     />
-                    {selectedCharacter.description && (
+                    {myCharacter.description && (
                         <Text style={styles.characterDescription}>
-                            {selectedCharacter.description}
+                            {myCharacter.description}
                         </Text>
                     )}
                     <Text style={styles.roleText}>{myRole}</Text>
                     <View style={styles.statsBox}>
                         <Text style={styles.statsTitle}>능력치</Text>
-                        {Object.entries(selectedCharacter.stats).map(([stat, value]) => (
+                        {Object.entries(myCharacter.stats).map(([stat, value]) => (
                             <Text key={stat} style={styles.statText}>
                                 {stat}: <Text style={{ color: "#E2C044", fontWeight: "bold" }}>{value}</Text>
                             </Text>
@@ -563,8 +546,13 @@ export default function GameEngineRealtime({
                     {phase === "choice" && (
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
                             <Text style={styles.title}>{title}</Text>
+                            <ScrollView style={styles.descriptionBox}>
+                                <Text style={styles.descriptionText}>
+                                    {roundSpec.description}
+                                </Text>
+                            </ScrollView>
                             <Text style={styles.subtitle}>
-                                {selectedCharacter.name} — {myRole} | 남은 시간: {remaining}s
+                                {myCharacter.name} — {myRole}
                             </Text>
 
                             <View style={styles.timerContainer}>
@@ -580,38 +568,36 @@ export default function GameEngineRealtime({
                                     ]}
                                 />
                             </View>
-
                             <Text style={styles.timerText}>남은 시간: {remaining}s</Text>
 
+                            {/* [추가] 다른 참여자 선택 현황 UI */}
                             {Object.keys(aiChoices).length > 0 && (
                                 <View style={styles.aiStatusBox}>
-                                    <Text style={styles.aiStatusTitle}>AI 캐릭터 선택 완료:</Text>
-                                    {Object.entries(aiChoices).map(([role, choiceId]) => (
-                                        <Text key={role} style={styles.aiStatusText}>
-                                            {role}: 선택 완료 ({choiceId})
-                                        </Text>
+                                    <Text style={styles.aiStatusTitle}>다른 참여자 선택 현황:</Text>
+                                    {Object.entries(aiChoices).map(([role]) => (
+                                        <Text key={role} style={styles.aiStatusText}>- {role}: 선택 완료 ✅</Text>
                                     ))}
                                 </View>
                             )}
 
-                            <View style={{ height: 16 }} />
-
-                            {myChoices.map((c) => (
-                                <TouchableOpacity
-                                    key={c.id}
-                                    style={[
-                                        styles.choiceBtn,
-                                        myChoiceId === c.id && styles.selectedChoiceBtn,
-                                    ]}
-                                    disabled={!!myChoiceId || submitting}
-                                    onPress={() => submitChoice(c.id)}
-                                >
-                                    <Text style={styles.choiceText}>{c.text}</Text>
-                                    <Text style={styles.hint}>
-                                        적용 스탯: {statMapping[c.appliedStat] ?? c.appliedStat} (보정: {c.modifier >= 0 ? `+${c.modifier}` : c.modifier})
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
+                            <ScrollView style={{ flex: 1, width: '100%' }}>
+                                {myChoices.map((c) => (
+                                    <TouchableOpacity
+                                        key={c.id}
+                                        style={[
+                                            styles.choiceBtn,
+                                            myChoiceId === c.id && styles.selectedChoiceBtn,
+                                        ]}
+                                        disabled={!!myChoiceId || submitting}
+                                        onPress={() => submitChoice(c.id)}
+                                    >
+                                        <Text style={styles.choiceText}>{c.text}</Text>
+                                        <Text style={styles.hint}>
+                                            적용 스탯: {statMapping[c.appliedStat as EnglishStat] ?? c.appliedStat} (보정: {c.modifier >= 0 ? `+${c.modifier}` : c.modifier})
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
 
                             {!myChoiceId && (
                                 <TouchableOpacity style={styles.secondary} onPress={autoPickAndSubmit}>
@@ -623,8 +609,8 @@ export default function GameEngineRealtime({
 
                     {phase === "sync" && (
                         <Animated.View style={[styles.center, { opacity: phaseAnim }]}>
-                            <ActivityIndicator size="large" />
-                            <Text style={styles.subtitle}>결과를 처리하는 중…</Text>
+                            <ActivityIndicator size="large" color="#E2C044"/>
+                            <Text style={styles.subtitle}>GM이 다음 이야기를 준비하는 중...</Text>
                         </Animated.View>
                     )}
 
@@ -658,87 +644,18 @@ export default function GameEngineRealtime({
                             >
                                 <Text style={styles.secondaryText}>결과 상세 보기</Text>
                             </TouchableOpacity>
+                            
+                            <TouchableOpacity
+                                style={styles.saveButton} // 새로운 스타일 적용 필요
+                                onPress={handleSaveGame}
+                            >
+                                <Text style={styles.primaryText}>지금까지 내용 저장하기</Text>
+                            </TouchableOpacity>
 
+                            {/* [수정] 다음 씬으로 넘어가는 버튼 */}
                             <TouchableOpacity
                                 style={styles.primary}
-                                onPress={() => {
-                                    const currentScene = getSceneTemplate(sceneTemplates, sceneIndex);
-                                    if (!currentScene) {
-                                        setPhase("end");
-                                        return;
-                                    }
-
-                                    const roundSpec = currentScene.round;
-                                    if (!roundSpec || !roundSpec.nextScene) {
-                                        const nextIndex = sceneIndex + 1;
-                                        if (nextIndex < sceneTemplates.length) {
-                                            setSceneIndex(nextIndex);
-                                            setPhase("intro");
-                                        } else {
-                                            setPhase("end");
-                                        }
-                                        return;
-                                    }
-
-                                    const { routes, fallback } = roundSpec.nextScene;
-                                    let nextSceneIndex: number | null = null;
-
-                                    if (routes) {
-                                        for (const route of routes) {
-                                            let isMatch = true;
-                                            for (const [role, condition] of Object.entries(route.when)) {
-                                                const result = roundResult?.results.find(r => r.role === role);
-                                                if (!condition || !result) {
-                                                    isMatch = false;
-                                                    break;
-                                                }
-                                                if (condition.grade && !condition.grade.includes(result.grade)) {
-                                                    isMatch = false;
-                                                    break;
-                                                }
-                                                if (condition.choiceId && !condition.choiceId.includes(result.choiceId)) {
-                                                    isMatch = false;
-                                                    break;
-                                                }
-                                            }
-                                            if (isMatch) {
-                                                const goto = route.gotoIndex;
-                                                if (typeof goto === "string" && goto === "+1") {
-                                                    nextSceneIndex = sceneIndex + 1;
-                                                } else if (typeof goto === "number") {
-                                                    nextSceneIndex = goto;
-                                                }
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    if (nextSceneIndex === null) {
-                                        if (fallback === "end") {
-                                            setPhase("end");
-                                            return;
-                                        }
-                                        if (typeof fallback === "number") {
-                                            nextSceneIndex = fallback;
-                                        } else if (typeof fallback === "string" && fallback === "+1") {
-                                            nextSceneIndex = sceneIndex + 1;
-                                        } else {
-                                            nextSceneIndex = sceneIndex + 1;
-                                        }
-                                    }
-
-                                    if (nextSceneIndex !== null && nextSceneIndex < sceneTemplates.length) {
-                                        setRoundResult(null);
-                                        setCinematicText("");
-                                        setMyChoiceId(null);
-                                        setAiChoices({});
-                                        setAllChoicesReady(false);
-                                        setSceneIndex(nextSceneIndex);
-                                        setPhase("intro");
-                                    } else {
-                                        setPhase("end");
-                                    }
-                                }}
+                                onPress={handleNextScene}
                             >
                                 <Text style={styles.primaryText}>다음 ▶</Text>
                             </TouchableOpacity>
@@ -749,6 +666,9 @@ export default function GameEngineRealtime({
                         <Animated.View style={[styles.center, { opacity: phaseAnim }]}>
                             <Text style={styles.title}>엔딩</Text>
                             <Text style={styles.subtitle}>수고하셨습니다!</Text>
+                            <TouchableOpacity style={styles.primary} onPress={confirmReturnToRoom}>
+                                <Text style={styles.primaryText}>대기실로 돌아가기</Text>
+                            </TouchableOpacity>
                         </Animated.View>
                     )}
                 </View>
@@ -801,11 +721,12 @@ export default function GameEngineRealtime({
                         <ScrollView style={styles.resultsScrollView}>
                             {roundResult?.results?.map((result, index) => {
                                 const choiceText = roundSpec?.choices?.[result.role]?.find(c => c.id === result.choiceId)?.text || "선택 정보를 찾을 수 없음";
-                                // ✅ 수정: appliedStat 한글 매핑
-                                const appliedStatKr = statMapping[result.appliedStat] ?? result.appliedStat;
+                                const appliedStatKr = statMapping[result.appliedStat as EnglishStat] ?? result.appliedStat;
                                 return (
                                     <View key={index} style={styles.resultItem}>
-                                        <Text style={styles.resultRole}>{result.role}</Text>
+                                        <Text style={styles.resultRole}>
+                                            {result.characterName} {result.characterName === myCharacter.name ? '(나)' : ''}
+                                        </Text>
                                         <Text style={styles.resultDetails}>
                                             - 선택: "{choiceText}"
                                         </Text>
@@ -824,6 +745,28 @@ export default function GameEngineRealtime({
                             onPress={() => setIsResultsModalVisible(false)}
                         >
                             <Text style={styles.modalButtonText}>닫기</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={isSaveModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsSaveModalVisible(false)}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>알림</Text>
+                        <Text style={styles.modalMessage}>
+                            {saveModalMessage}
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.modalCloseButton} // 기존 닫기 버튼 스타일 재사용
+                            onPress={() => setIsSaveModalVisible(false)}
+                        >
+                            <Text style={styles.modalButtonText}>확인</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -965,12 +908,12 @@ const styles = StyleSheet.create({
         borderColor: "#4CAF50",
     },
     choiceText: {
-        color: "#E0E0E0",
+        color: "#FFFFFF", 
         fontSize: 16,
         fontWeight: "bold",
     },
     hint: {
-        color: "#A0A0A0",
+        color: "#A0A0E0",
         marginTop: 6,
         fontSize: 12,
     },
@@ -997,6 +940,13 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "bold",
         fontSize: 16,
+    },
+    saveButton: { // [추가] 저장 버튼 스타일
+        marginTop: 12,
+        backgroundColor: "#1D4ED8", // 다른 색상으로 구분
+        paddingVertical: 14,
+        borderRadius: 10,
+        alignItems: "center",
     },
     cinematicBox: {
         flex: 1,
@@ -1159,5 +1109,17 @@ const styles = StyleSheet.create({
         paddingHorizontal: 25,
         borderRadius: 10,
         alignItems: 'center',
+    },
+    descriptionBox: {
+        maxHeight: 100, // 설명이 너무 길 경우를 대비해 최대 높이 설정
+        marginVertical: 12,
+        padding: 12,
+        backgroundColor: "rgba(0,0,0,0.2)",
+        borderRadius: 8,
+    },
+    descriptionText: {
+        color: '#D4D4D4',
+        fontSize: 15,
+        lineHeight: 22,
     },
 });

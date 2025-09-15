@@ -42,6 +42,7 @@ export const leaveRoom = (id: string) => api.post(`game/${id}/leave/`);
 export const toggleReady = (id: string) => api.post(`game/${id}/toggle-ready/`);
 export const startGame = (id: string) => api.post(`game/${id}/start/`);
 export const endGame = (id: string) => api.post(`game/${id}/end/`);
+export const fetchMySession = (roomId: string) => api.get(`game/${roomId}/my-session/`);
 export const getWebSocketNonce = () => api.post("common/websocket-nonce/");
 export const fetchScenarios = () => api.get("game/options/scenarios/");
 export const fetchDifficulties = () => api.get("game/options/difficulties/");
@@ -60,11 +61,21 @@ export const saveRoomOptions = (
   return api.post(`game/${roomId}/options/`, options);
 };
 
-export const fetchCharactersByTopic = async (topic: string): Promise<PaginatedCharacterResponse> => {
-  const response = await api.get("game/characters/", {
-    params: { topic },
-  });
-  return response.data;
+export const fetchCharactersByTopic = async (topic: string): Promise<Character[]> => {
+  let allCharacters: Character[] = [];
+  let url: string | null = `game/characters/?topic=${encodeURIComponent(topic)}`;
+
+  while (url) {
+    const response = await api.get(url);
+    const data: PaginatedCharacterResponse = response.data;
+
+    if (data.results) {
+      allCharacters = [...allCharacters, ...data.results];
+    }
+    url = data.next;
+  }
+
+  return allCharacters;
 };
 
 export default api;
