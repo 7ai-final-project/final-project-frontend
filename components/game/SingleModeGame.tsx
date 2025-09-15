@@ -277,7 +277,7 @@ export default function SingleModeGame({ initialData }: GameProps) {
             <Ionicons name="save-outline" size={28} color="#F4E4BC" />
             <Text style={styles.headerButtonText}>저장</Text>
           </TouchableOpacity>
-          <Text style={styles.storyTitle}>{sceneText}</Text>
+          <Text style={styles.storyTitle}>{storyTitle}</Text>
           <TouchableOpacity style={styles.headerButton} onPress={() => setOptionsModalVisible(true)}>
             <Ionicons name="settings-outline" size={28} color="#F4E4BC" />
           </TouchableOpacity>

@@ -271,15 +271,31 @@ export default function GameSetup({
       {(phase === "loading" || phase === "loading_steps" || phase === "confirm") && (
         <ImageBackground source={loadingImage} style={styles.loadingBackground} imageStyle={{ opacity: 0.2 }}>
           <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color="#E2C044" />
-            <Text style={styles.loadingText}>{loadingMessage}</Text>
-            {phase === "confirm" && isOwner && (
-              <TouchableOpacity style={styles.finalStartBtn} onPress={handleGameStart}>
-                <Text style={styles.finalStartBtnText}>게임 시작!</Text>
-              </TouchableOpacity>
-            )}
-            {phase === "confirm" && !isOwner && (
-              <Text style={styles.loadingText}>방장이 게임을 시작하기를 기다리고 있습니다...</Text>
+            {phase === 'confirm' ? (
+              // 최종 확인 단계 UI
+              <>
+                {isOwner ? (
+                  // 방장에게 보여줄 UI
+                  <>
+                    <Text style={styles.loadingText}>모든 플레이어의 준비가 완료되었습니다.</Text>
+                    <TouchableOpacity style={styles.finalStartBtn} onPress={handleGameStart}>
+                      <Text style={styles.finalStartBtnText}>게임 시작!</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  // 참여자에게 보여줄 UI
+                  <>
+                    <ActivityIndicator size="large" color="#E2C044" />
+                    <Text style={styles.loadingText}>방장이 게임을 시작하기를 기다리고 있습니다...</Text>
+                  </>
+                )}
+              </>
+            ) : (
+              // 캐릭터 선택 후 로딩 단계 UI
+              <>
+                <ActivityIndicator size="large" color="#E2C044" />
+                <Text style={styles.loadingText}>{loadingMessage}</Text>
+              </>
             )}
           </View>
         </ImageBackground>

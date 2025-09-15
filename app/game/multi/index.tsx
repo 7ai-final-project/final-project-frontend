@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Modal, SafeAreaView, Alert, TextInput, Switch, ActivityIndicator, LayoutAnimation, UIManager, Platform, Pressable } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import api from "../../../services/api";
 import { Ionicons } from '@expo/vector-icons';
 import CreateRoomScreen from './room/create_room';
@@ -96,6 +96,15 @@ export default function MultiModeLobby() {
     }
   }, [page, loading, refreshing, hasNextPage, searchQuery, showAvailableOnly]);
 
+  useFocusEffect(
+    useCallback(() => {
+      // 화면에 들어올 때 항상 첫 페이지부터 새로고침
+      setPage(1);
+      setHasNextPage(true);
+      fetchRooms(true); // 'true'를 인자로 주어 새로고침 동작을 수행
+    }, []) // 의존성 배열은 비워둡니다.
+  );
+
   useEffect(() => {
     // ... (이전과 동일한 useEffect)
     const handler = setTimeout(() => {
@@ -131,7 +140,7 @@ export default function MultiModeLobby() {
     } catch (err) {
       console.error("방 삭제 실패:", err);
       Alert.alert("오류", "방 삭제에 실패했습니다.");
-      setIsConfirmModalVisible(false); // 오류 발생 시에도 모달 닫기
+      setIsConfirmModalVisible(false);
       setRoomToDelete(null);
     }
   };
