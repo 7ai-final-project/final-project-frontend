@@ -21,8 +21,8 @@ interface Story {
 }
 
 const storyImages: { [key: string]: any } = {
-    'sun_and_moon': require('../../../assets/images/game/multi_mode/background/sun_and_moon.jpg'),
-    'well_ghost': require('../../../assets/images/game/multi_mode/background/well_ghost.jpg'),
+    'Sun and Moon': require('../../../assets/images/game/multi_mode/background/sun_and_moon.jpg'),
+    'well-ghost': require('../../../assets/images/game/multi_mode/background/well_ghost.jpg'),
     'good_brothers': require('../../../assets/images/game/multi_mode/background/good_brothers.jpg'),
 };
 
