@@ -39,6 +39,7 @@ type Props = {
     };
     initialSessionData?: LoadedSessionData | null;
     turnSeconds?: number;
+    isLoadedGame: boolean;
 };
 
 type Phase = "intro" | "choice" | "sync" | "dice_roll" | "cinematic" | "end";
@@ -55,6 +56,7 @@ export default function GameEngineRealtime({
     setupData,
     initialSessionData = null,
     turnSeconds = 20,
+    isLoadedGame,
 }: Props) {
     // [수정] setupData에서 필요한 정보를 구조 분해 할당합니다.
     const { myCharacter, aiCharacters, allCharacters } = setupData;
@@ -89,6 +91,8 @@ export default function GameEngineRealtime({
 
     const [isSaveModalVisible, setIsSaveModalVisible] = useState(false);
     const [saveModalMessage, setSaveModalMessage] = useState("");
+
+    const [isGeneratingNextScene, setIsGeneratingNextScene] = useState(false);
 
     const spin = spinValue.interpolate({
         inputRange: [0, 1],
@@ -133,30 +137,24 @@ export default function GameEngineRealtime({
                 ws = new WebSocket(url);
                 wsRef.current = ws;
 
-                // --- 1. 웹소켓 이벤트 핸들러 정의 ---
                 ws.onopen = () => {
                     console.log("✅ GameEngineRealtime WebSocket Connected");
-                    setIsLoading(true); // 로딩 시작
-                    // 연결 성공 후, 첫 장면 요청
-                    if (initialSessionData) {
-                        // 1. 불러온 데이터가 있으면 'continue_game' 액션을 전송
-                        console.log("🚀 게임 이어하기를 요청합니다.");
-                        ws?.send(JSON.stringify({
-                            type: "continue_game",
-                            session_data: initialSessionData,
-                        }));
-                    } else {
-                        // 2. 없으면 기존처럼 'request_initial_scene' 액션을 전송
-                        console.log("🚀 새 게임 시작을 요청합니다.");
-                        ws?.send(JSON.stringify({
-                            type: "request_initial_scene",
-                            topic: Array.isArray(topic) ? topic[0] : topic,
-                            characters: setupData.allCharacters.map(c => ({
-                                name: c.name,
-                                description: c.description
-                            })),
-                        }));
-                    }
+                    setIsLoading(true);
+
+                    // --- ⬇️ [핵심 수정] ⬇️ ---
+                    // isLoadedGame 플래그를 기반으로 서버에 첫 장면을 요청합니다.
+                    // 이제 'continue_game' 메시지는 사용하지 않습니다.
+                    const logMessage = isLoadedGame
+                        ? "🚀 (불러온 게임) 첫 장면을 요청합니다."
+                        : "🚀 (새 게임) 첫 장면을 요청합니다.";
+                    console.log(logMessage);
+
+                    ws?.send(JSON.stringify({
+                        type: "request_initial_scene",
+                        topic: Array.isArray(topic) ? topic[0] : topic,
+                        characters: allCharacters, // 캐릭터 전체 정보 전달
+                        isLoadedGame: isLoadedGame,  // ✅ '깃발'을 여기에 포함하여 전송
+                    }));
                 };
 
                 ws.onmessage = (event) => {
@@ -170,29 +168,25 @@ export default function GameEngineRealtime({
                         setRoundResult(null);
                         setCinematicText("");
                         setSubmitting(false);
-                        setAiChoices({}); // [수정] 새 씬 시작 시 선택 현황 초기화
+                        setAiChoices({});
                         setIsLoading(false);
+                        setIsGeneratingNextScene(false);
                         pageTurnSound?.replayAsync();
-
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-                    }
-                    else if (data.type === "game_update" && data.payload.event === "turn_resolved") {
-                        // 서버가 보내준 narration으로 cinematicText를 설정합니다.
+                    } else if (data.type === "game_update" && data.payload.event === "turn_resolved") {
                         setCinematicText(data.payload.narration);
                         setRoundResult(data.payload.roundResult);
                         setPhase("cinematic");
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-                    }
-
-                    else if (data.type === "save_success") {
+                    } else if (data.type === "save_success") {
                         setSaveModalMessage(data.message);
                         setIsSaveModalVisible(true);
-                    }
-                    else if (data.type === "error") {
+                    } else if (data.type === "error") {
                         setError(data.message);
                         setIsLoading(false);
+                        setIsGeneratingNextScene(false);
                     }
                 };
 
@@ -210,21 +204,16 @@ export default function GameEngineRealtime({
                 console.error("GameEngine WebSocket connection failed:", error);
                 setError("웹소켓 서버에 연결할 수 없습니다.");
                 setIsLoading(false);
-
             }
         };
 
-        // --- 2. 연결 실행 ---
         connect();
 
-        // --- 3. 컴포넌트 종료 시 연결 해제 ---
         return () => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.close();
-            }
-            stopTimer(); // 타이머도 함께 정리
+            if (ws && ws.readyState === WebSocket.OPEN) { ws.close(); }
+            stopTimer();
         };
-    }, [roomId, topic, setupData, initialSessionData]);
+    }, [roomId, topic, setupData, isLoadedGame]);
 
     // --- 사운드 로딩 Hook (변경 없음) ---
     useEffect(() => {
@@ -329,8 +318,7 @@ export default function GameEngineRealtime({
 
             const myDice = rollDice(20);
             const myAppliedStatKorean = myChoice.appliedStat;
-            const myAppliedStatEnglish = statKrToEn[myAppliedStatKorean] as EnglishStat;
-            const myStatValue = getStatValue(myCharacter, myAppliedStatEnglish) ?? 0;
+            const myStatValue = myCharacter.stats[myAppliedStatKorean] ?? 0;
             const myModifier = myChoice.modifier;
             const myTotal = myDice + myStatValue + myModifier;
             const DC = getDC(difficulty);
@@ -390,14 +378,16 @@ export default function GameEngineRealtime({
     };
     
     const handleNextScene = () => {
-        if (!ws || !myRole || !myChoiceId || !currentScene) return;
+        if (!ws || !myRole || !myChoiceId || !currentScene || isGeneratingNextScene) return;
 
-        setIsLoading(true);
+        setIsGeneratingNextScene(true);
 
         const myLastChoice = myChoices.find(c => c.id === myChoiceId);
-        if (!myLastChoice) return;
+        if (!myLastChoice) {
+            setIsGeneratingNextScene(false); // [추가] 오류 시 상태 초기화
+            return;
+        }
 
-        // ✅ 백엔드와 약속한 'request_next_scene' 타입으로 메시지를 보냅니다.
         ws.send(JSON.stringify({
             type: "request_next_scene",
             history: { // history 객체 안에 필요한 정보를 담습니다.
@@ -654,10 +644,13 @@ export default function GameEngineRealtime({
 
                             {/* [수정] 다음 씬으로 넘어가는 버튼 */}
                             <TouchableOpacity
-                                style={styles.primary}
+                                style={[styles.primary, isGeneratingNextScene && styles.disabledButton]}
                                 onPress={handleNextScene}
+                                disabled={isGeneratingNextScene}
                             >
-                                <Text style={styles.primaryText}>다음 ▶</Text>
+                                <Text style={styles.primaryText}>
+                                    {isGeneratingNextScene ? "이야기 생성 중..." : "다음 ▶"}
+                                </Text>
                             </TouchableOpacity>
                         </Animated.View>
                     )}
@@ -940,6 +933,9 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "bold",
         fontSize: 16,
+    },
+    disabledButton: {
+        backgroundColor: '#5A5A5A',
     },
     saveButton: { // [추가] 저장 버튼 스타일
         marginTop: 12,

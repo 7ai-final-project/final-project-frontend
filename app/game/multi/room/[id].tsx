@@ -173,7 +173,8 @@ export default function RoomScreen() {
               participants: loadedSessionRef.current ? undefined : JSON.stringify(roomRef.current?.selected_by_room),
               isOwner: String(roomRef.current?.owner === user?.name),
               isLoaded: loadedSessionRef.current ? 'true' : 'false',
-              loadedCharacterHistory: loadedSessionRef.current ? JSON.stringify(loadedSessionRef.current.character_history) : undefined,
+              loadedSessionData: loadedSessionRef.current ? JSON.stringify(loadedSessionRef.current) 
+                : undefined,
             };
             
             countdownIntervalRef.current = setInterval(() => {
