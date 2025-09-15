@@ -281,7 +281,7 @@ return (
 
           {user && (
             <View style={styles.modeContainer}>
-              <MedievalButton onPress={() => router.push('/game/story')}>
+              <MedievalButton onPress={() => router.push('/storymode')}>
                 스토리 모드
               </MedievalButton>
               <MedievalButton onPress={() => router.push('/game/single')}>

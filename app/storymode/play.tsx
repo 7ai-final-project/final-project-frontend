@@ -6,8 +6,8 @@ import {
   StyleSheet,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import SingleModeGame from "../../../components/game/SingleModeGame";
-import api from "../../../services/api";
+import SingleModeGame from "../../components/game/SingleModeGame";
+import api from "../../services/api";
 
 export default function CharacterScreen() {
   const { story } = useLocalSearchParams();
@@ -18,7 +18,7 @@ export default function CharacterScreen() {
   const handleStartGame = useCallback(async (title: string) => {
     setIsLoading(true);
     try {
-      const response = await api.post('game/story/start/', {
+      const response = await api.post('storymode/story/start/', {
         story_title: story,
       });
       // console.log(response);

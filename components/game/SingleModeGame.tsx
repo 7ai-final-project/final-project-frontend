@@ -204,7 +204,7 @@ export default function SingleModeGame({ initialData }: GameProps) {
     setChoices([]);
  
     try {
-      const response = await api.post("game/story/choice/", {
+      const response = await api.post("storymode/story/choice/", {
         story_title: storyTitle,
         choice_index: choiceIndex,
         current_moment_id: currentMomentId,

@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, X, Wifi, Settings } from 'lucide-react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, ImageBackground, LayoutAnimation, UIManager, Platform, ScrollView, Image } from 'react-native';
 import { router } from 'expo-router';
-import api from '../../../services/api';
-import OptionsModal from '../../../components/OptionsModal'; 
+import api from '../../services/api';
+import OptionsModal from '../../components/OptionsModal'; 
 
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -21,9 +21,9 @@ interface Story {
 }
 
 const storyImages: { [key: string]: any } = {
-    'Sun and Moon': require('../../../assets/images/game/multi_mode/background/sun_and_moon.jpg'),
-    'well-ghost': require('../../../assets/images/game/multi_mode/background/well_ghost.jpg'),
-    'good_brothers': require('../../../assets/images/game/multi_mode/background/good_brothers.jpg'),
+    'Sun and Moon': require('../../assets/images/game/multi_mode/background/sun_and_moon.jpg'),
+    'well-ghost': require('../../assets/images/game/multi_mode/background/well_ghost.jpg'),
+    'good_brothers': require('../../assets/images/game/multi_mode/background/good_brothers.jpg'),
 };
 
 export default function StorySelectorScreen() {
@@ -42,7 +42,7 @@ export default function StorySelectorScreen() {
   useEffect(() => {
     const fetchStories = async () => {
       try {
-        const response = await api.get('game/story/stories/');
+        const response = await api.get('storymode/story/stories/');
         const data = response.data;
         // console.log('Fetched stories: ', data.stories);
         setStories(data.stories);
@@ -63,7 +63,7 @@ export default function StorySelectorScreen() {
     if(selectedStory) {
       // 선택된 스토리를 params로 전달하여 play.tsx로 이동
       router.push({
-        pathname: "/game/story/play",
+        pathname: "/storymode/play",
         params: { story: selectedStory.title },
       });
     }
@@ -77,7 +77,7 @@ export default function StorySelectorScreen() {
 
   const renderStoryCard = (story: Story) => {
     const isSelected = selectedStoryId === story.id;
-    const imageSource = storyImages[story.title_eng] || require('../../../assets/images/game/multi_mode/background/sun_and_moon.jpg');
+    const imageSource = storyImages[story.title_eng] || require('../../assets/images/game/multi_mode/background/sun_and_moon.jpg');
 
     return (
       <TouchableOpacity
