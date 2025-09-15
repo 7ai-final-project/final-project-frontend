@@ -480,11 +480,11 @@ const styles = StyleSheet.create({
 
   // --- MedievalButton 관련 스타일을 index.tsx에서 복사해옵니다. ---
   buttonContainer: { justifyContent: 'center', alignItems: 'center', marginVertical: 12, height: 80 },
-  mediumButton: { width: '100%', height: 70 },
-  largeButton: { width: 320, height: 80 },
+  mediumButton: { width: '100%', height: 70, },
+  largeButton: { width: '150%', height: 80 },
   outerBorder: { position: 'absolute', width: '100%', height: '100%', backgroundColor: '#4a2c1a', borderRadius: 18, borderWidth: 2, borderColor: '#2a180e' },
   innerBorder: { position: 'absolute', width: '95%', height: '90%', backgroundColor: '#8B4513', borderRadius: 14, borderWidth: 2, borderColor: '#c88a5a' },
-  buttonBody: { width: '90%', height: '80%', backgroundColor: '#6a381a', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 2, elevation: 5 },
+  buttonBody: { width: '100%', height: '80%', backgroundColor: '#6a381a', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 2, elevation: 5 },
   pressed: { backgroundColor: '#4a2c1a' },
   buttonText: {
     fontFamily: 'neodgm',
