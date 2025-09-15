@@ -4,6 +4,7 @@ import api from "../../services/api";
 import { Audio } from "expo-av";
 import { Ionicons } from '@expo/vector-icons';
 import OptionsModal from '../OptionsModal'; 
+import { router } from 'expo-router';
 
 interface GameProps {
   initialData: {
@@ -152,6 +153,7 @@ export default function SingleModeGame({ initialData }: GameProps) {
       }
     };
     loadSounds();
+    console.log(initialData);
 
     // 컴포넌트가 사라질 때 모든 사운드 리소스 정리
     return () => {
@@ -270,18 +272,29 @@ export default function SingleModeGame({ initialData }: GameProps) {
  
   return (
     <View style={{ flex: 1, backgroundColor: backgroundColor }}>
-      <ScrollView contentContainerStyle={styles.container}>
+     <ScrollView contentContainerStyle={styles.container}>
         {/* --- 1. 헤더 --- */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="save-outline" size={28} color="#F4E4BC" />
-            <Text style={styles.headerButtonText}>저장</Text>
+         <View style={styles.header}>
+          {/* 1. 왼쪽: 뒤로가기 버튼 */}
+          <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={28} color="#F4E4BC" />
+            {/* <Text style={styles.headerButtonText}>Back</Text> */}
           </TouchableOpacity>
-          <Text style={styles.storyTitle}>{sceneText}</Text>
-          <TouchableOpacity style={styles.headerButton} onPress={() => setOptionsModalVisible(true)}>
-            <Ionicons name="settings-outline" size={28} color="#F4E4BC" />
-          </TouchableOpacity>
-        </View>
+
+          {/* 2. 가운데: 스토리 제목 */}
+          <Text style={styles.storyTitle}>{storyTitle}</Text>
+
+          {/* 3. 오른쪽: 저장 & 설정 버튼 그룹 */}
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.headerButton}>
+              <Ionicons name="save-outline" size={28} color="#F4E4BC" />
+              <Text style={styles.headerButtonText}>저장</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerButton} onPress={() => setOptionsModalVisible(true)}>
+              <Ionicons name="settings-outline" size={28} color="#F4E4BC" />
+            </TouchableOpacity>
+          </View>
+          </View>
 
         {/* --- 2. 메인 콘텐츠 (좌우 분할) --- */}
         <View style={styles.mainContent}>
@@ -298,9 +311,16 @@ export default function SingleModeGame({ initialData }: GameProps) {
 
           {/* --- 2-2. 오른쪽 패널 (스토리 & 선택지) --- */}
           <View style={styles.rightPanel}>
-            <ScrollView contentContainerStyle={styles.rightPanelContent}>
-              
-              {/* 두루마리 스타일 스토리 컨테이너 */}
+           {/*<ScrollView contentContainerStyle={styles.rightPanelContent}>*/}
+          
+          <View style={styles.topCell}>
+            {/* 이제 ImageBackground 대신, 스타일로 꾸민 View를 사용합니다. */}
+            <ScrollView contentContainerStyle={styles.sceneContainer}>
+              <TypingText text={sceneText || ''} onFinished={() => setIsTyping(false)} />
+            </ScrollView>
+          </View>
+
+              {/* 두루마리 스타일 스토리 컨테이너 
               <ImageBackground
                 source={require('../../assets/images/game/multi_mode/background/scroll (3).png')}
                 style={styles.sceneContainer}
@@ -308,10 +328,11 @@ export default function SingleModeGame({ initialData }: GameProps) {
                 onLayout={onScrollLayout}
               >
                 <TypingText text={sceneText || ''} onFinished={() => setIsTyping(false)} />
-              </ImageBackground>
+              </ImageBackground> */}
 
               {/* MedievalButton 선택지 */}
-              <View style={styles.choiceGrid}>
+            <View style={styles.bottomCell}>
+            <ScrollView contentContainerStyle={styles.choiceGrid}>
                 {!isTyping && !isChoiceLoading &&
                   choices.map((choiceText: string, index: number) => (
                   <MedievalButton
@@ -326,9 +347,9 @@ export default function SingleModeGame({ initialData }: GameProps) {
                   ))
                 }
                 {isChoiceLoading && <ActivityIndicator size="small" color="#fff" />}
+              </ScrollView>
               </View>
             {error && <Text style={styles.errorMessage}>{error}</Text>}
-          </ScrollView>
           </View>
         </View>
 
@@ -382,6 +403,11 @@ const styles = StyleSheet.create({
     fontSize: 16, // neodgm 폰트는 크기가 작으므로 키워줍니다.
     fontFamily: 'neodgm',
   },
+    headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   storyTitle: {
     color: '#F4E4BC',
     fontSize: 28, // neodgm 폰트는 크기가 작으므로 키워줍니다.
@@ -399,6 +425,7 @@ const styles = StyleSheet.create({
     flex: 1, // 가로 비율 1
     justifyContent: 'center',
     alignItems: 'center',
+    color: '#1e1e1e', 
   },
  imageContainer: {
     width: "100%",
@@ -439,19 +466,37 @@ const styles = StyleSheet.create({
   // 오른쪽 패널 (스토리 & 선택지)
   rightPanel: {
     flex: 1, // 가로 비율 1
+    flexDirection: 'column', 
+    Width: 4,
+    borderColor: 'black',
+    borderRadius: 15, 
+    backgroundColor: '#1e1e1e', 
+    padding: 10, 
   },
-  rightPanelContent: {
-    flexGrow: 1, // 내용이 적어도 패널을 꽉 채우도록
+  //rightPanelContent: {
+    //flexGrow: 1, // 내용이 적어도 패널을 꽉 채우도록
+  //},
+  // 위쪽 셀 (흰색 종이)
+  topCell: {
+    flex: 1, // ★★★ 공간을 1의 비율 (50%)로 차지 ★★★
+    justifyContent: 'center',
+  },
+  // 아래쪽 셀 (선택지)
+  bottomCell: {
+    flex: 1, // ★★★ 공간을 1의 비율 (50%)로 차지 ★★★
+    justifyContent: 'center',
+    paddingTop: 15, // 위쪽 셀과의 간격
   },
   sceneContainer: {
-    paddingVertical: 50,
-    paddingHorizontal: 70,
-    minHeight: 300,
-    top: -50,
-    width: 800,
-    marginBottom: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#F4E4BC', 
+    borderRadius: 10,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+
   },
   sceneDescription: { 
     color: "#000000ff",
@@ -476,14 +521,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 20,
     fontWeight: "bold",
+    fontFamily: 'neodgm',
   },
 
   // --- MedievalButton 관련 스타일을 index.tsx에서 복사해옵니다. ---
-  buttonContainer: { justifyContent: 'center', alignItems: 'center', marginVertical: 12, height: 80 },
+  buttonContainer: { justifyContent: 'center', alignItems: 'center', marginVertical: 12, height: 300 },
   mediumButton: { width: '100%', height: 70, },
   largeButton: { width: '150%', height: 80 },
   outerBorder: { position: 'absolute', width: '100%', height: '100%', backgroundColor: '#4a2c1a', borderRadius: 18, borderWidth: 2, borderColor: '#2a180e' },
-  innerBorder: { position: 'absolute', width: '95%', height: '90%', backgroundColor: '#8B4513', borderRadius: 14, borderWidth: 2, borderColor: '#c88a5a' },
+  innerBorder: { position: 'absolute', width: '102%', height: '100%', backgroundColor: '#8B4513', borderRadius: 14, borderWidth: 2, borderColor: '#c88a5a' },
   buttonBody: { width: '100%', height: '80%', backgroundColor: '#6a381a', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 2, elevation: 5 },
   pressed: { backgroundColor: '#4a2c1a' },
   buttonText: {
