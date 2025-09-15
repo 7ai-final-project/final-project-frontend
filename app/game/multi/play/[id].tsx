@@ -57,7 +57,6 @@ export default function GameScreen() {
   };
 
   if (gamePhase === 'loading' || !params.id || !params.topic) {
-    // 로딩과 요약 화면은 중앙 정렬 스타일(centerContainer)을 사용합니다.
     return (
       <SafeAreaView style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#E2C044" />
