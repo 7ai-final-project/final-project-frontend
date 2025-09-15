@@ -214,6 +214,7 @@ const styles = StyleSheet.create({
   headerButtonText: {
     color: 'white',
     fontSize: 18,
+    fontFamily: 'neodgm',
   },
   headerTitle: {
     color: 'white',
