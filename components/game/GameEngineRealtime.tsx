@@ -18,7 +18,7 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 // [수정] API 서비스에서 Character 타입과 endGame 함수만 import 합니다.
-import { Character, endGame, getWebSocketNonce } from "@/services/api";
+import { Character, endGame, getWebSocketNonce, Skill, Item } from "@/services/api";
 import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade } from "@/util/ttrpg";
 import { Audio } from "expo-av";
 
@@ -121,6 +121,11 @@ export default function GameEngineRealtime({
     const [roundResult, setRoundResult] = useState<RoundResult | null>(null);
     const [cinematicText, setCinematicText] = useState<string>("");
 
+    const [usedItems, setUsedItems] = useState<Set<string>>(new Set()); // 사용한 아이템 이름 저장 (1회용)
+    const [skillCooldowns, setSkillCooldowns] = useState<Record<string, number>>({}); // 스킬별 재사용 가능한 씬 인덱스 저장
+    const [pendingUsage, setPendingUsage] = useState<{ type: 'skill' | 'item'; data: Skill | Item } | null>(null); // 다음 씬 요청 시 보낼 사용 정보
+    const SKILL_COOLDOWN_SCENES = 2;
+
     const timerAnim = useRef(new Animated.Value(turnSeconds)).current;
 
     useEffect(() => {
@@ -174,6 +179,30 @@ export default function GameEngineRealtime({
                         pageTurnSound?.replayAsync();
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+                        } else if (data.type === "game_update" && data.payload.event === "game_loaded") {
+                        const { scene, playerState } = data.payload;
+                        setCurrentScene(scene); // 씬 정보 설정
+ 
+                        // 불러온 스킬/아이템 상태 복원
+                        if (playerState) {
+                            setUsedItems(new Set(playerState.usedItems || [])); // Array를 Set으로 변환
+                            setSkillCooldowns(playerState.skillCooldowns || {});
+                        }
+ 
+                        // 새 씬 시작과 동일한 공통 로직 수행
+                        setPhase("choice");
+                        setMyChoiceId(null);
+                        setRoundResult(null);
+                        setDiceResult(null);
+                        setCinematicText("");
+                        setSubmitting(false);
+                        setAiChoices({});
+                        setIsLoading(false);
+                        setIsGeneratingNextScene(false);
+                        pageTurnSound?.replayAsync();
+                        phaseAnim.setValue(0);
+                        Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+
                     } else if (data.type === "game_update" && data.payload.event === "turn_resolved") {
                         setCinematicText(data.payload.narration);
                         setRoundResult(data.payload.roundResult);
@@ -376,6 +405,20 @@ export default function GameEngineRealtime({
         const randomChoice = myChoices[Math.floor(Math.random() * myChoices.length)];
         submitChoice(randomChoice.id);
     };
+
+    const handleUseSkill = (skill: Skill) => {
+        if (!currentScene) return;
+        const cooldownEndSceneIndex = currentScene.index + SKILL_COOLDOWN_SCENES;
+        setSkillCooldowns(prev => ({ ...prev, [skill.name]: cooldownEndSceneIndex }));
+        setPendingUsage({ type: 'skill', data: skill });
+        Alert.alert("스킬 준비 완료", `'${skill.name}' 스킬을 다음 행동에 사용합니다.`);
+    };
+
+    const handleUseItem = (item: Item) => {
+        setUsedItems(prev => new Set(prev).add(item.name));
+        setPendingUsage({ type: 'item', data: item });
+        Alert.alert("아이템 사용", `'${item.name}' 아이템을 사용했습니다. (1회성)`);
+    };
     
     const handleNextScene = () => {
         if (!ws || !myRole || !myChoiceId || !currentScene || isGeneratingNextScene) return;
@@ -390,15 +433,17 @@ export default function GameEngineRealtime({
 
         ws.send(JSON.stringify({
             type: "request_next_scene",
-            history: { // history 객체 안에 필요한 정보를 담습니다.
+            history: { 
                 lastChoice: {
                     role: myRole,
                     text: myLastChoice.text,
                 },
-                lastNarration: cinematicText, // 이전 턴의 결과 텍스트를 함께 보냅니다.
+                lastNarration: cinematicText,
                 sceneIndex: currentScene.index,
+                usage: pendingUsage, // ✅ 사용한 스킬/아이템 정보를 여기에 담습니다.
             }
         }));
+        setPendingUsage(null);
     };
 
     const handleSaveGame = () => {
@@ -432,7 +477,11 @@ export default function GameEngineRealtime({
             description: roundSpec?.title, // 현재 템플릿에서는 title이 주된 설명이므로 동일하게 사용
             choices: choicesFormatted,
             selectedChoice: selectedChoiceFormatted,
-            sceneIndex: currentScene.index
+            sceneIndex: currentScene.index,
+            playerState: {
+                usedItems: Array.from(usedItems), // Set을 Array로 변환하여 JSON 직렬화
+                skillCooldowns: skillCooldowns,
+            }
         };
 
         // 웹소켓으로 데이터 전송
@@ -521,15 +570,74 @@ export default function GameEngineRealtime({
                             {myCharacter.description}
                         </Text>
                     )}
-                    <Text style={styles.roleText}>{myRole}</Text>
-                    <View style={styles.statsBox}>
-                        <Text style={styles.statsTitle}>능력치</Text>
-                        {Object.entries(myCharacter.stats).map(([stat, value]) => (
-                            <Text key={stat} style={styles.statText}>
-                                {stat}: <Text style={{ color: "#E2C044", fontWeight: "bold" }}>{value}</Text>
-                            </Text>
-                        ))}
-                    </View>
+
+                   <ScrollView 
+                       style={{width: '100%', flex: 1}} 
+                       showsVerticalScrollIndicator={false}
+                   >
+                       {/* 능력치 박스 (ScrollView 안으로 이동) */}
+                       <View style={styles.statsBox}>
+                           <Text style={styles.statsTitle}>능력치</Text>
+                           {Object.entries(myCharacter.stats).map(([stat, value]) => (
+                               <Text key={stat} style={styles.statText}>
+                                   {stat}: <Text style={{ color: "#E2C044", fontWeight: "bold" }}>{value}</Text>
+                               </Text>
+                           ))}
+                       </View>
+                       {/* 스킬 목록 */}
+                       {myCharacter.skills && myCharacter.skills.length > 0 && (
+                           <View style={styles.skillsItemsBox}>
+                               <Text style={styles.skillsItemsTitle}>스킬</Text>
+                                {myCharacter.skills.map((skill) => {
+                                    const isOnCooldown = (skillCooldowns[skill.name] ?? 0) > (currentScene?.index ?? 0);
+                                    return (
+                                        <View key={skill.name} style={styles.skillItem}>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.skillItemName}>- {skill.name}</Text>
+                                                <Text style={styles.skillItemDesc}>{skill.description}</Text>
+                                            </View>
+                                            <TouchableOpacity 
+                                                style={[styles.useButton, (isOnCooldown || pendingUsage) && styles.disabledUseButton]}
+                                                disabled={isOnCooldown || !!pendingUsage}
+                                                onPress={() => handleUseSkill(skill)}
+                                            >
+                                                <Text style={styles.useButtonText}>
+                                                    {isOnCooldown 
+                                                        ? `대기중(${skillCooldowns[skill. name] - (currentScene?.index ?? 0)}턴)` 
+                                                        : "사용"}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                })}
+                           </View>
+                       )}
+
+                       {/* 아이템 목록 */}
+                       {myCharacter.items && myCharacter.items.length > 0 && (
+                           <View style={styles.skillsItemsBox}>
+                               <Text style={styles.skillsItemsTitle}>아이템</Text>
+                                {myCharacter.items.map((item) => {
+                                    const isUsed = usedItems.has(item.name);
+                                    return (
+                                        <View key={item.name} style={styles.skillItem}>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.skillItemName}>- {item.name}</Text>
+                                                <Text style={styles.skillItemDesc}>{item.description}</Text>
+                                            </View>
+                                            <TouchableOpacity 
+                                                style={[styles.useButton, (isUsed || pendingUsage) && styles.disabledUseButton]}
+                                                disabled={isUsed || !!pendingUsage}
+                                                onPress={() => handleUseItem(item)}
+                                            >
+                                                <Text style={styles.useButtonText}>{isUsed ? "사용완료" : "사용"}</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                  );
+                              })}
+                           </View>
+                       )}
+                   </ScrollView>
                 </View>
 
                 <View style={styles.gamePanel}>
@@ -849,6 +957,52 @@ const styles = StyleSheet.create({
         color: "#D4D4D4",
         fontSize: 14,
         lineHeight: 22,
+    },
+    skillsItemsBox: {
+        width: "100%",
+        marginBottom: 15,
+        padding: 15,
+        backgroundColor: "#0B1021",
+        borderRadius: 12,
+    },
+    skillsItemsTitle: {
+        fontSize: 16,
+        fontWeight: "bold",
+        color: "#E0E0E0",
+        marginBottom: 10, // 이름과 설명 사이 간격
+    },
+    skillItem: {
+        marginBottom: 12,
+        flexDirection: 'row', // 가로 정렬
+        alignItems: 'center', // 세로 중앙 정렬
+        justifyContent: 'space-between',
+    },
+    skillItemName: {
+        color: "#E2C044", // 노란색으로 강조
+        fontWeight: "bold",
+        fontSize: 14,
+        marginBottom: 4,
+    },
+    skillItemDesc: {
+        color: "#A0A0A0", // 회색으로 설명 표시
+        fontSize: 13,
+        lineHeight: 18,
+        paddingLeft: 8, // 이름과 맞추기 위해 살짝 들여쓰기
+    },
+    useButton: {
+        backgroundColor: '#4CAF50',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        marginLeft: 10,
+    },
+    disabledUseButton: {
+        backgroundColor: '#5A5A5A',
+    },
+    useButtonText: {
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+        fontSize: 12,
     },
     gamePanel: {
         flex: 1,

@@ -60,13 +60,13 @@ const CharacterDetails = ({ char }: { char: Character }) => (
     {char.skills?.length > 0 && (
       <View style={styles.listContainer}>
         <Text style={styles.listTitle}>스킬</Text>
-        {char.skills.map(skill => <Text key={skill} style={styles.listItemText}>- {skill}</Text>)}
++       {char.skills.map(skill => <Text key={skill.name} style={styles.listItemText}>- {skill.name}</Text>)}
       </View>
     )}
     {char.items?.length > 0 && (
       <View style={styles.listContainer}>
         <Text style={styles.listTitle}>아이템</Text>
-        {char.items.map(item => <Text key={item} style={styles.listItemText}>- {item}</Text>)}
+        {char.items.map(item => <Text key={item.name} style={styles.listItemText}>- {item.name}</Text>)}
       </View>
     )}
   </>
