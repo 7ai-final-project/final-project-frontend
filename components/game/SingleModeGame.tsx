@@ -35,20 +35,29 @@ const TypingText = ({ text, onFinished }: { text: string, onFinished: () => void
     const processedText = text.replace(/\. ([가-힣A-Za-z])/g, '.\n$1');
     
     let i = 0;
-    const typingInterval = setInterval(() => {
-      if (i < processedText.length) {
-        setDisplayedText(prev => prev + processedText.charAt(i));
-        i++;
-      } else {
-        clearInterval(typingInterval);
+      const intervalId = setInterval(() => {
+      // 한 글자씩 추가하는 대신, substring을 사용하여 항상 올바른 길이의 텍스트를 보장합니다.
+      // 이것이 상태 업데이트 지연으로 인한 문제를 방지합니다.
+      setDisplayedText(text.substring(0, i + 1));
+      i++;
+
+      if (i > text.length) {
+        clearInterval(intervalId);
         onFinished();
       }
-    }, 40);
+    }, 40); // 타이핑 속도 (ms)
 
-    return () => clearInterval(typingInterval);
-  }, [text]);
+    // 컴포넌트가 업데이트되거나 사라질 때, 이전의 인터벌을 반드시 정리합니다.
+    return () => clearInterval(intervalId);
+  }, [text]); // text prop이 바뀔 때만 이 효과를 다시 실행합니다.
 
-  return <Text style={styles.sceneDescription}>{displayedText}</Text>;
+  return (
+      <Text style={styles.sceneDescription}>
+          {displayedText}
+          {/* 타이핑이 끝났는지 여부는 onFinished 콜백으로 관리되므로, 커서는 displayedText 길이로 판단합니다. */}
+          {displayedText.length < text.length && <Text style={{ opacity: 0.5 }}>|</Text>}
+      </Text>
+  );
 };
 
 const MedievalButton: React.FC<MedievalButtonProps> = ({
@@ -183,53 +192,6 @@ export default function SingleModeGame({ initialData }: GameProps) {
       }
     }
   }, [currentMomentId, currentMomentTitle]);
-  
-  //   const generateImageForCurrentScene = async () => {
-  //     // `currentMomentId`가 없으면 (예: 게임 시작 전) 실행하지 않습니다.
-  //     if (!currentMomentId) return;
-
-  //     // 이미지 로딩 상태 초기화
-  //     setIsImageLoading(true);
-  //     setImageUrl(null);
-  //     setDuration(null);
-  //     setElapsedTime(0);
-
-  //     // 실시간 타이머 시작
-  //     if (intervalRef.current) clearInterval(intervalRef.current as any);
-  //     intervalRef.current = setInterval(() => {
-  //       setElapsedTime((prevTime) => prevTime + 0.1);
-  //     }, 100);
-
-  //     try {
-  //       // 백엔드의 이미지 생성 API를 호출합니다.
-  //       const response = await api.post(
-  //         "/image-gen/api/generate-scene-image/",
-  //         {
-  //           story_id: storyTitle,
-  //           scene_name: currentMomentId, // 현재 장면 ID를 전달
-  //         }
-  //       );
-
-  //       if (response.data) {
-  //         setImageUrl(response.data.image_url);
-  //         setDuration(response.data.duration);
-  //       } else {
-  //         Alert.alert("오류", "이미지 데이터를 받아오지 못했습니다.");
-  //       }
-  //     } catch (error: any) {
-  //       console.error("이미지 생성 실패:", error);
-  //       // (선택사항) 사용자에게 에러 알림
-  //       // Alert.alert("이미지 생성 실패", error.response?.data?.error || "알 수 없는 오류");
-  //     } finally {
-  //       // 이미지 로딩이 성공하든 실패하든 로딩 상태를 종료하고 타이머를 멈춥니다.
-  //       setIsImageLoading(false);
-  //       if (intervalRef.current) clearInterval(intervalRef.current as any);
-  //     }
-  //   };
-
-  //   // 컴포넌트가 처음 렌더링될 때, 그리고 `currentMomentId`가 바뀔 때마다 이 함수가 실행됩니다.
-  //   generateImageForCurrentScene();
-  // }, [currentMomentId]); // `currentMomentId`의 변화를 감지합니다.
 
   // 사용자가 선택지를 눌렀을 때의 처리 (텍스트 업데이트 및 이미지 생성 트리거)
   const handleChoice = async (choiceIndex: number) => {
@@ -319,16 +281,6 @@ export default function SingleModeGame({ initialData }: GameProps) {
               <TypingText text={sceneText || ''} onFinished={() => setIsTyping(false)} />
             </ScrollView>
           </View>
-
-              {/* 두루마리 스타일 스토리 컨테이너 
-              <ImageBackground
-                source={require('../../assets/images/game/multi_mode/background/scroll (3).png')}
-                style={styles.sceneContainer}
-                resizeMode="stretch"
-                onLayout={onScrollLayout}
-              >
-                <TypingText text={sceneText || ''} onFinished={() => setIsTyping(false)} />
-              </ImageBackground> */}
 
               {/* MedievalButton 선택지 */}
             <View style={styles.bottomCell}>
@@ -467,15 +419,11 @@ const styles = StyleSheet.create({
   rightPanel: {
     flex: 1, // 가로 비율 1
     flexDirection: 'column', 
-    Width: 4,
     borderColor: 'black',
     borderRadius: 15, 
     backgroundColor: '#1e1e1e', 
     padding: 10, 
   },
-  //rightPanelContent: {
-    //flexGrow: 1, // 내용이 적어도 패널을 꽉 채우도록
-  //},
   // 위쪽 셀 (흰색 종이)
   topCell: {
     flex: 1, // ★★★ 공간을 1의 비율 (50%)로 차지 ★★★
