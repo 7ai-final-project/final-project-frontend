@@ -174,6 +174,7 @@ export default function HomeScreen() {
 
   const [loginModalVisible, setLoginModalVisible] = useState(false);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false); // 옵션 모달 상태
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [backgroundColor, setBackgroundColor] = useState('#0B1021'); // 배경색 상태
 
   const [isBgmOn, setIsBgmOn] = useState(true);
@@ -202,8 +203,10 @@ export default function HomeScreen() {
     setLoginModalVisible(false); // 로그인 모달창 닫기
   };
 
+  // const { microsoftPromptAsync } = useMicrosoftAuth(handleSocialLoginSuccess);
   const { googlePromptAsync } = useGoogleAuth(handleSocialLoginSuccess);
   const { kakaoPromptAsync } = useKakaoAuth(handleSocialLoginSuccess);
+
 
   if (loading) {
    return (
@@ -239,6 +242,10 @@ return (
             {user ? (
               <View style={styles.loggedInBox}>
                 <Text style={[styles.loggedInText, { fontSize: 16 * fontSizeMultiplier }]}>{user.name}님</Text>
+                <TouchableOpacity style={styles.profileButton} onPress={() => setProfileModalVisible(true)}>
+                  <Ionicons name="person-circle-outline" size={32} color="#F4E4BC" />
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
                   <Text style={styles.loginText}>Logout</Text>
                 </TouchableOpacity>
@@ -258,6 +265,7 @@ return (
         <View style={styles.main}>
         {/* user 상태가 'null' 또는 'undefined'일 때 (즉, 로그인하지 않았을 때)만 이 안의 내용을 보여줍니다. */}
           {!user && (
+            
             <> 
               {/* ★★★ 2. 기존 Text를 TypingText 컴포넌트로 교체합니다! ★★★ */}
               <TypingText 
@@ -303,6 +311,19 @@ return (
               </TouchableOpacity>
               
               <Text style={styles.modalTitle}>로그인</Text>
+
+              {/* Microsoft 로그인 버튼 */}
+              <TouchableOpacity
+                style={styles.socialLoginButton}
+                onPress={() => microsoftPromptAsync()}
+              >
+                {/* 아이콘을 담을 View */}
+                <View style={styles.socialIconContainer}>
+                  <Ionicons name="logo-microsoft" size={24} color="#fff" />
+                </View>
+                {/* 텍스트 */}
+                <Text style={styles.socialButtonText}>Microsoft로 로그인</Text>
+              </TouchableOpacity>
               
               {/* Google 로그인 버튼 */}
               <TouchableOpacity
@@ -391,7 +412,10 @@ header: {
   loggedInBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+  },
+  profileButton: {
+    padding: 5,
   },
   loggedInText: { 
     color: '#fff', 
@@ -405,7 +429,26 @@ header: {
     backgroundColor: '#DC2626',
     borderRadius: 8,
   },
-
+ // --- 프로필 모달 스타일 ---
+  profileInfoContainer: {
+    width: '100%',
+    paddingVertical: 10,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  profileLabel: {
+    color: '#D1C4E9',
+    fontSize: 18,
+    fontFamily: 'neodgm',
+    marginBottom: 4,
+  },
+  profileValue: {
+    color: '#fff',
+    fontSize: 22,
+    fontFamily: 'neodgm',
+    fontWeight: '600',
+  },
   // --- 메인 콘텐츠 (환영 메시지 & 소식 창) ---
   title: { fontSize: 22, fontWeight: 'bold', color: '#F4E1D2', textAlign: 'center', marginBottom: 20 , fontFamily: 'neodgm',},
   description: { fontSize: 16, fontFamily: 'neodgm', color: '#D1C4E9', textAlign: 'center', lineHeight: 24 },
