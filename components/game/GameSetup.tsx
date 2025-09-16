@@ -16,6 +16,42 @@ import { useAuth } from "@/hooks/useAuth";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
+// 객체/문자열 모두 안전하게 문자열로 정규화
+function toLine(
+  v: unknown,
+  fallbackWhenObject?: string
+): { title: string; desc?: string } {
+  if (typeof v === "string" || typeof v === "number") {
+    return { title: String(v) };
+  }
+  if (v && typeof v === "object") {
+    const o = v as any;
+    // name/title/name_eng 등 흔한 키를 우선적으로 사용
+    const title =
+      o.name ??
+      o.title ??
+      o.name_eng ??
+      o.title_eng ??
+      fallbackWhenObject ??
+      "[object]";
+    const desc =
+      o.description ??
+      o.desc ??
+      o.description_kr ??
+      o.description_eng ??
+      undefined;
+    return { title: String(title), desc: desc ? String(desc) : undefined };
+  }
+  return { title: String(v ?? "") };
+}
+
+// 배열이 아닐 수도 있는 입력을 방어적으로 배열로
+function toArray<T = unknown>(v: unknown): T[] {
+  if (Array.isArray(v)) return v as T[];
+  if (v == null) return [];
+  return [v as T];
+}
+
 // --- 타입 정의 ---
 interface Participant {
   id: string;
@@ -46,32 +82,82 @@ interface GameSetupProps {
 }
 
 // --- 자식 컴포넌트: 상세 정보 표시용 ---
-const CharacterDetails = ({ char }: { char: Character }) => (
-  <>
-    <Text style={styles.characterDescription}>{char.description}</Text>
-    <View style={styles.statsContainer}>
-        <Text style={styles.listTitle}>능력치</Text>
-      {Object.entries(char.stats).map(([stat, value]) => (
-        <Text key={stat} style={styles.statText}>
-          {stat}: {value}
-        </Text>
-      ))}
-    </View>
-    {char.skills?.length > 0 && (
-      <View style={styles.listContainer}>
-        <Text style={styles.listTitle}>스킬</Text>
-        {char.skills.map(skill => <Text key={skill} style={styles.listItemText}>- {skill}</Text>)}
-      </View>
-    )}
-    {char.items?.length > 0 && (
-      <View style={styles.listContainer}>
-        <Text style={styles.listTitle}>아이템</Text>
-        {char.items.map(item => <Text key={item} style={styles.listItemText}>- {item}</Text>)}
-      </View>
-    )}
-  </>
-);
+const CharacterDetails = ({ char }: { char: Character }) => {
+  // stats, skills, items가 없거나 타입이 달라도 안전하게 처리
+  const stats: Record<string, unknown> =
+    // 백엔드가 ability.stats에 넣는 경우도 대비
+    (char as any).stats ??
+    (char as any).ability?.stats ??
+    {};
+  const skillsRaw =
+    (char as any).skills ??
+    (char as any).ability?.skills ??
+    [];
+  const itemsRaw =
+    (char as any).items ??
+    (char as any).starting_items ??
+    [];
 
+  const skills = toArray(skillsRaw).map((s) => toLine(s));
+  const items = toArray(itemsRaw).map((it) => toLine(it));
+
+  return (
+    <>
+      {!!char.description && (
+        <Text style={styles.characterDescription}>
+          {String(char.description)}
+        </Text>
+      )}
+
+      {/* 스탯 */}
+      <View style={styles.statsContainer}>
+        <Text style={styles.listTitle}>능력치</Text>
+        {Object.entries(stats).length === 0 && (
+          <Text style={styles.statText}>-</Text>
+        )}
+        {Object.entries(stats).map(([stat, value]) => (
+          <Text key={stat} style={styles.statText}>
+            {stat}: {typeof value === "number" ? value : String(value)}
+          </Text>
+        ))}
+      </View>
+
+      {/* 스킬 */}
+      {skills.length > 0 && (
+        <View style={styles.listContainer}>
+          <Text style={styles.listTitle}>스킬</Text>
+          {skills.map(({ title, desc }, idx) => (
+            <View key={`skill-${idx}`} style={{ width: "100%" }}>
+              <Text style={styles.listItemText}>- {title}</Text>
+              {!!desc && (
+                <Text style={[styles.listItemText, { opacity: 0.8 }]}>
+                  {"  "}· {desc}
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* 아이템 */}
+      {items.length > 0 && (
+        <View style={styles.listContainer}>
+          <Text style={styles.listTitle}>아이템</Text>
+          {items.map(({ title, desc }, idx) => (
+            <View key={`item-${idx}`} style={{ width: "100%" }}>
+              <Text style={styles.listItemText}>- {title}</Text>
+              {!!desc && (
+                <Text style={[styles.listItemText, { opacity: 0.8 }]}>
+                  {"  "}· {desc}
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+    </>
+  );
+};
 // --- 메인 컴포넌트 ---
 export default function GameSetup({
   topic,
