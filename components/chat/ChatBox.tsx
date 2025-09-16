@@ -14,6 +14,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { getWebSocketNonce } from "../../services/api"; // ✅ 새로운 API 헬퍼 함수 임포트
 
 interface ChatMessage {
+  userId: string;
   username: string;
   message: string;
   timestamp: string;
@@ -62,6 +63,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ roomId, chatSocketRef }) => {
 
             if (data.type === 'history') {
               const historyMessages = data.messages.map((msg: any) => ({
+                userId: msg.user_id, // 👈 user_id 추가
                 username: msg.user || "system",
                 message: msg.message || "",
                 timestamp: formatTimestamp(msg.created_at),
@@ -72,6 +74,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ roomId, chatSocketRef }) => {
               const newMessageData = data.message;
               if (newMessageData && newMessageData.message) {
                 const newMessage = {
+                  userId: newMessageData.user_id, // 👈 user_id 추가
                   username: newMessageData.user || "system",
                   message: newMessageData.message,
                   timestamp: formatTimestamp(newMessageData.created_at),
@@ -128,7 +131,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ roomId, chatSocketRef }) => {
           showsVerticalScrollIndicator={false}
         >
           {messages.map((msg, index) => {
-            const isMyMessage = msg.username === username;
+            const isMyMessage = msg.userId === user?.id;
             return (
               <View
                 key={index}

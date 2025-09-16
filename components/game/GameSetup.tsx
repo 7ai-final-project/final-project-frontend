@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ interface SelectedRoomParticipant {
   selected_character: {
     id: string;
     name: string;
+    user_id: string;
   } | null;
 }
 
@@ -60,7 +61,7 @@ const CharacterDetails = ({ char }: { char: Character }) => (
     {char.skills?.length > 0 && (
       <View style={styles.listContainer}>
         <Text style={styles.listTitle}>스킬</Text>
-+       {char.skills.map(skill => <Text key={skill.name} style={styles.listItemText}>- {skill.name}</Text>)}
+        {char.skills.map(skill => <Text key={skill.name} style={styles.listItemText}>- {skill.name}</Text>)}
       </View>
     )}
     {char.items?.length > 0 && (
@@ -85,7 +86,12 @@ export default function GameSetup({
   const { wsRef } = useWebSocket();
 
   const allCharacters: Character[] = useMemo(() => {
-    try { return JSON.parse(initialCharacters); } 
+    try {
+      const chars = JSON.parse(initialCharacters);
+      // ✅ [추가] 이 console.log로 터미널이나 개발자 도구에서 데이터 확인
+      console.log("서버로부터 받은 캐릭터 데이터:", JSON.stringify(chars, null, 2));
+      return chars;
+    } 
     catch (e) { console.error("캐릭터 데이터 파싱 실패:", e); return []; }
   }, [initialCharacters]);
   
@@ -103,24 +109,28 @@ export default function GameSetup({
   const [remainingTime, setRemainingTime] = useState(30);
 
   const mySelectedCharacterId = useMemo(() => 
-    Object.keys(characterSelections).find(charId => characterSelections[charId] === user?.name)
+    Object.keys(characterSelections).find(charId => characterSelections[charId] === user?.id)
   , [characterSelections, user]);
   
   const allPlayersSelected = useMemo(() => {
-    // ✅ [수정] Stale한 prop 대신 실시간 state를 사용합니다.
     const participantCount = realtimeParticipants.length;
-    const selectionCount = Object.values(characterSelections).length;
+    // ✅ [수정] 선택한 '사람의 수'를 중복 없이 계산합니다.
+    const selectionCount = new Set(Object.values(characterSelections)).size;
 
-    // 참가자가 없거나, 선택한 사람 수가 참가자 수와 다르면 false
     if (participantCount === 0 || selectionCount < participantCount) {
         return false;
     }
     
-    // 모든 참가자가 선택했는지 최종 확인
-    const selectedUsernames = new Set(Object.values(characterSelections));
-    return realtimeParticipants.every(p => selectedUsernames.has(p.username));
+    // ✅ [수정] 선택된 userId 목록과 전체 참가자의 id 목록을 비교합니다.
+    const selectedUserIds = new Set(Object.values(characterSelections));
+    return realtimeParticipants.every(p => selectedUserIds.has(p.id));
 
   }, [realtimeParticipants, characterSelections]);
+
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
       const ws = wsRef?.current;
@@ -131,17 +141,16 @@ export default function GameSetup({
         console.log("--- 📥 [1] WebSocket 메시지 수신 ---", data);
 
         if (data.type === "room_state") {
-          const newSelections: Record<string, string> = {};
+          // ✅ [수정] 이제 Record<charId, userId> 형태가 됩니다.
+          const newSelections: Record<string, string> = {}; 
           const updatedParticipants: Participant[] = [];
 
           if (Array.isArray(data.selected_by_room)) {
-              // ✅ [로그 2] 서버가 보내준 핵심 데이터인 참가자 목록을 확인합니다.
-              console.log("--- [2] 서버가 보낸 참가자 RAW 데이터 ---", data.selected_by_room);
-
               data.selected_by_room.forEach((p: SelectedRoomParticipant) => {
                   updatedParticipants.push({ id: p.id, username: p.username });
-                  if (p.selected_character && p.selected_character.id) {
-                      newSelections[p.selected_character.id] = p.username;
+                  // ✅ [수정] username 대신 user_id를 newSelections에 저장합니다.
+                  if (p.selected_character && p.selected_character.id && p.selected_character.user_id) {
+                      newSelections[p.selected_character.id] = p.selected_character.user_id;
                   }
               });
           }
@@ -153,7 +162,27 @@ export default function GameSetup({
         }
         
         if (data.type === "selections_confirmed") {
-          onStart(data.payload);
+          console.log(
+            "✅ [DEBUG] 'selections_confirmed' 메시지 수신, payload 전체 데이터:", 
+            JSON.stringify(data.payload, null, 2)
+          );
+          const { assignments, aiCharacters, allCharacters } = data.payload;
+          const currentUser = userRef.current; 
+
+          if (!currentUser) {
+            console.error("인증 오류: 캐릭터 배정 단계에서 user 정보를 찾을 수 없습니다.");
+            alert("사용자 정보를 찾을 수 없어 게임을 시작할 수 없습니다.");
+            return;
+          }
+          
+          const myCharacter = assignments[currentUser.id];
+
+          if (myCharacter) {
+            onStart({ myCharacter, aiCharacters, allCharacters });
+          } else {
+            console.error("오류: 서버로부터 내 캐릭터 정보를 배정받지 못했습니다.", assignments);
+            alert("오류가 발생하여 게임을 시작할 수 없습니다.");
+          }
         }
       };
 
@@ -254,15 +283,11 @@ export default function GameSetup({
 
   const handleGameStart = () => {
     const ws = wsRef?.current;
-    if (!ws || !mySelectedCharacterId) return;
-    const myChar = allCharacters.find(c => c.id === mySelectedCharacterId);
-    if (!myChar) return;
-    const playerSelectedCharIds = Object.keys(characterSelections);
-    const aiCharacters = allCharacters.filter(c => !playerSelectedCharIds.includes(c.id));
-    const finalSetupData = { myCharacter: myChar, aiCharacters, allCharacters };
+    if (!ws) return;
+    
+    // ✅ [수정] 이제 클라이언트는 '시작' 신호만 보냅니다. 데이터 계산은 서버가 합니다.
     ws.send(JSON.stringify({
       action: "confirm_selections",
-      setup_data: finalSetupData,
     }));
   };
 
@@ -316,10 +341,12 @@ export default function GameSetup({
               <ScrollView contentContainerStyle={styles.characterGridContainer} showsVerticalScrollIndicator={false}>
                 <View style={styles.characterGrid}>
                 {allCharacters.map((char) => {
-                  const selectorName = characterSelections[char.id];
-                  const isSelectedByMe = selectorName === user?.name;
-                  const isTakenByOther = !!(selectorName && !isSelectedByMe);
+                  const selectorId = characterSelections[char.id];
+                  const isSelectedByMe = selectorId === user?.id;
+                  const isTakenByOther = !!(selectorId && !isSelectedByMe);
                   const hasMadeMyChoice = !!mySelectedCharacterId;
+                  const selector = realtimeParticipants.find(p => p.id === selectorId);
+
                   return (
                     <TouchableOpacity
                       key={char.id}
@@ -333,7 +360,7 @@ export default function GameSetup({
                       onPress={() => handleCharacterSelect(char.id)}
                     >
                       <Image
-                        source={char.image ? { uri: `${API_BASE_URL}${char.image}` } : require("@/assets/images/game/multi_mode/character/knight.png")}
+                        source={char.image || require("@/assets/images/game/multi_mode/character/knight.png")}
                         style={styles.characterImage}
                         resizeMode="contain"
                       />
@@ -341,7 +368,7 @@ export default function GameSetup({
                       <CharacterDetails char={char} />
                       {(isSelectedByMe || isTakenByOther) && (
                       <View style={styles.takenOverlay}>
-                        <Text style={styles.takenText}>{selectorName}</Text>
+                        <Text style={styles.takenText}>{selector?.username}</Text>
                       </View>
                       )}
                     </TouchableOpacity>

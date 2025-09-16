@@ -21,6 +21,7 @@ import { useWebSocket } from "@/components/context/WebSocketContext";
 import { Character, endGame, getWebSocketNonce, Skill, Item } from "@/services/api";
 import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade } from "@/util/ttrpg";
 import { Audio } from "expo-av";
+import { useAuth } from "@/hooks/useAuth";
 
 interface LoadedSessionData {
   choice_history: any;
@@ -59,7 +60,10 @@ export default function GameEngineRealtime({
     isLoadedGame,
 }: Props) {
     // [수정] setupData에서 필요한 정보를 구조 분해 할당합니다.
+    const { user } = useAuth();
     const { myCharacter, aiCharacters, allCharacters } = setupData;
+
+    console.log("내 캐릭터 데이터:", JSON.stringify(myCharacter, null, 2));
 
     const wsRef = useRef<WebSocket | null>(null);
     const ws = wsRef?.current ?? null;
@@ -128,6 +132,10 @@ export default function GameEngineRealtime({
 
     const timerAnim = useRef(new Animated.Value(turnSeconds)).current;
 
+    const [amIReadyForNext, setAmIReadyForNext] = useState(false);
+    const [nextSceneReadyState, setNextSceneReadyState] = useState({ ready_users: [], total_users: 0 });
+    const [turnWaitingState, setTurnWaitingState] = useState({ submitted_users: [], total_users: 0 });
+
     useEffect(() => {
         let ws: WebSocket | null = null;
 
@@ -166,6 +174,14 @@ export default function GameEngineRealtime({
                     const data = JSON.parse(event.data);
                     console.log("GameEngine received message:", data);
 
+                    if (data.type === "game_update" && data.payload.event === "turn_waiting") {
+                        setTurnWaitingState(data.payload);
+                    }
+
+                    if (data.type === "game_update" && data.payload.event === "next_scene_ready_state_update") {
+                        setNextSceneReadyState(data.payload);
+                    }
+
                     if (data.type === "game_update" && data.payload.event === "scene_update") {
                         setCurrentScene(data.payload.scene);
                         setPhase("choice");
@@ -176,6 +192,8 @@ export default function GameEngineRealtime({
                         setAiChoices({});
                         setIsLoading(false);
                         setIsGeneratingNextScene(false);
+                        setAmIReadyForNext(false); // 👈 내 준비 상태 초기화
+                        setNextSceneReadyState({ ready_users: [], total_users: 0 });
                         pageTurnSound?.replayAsync();
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -206,6 +224,7 @@ export default function GameEngineRealtime({
                     } else if (data.type === "game_update" && data.payload.event === "turn_resolved") {
                         setCinematicText(data.payload.narration);
                         setRoundResult(data.payload.roundResult);
+                        setTurnWaitingState({ submitted_users: [], total_users: 0 }); // 대기 상태 초기화
                         setPhase("cinematic");
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -420,27 +439,27 @@ export default function GameEngineRealtime({
         Alert.alert("아이템 사용", `'${item.name}' 아이템을 사용했습니다. (1회성)`);
     };
     
-    const handleNextScene = () => {
-        if (!ws || !myRole || !myChoiceId || !currentScene || isGeneratingNextScene) return;
+    const handleReadyForNextScene = () => {
+        if (!ws || !myRole || !myChoiceId || !currentScene || amIReadyForNext) return;
 
-        setIsGeneratingNextScene(true);
+        setAmIReadyForNext(true); // 내 상태를 '준비됨'으로 변경
+        setIsGeneratingNextScene(true); // UI를 '대기 중'으로 변경
 
         const myLastChoice = myChoices.find(c => c.id === myChoiceId);
         if (!myLastChoice) {
-            setIsGeneratingNextScene(false); // [추가] 오류 시 상태 초기화
+            setAmIReadyForNext(false);
+            setIsGeneratingNextScene(false);
             return;
         }
 
+        // ✅ [수정] 'ready_for_next_scene' 액션을 서버에 전송
         ws.send(JSON.stringify({
-            type: "request_next_scene",
+            type: "ready_for_next_scene",
             history: { 
-                lastChoice: {
-                    role: myRole,
-                    text: myLastChoice.text,
-                },
+                lastChoice: { role: myRole, text: myLastChoice.text },
                 lastNarration: cinematicText,
                 sceneIndex: currentScene.index,
-                usage: pendingUsage, // ✅ 사용한 스킬/아이템 정보를 여기에 담습니다.
+                usage: pendingUsage,
             }
         }));
         setPendingUsage(null);
@@ -708,7 +727,11 @@ export default function GameEngineRealtime({
                     {phase === "sync" && (
                         <Animated.View style={[styles.center, { opacity: phaseAnim }]}>
                             <ActivityIndicator size="large" color="#E2C044"/>
-                            <Text style={styles.subtitle}>GM이 다음 이야기를 준비하는 중...</Text>
+                            <Text style={styles.subtitle}>다른 플레이어의 행동을 기다리는 중...</Text>
+                            {/* ✅ [추가] 대기 현황 텍스트 */}
+                            <Text style={styles.subtitle}>
+                                ({turnWaitingState.submitted_users.length}/{turnWaitingState.total_users}명 제출 완료)
+                            </Text>
                         </Animated.View>
                     )}
 
@@ -752,14 +775,21 @@ export default function GameEngineRealtime({
 
                             {/* [수정] 다음 씬으로 넘어가는 버튼 */}
                             <TouchableOpacity
-                                style={[styles.primary, isGeneratingNextScene && styles.disabledButton]}
-                                onPress={handleNextScene}
-                                disabled={isGeneratingNextScene}
+                                style={[styles.primary, (amIReadyForNext || isGeneratingNextScene) && styles.disabledButton]}
+                                onPress={handleReadyForNextScene}
+                                disabled={amIReadyForNext || isGeneratingNextScene}
                             >
                                 <Text style={styles.primaryText}>
-                                    {isGeneratingNextScene ? "이야기 생성 중..." : "다음 ▶"}
+                                    {amIReadyForNext ? "다른 플레이어 대기 중..." : "다음 이야기 준비 완료"}
                                 </Text>
                             </TouchableOpacity>
+
+                            {/* ✅ [추가] 현재 준비 상태를 보여주는 UI */}
+                            {isGeneratingNextScene && (
+                                <Text style={styles.subtitle}>
+                                    ({nextSceneReadyState.ready_users.length}/{nextSceneReadyState.total_users}명 준비 완료)
+                                </Text>
+                            )}
                         </Animated.View>
                     )}
 

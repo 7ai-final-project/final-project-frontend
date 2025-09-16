@@ -6,6 +6,7 @@ import { useLocalSearchParams } from "expo-router";
 import GameSetup from "@/components/game/GameSetup";
 import GameEngineRealtime from "@/components/game/GameEngineRealtime";
 import { Character as ApiCharacter } from "@/services/api";
+import { useAuth } from "@/hooks/useAuth"; // ✅ 1. Auth hook import
 
 // --- 타입 정의 (기존과 동일) ---
 interface GameStartPayload {
@@ -13,9 +14,15 @@ interface GameStartPayload {
   aiCharacters: ApiCharacter[];
   allCharacters: ApiCharacter[];
 }
+// ✅ 2. 불러온 데이터의 원본 타입을 명확히 정의
+interface LoadedCharacterHistory {
+  assignments: { [userId: string]: ApiCharacter };
+  aiCharacters: ApiCharacter[];
+  allCharacters: ApiCharacter[];
+}
 interface LoadedSessionData {
   choice_history: { summary?: string; };
-  character_history: GameStartPayload;
+  character_history: LoadedCharacterHistory; // ✅ 3. 타입 적용
 }
 type GamePhase = 'loading' | 'summary' | 'setup' | 'playing';
 
@@ -25,27 +32,47 @@ export default function GameScreen() {
     characters?: string; participants?: string; isOwner: string; loadedSessionData?: string;
   }>();
 
+  const { user } = useAuth(); // ✅ 4. 현재 사용자 정보 가져오기
   const [gamePhase, setGamePhase] = useState<GamePhase>('loading');
   const [gameStartData, setGameStartData] = useState<GameStartPayload | null>(null);
   const [summary, setSummary] = useState<string>('');
   
-  // useEffect 및 핸들러 함수들은 수정사항이 없습니다.
   useEffect(() => {
-    if (params.isLoaded === 'true' && params.loadedSessionData) {
+    // '불러오기'이며, 세션 데이터와 사용자 정보가 모두 있을 때 실행
+    if (params.isLoaded === 'true' && params.loadedSessionData && user) { // ✅ 5. user 로딩 확인
       try {
         const session: LoadedSessionData = JSON.parse(params.loadedSessionData);
-        setGameStartData(session.character_history);
-        setSummary(session.choice_history?.summary || "저장된 줄거리가 없습니다.");
-        setGamePhase('summary');
+        const loadedHistory = session.character_history;
+
+        // ✅ 6. [핵심] assignments 맵에서 내 캐릭터 찾기
+        const myCharacter = loadedHistory.assignments[user.id];
+
+        if (myCharacter) {
+          // ✅ 7. GameEngineRealtime이 요구하는 형태로 데이터 변환
+          const transformedPayload: GameStartPayload = {
+            myCharacter: myCharacter,
+            aiCharacters: loadedHistory.aiCharacters,
+            allCharacters: loadedHistory.allCharacters,
+          };
+          
+          setGameStartData(transformedPayload); // 변환된 데이터로 상태 설정
+          setSummary(session.choice_history?.summary || "저장된 줄거리가 없습니다.");
+          setGamePhase('summary'); // 요약 화면으로 이동
+
+        } else {
+          console.error("저장된 데이터에서 현재 유저의 캐릭터를 찾을 수 없습니다.");
+          setGamePhase('setup'); // 에러 발생 시 설정 화면으로 이동
+        }
+
       } catch (error) {
-        console.error("세션 데이터 파싱 실패:", error);
+        console.error("세션 데이터 파싱 또는 변환 실패:", error);
         setGamePhase('setup'); 
       }
     } 
     else if (params.isLoaded === 'false') {
       setGamePhase('setup');
     }
-  }, [params.isLoaded, params.loadedSessionData]);
+  }, [params.isLoaded, params.loadedSessionData, user]); // ✅ 8. user를 의존성 배열에 추가
 
   const handleGameStartFromSetup = (payload: GameStartPayload) => {
     setGameStartData(payload);
@@ -56,6 +83,7 @@ export default function GameScreen() {
     setGamePhase('playing');
   };
 
+  // ... 이하 렌더링 로직은 변경할 필요 없습니다 ...
   if (gamePhase === 'loading' || !params.id || !params.topic) {
     return (
       <SafeAreaView style={styles.centerContainer}>
@@ -66,7 +94,6 @@ export default function GameScreen() {
   }
 
   if (gamePhase === 'summary') {
-    // 로딩과 요약 화면은 중앙 정렬 스타일(centerContainer)을 사용합니다.
     return (
       <SafeAreaView style={styles.centerContainer}>
         <View style={styles.summaryContainer}>
@@ -83,7 +110,6 @@ export default function GameScreen() {
   }
 
   if (gamePhase === 'setup' || gamePhase === 'playing') {
-    // GameSetup과 GameEngine은 화면 전체를 채우는 스타일(fullContainer)을 사용합니다.
     return (
       <SafeAreaView style={styles.fullContainer}>
         {gameStartData && gamePhase === 'playing' ? (
@@ -106,7 +132,6 @@ export default function GameScreen() {
               onStart={handleGameStartFromSetup}
             />
           ) : (
-            // '새 게임' 파라미터가 아직 도착하지 않은 경우 (중앙 정렬)
             <View style={styles.centerContainer}>
               <ActivityIndicator size="large" color="#E2C044" />
               <Text style={styles.loadingText}>캐릭터 설정 정보를 불러오는 중...</Text>
@@ -116,7 +141,6 @@ export default function GameScreen() {
       </SafeAreaView>
     );
   }
-  
   return <SafeAreaView style={styles.fullContainer} />;
 }
 
