@@ -18,9 +18,11 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 // [수정] API 서비스에서 Character 타입과 endGame 함수만 import 합니다.
-import { Character, endGame, getWebSocketNonce } from "@/services/api";
-import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade } from "@/util/ttrpg";
+import { Character, endGame, getWebSocketNonce, Skill, Item } from "@/services/api";
+import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade, ShariBlock, World, PartyEntry } from "@/util/ttrpg";
 import { Audio } from "expo-av";
+import { useAuth } from "@/hooks/useAuth";
+import ShariHud from "./ShariHud";
 
 interface LoadedSessionData {
   choice_history: any;
@@ -59,7 +61,10 @@ export default function GameEngineRealtime({
     isLoadedGame,
 }: Props) {
     // [수정] setupData에서 필요한 정보를 구조 분해 할당합니다.
+    const { user } = useAuth();
     const { myCharacter, aiCharacters, allCharacters } = setupData;
+
+    console.log("내 캐릭터 데이터:", JSON.stringify(myCharacter, null, 2));
 
     const wsRef = useRef<WebSocket | null>(null);
     const ws = wsRef?.current ?? null;
@@ -76,11 +81,9 @@ export default function GameEngineRealtime({
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     
-
-    // [수정] 로딩 및 에러 상태 이름을 명확히 변경합니다. (기존 loadingScenes, loadError 대체)
-    // const [sceneTemplates, setSceneTemplates] = useState<SceneTemplate[]>([]);
-    // const [loadingScenes, setLoadingScenes] = useState(true);
-    // const [loadError, setLoadError] = useState<string | null>(null);
+    const [isStatsVisible, setIsStatsVisible] = useState(true);
+    const [isSkillsVisible, setIsSkillsVisible] = useState(true);
+    const [isItemsVisible, setIsItemsVisible] = useState(true);
 
     const [diceResult, setDiceResult] = useState<string | null>(null);
     const [isRolling, setIsRolling] = useState(false);
@@ -121,7 +124,29 @@ export default function GameEngineRealtime({
     const [roundResult, setRoundResult] = useState<RoundResult | null>(null);
     const [cinematicText, setCinematicText] = useState<string>("");
 
+    const [usedItems, setUsedItems] = useState<Set<string>>(new Set()); // 사용한 아이템 이름 저장 (1회용)
+    const [skillCooldowns, setSkillCooldowns] = useState<Record<string, number>>({}); // 스킬별 재사용 가능한 씬 인덱스 저장
+    const [pendingUsage, setPendingUsage] = useState<{ type: 'skill' | 'item'; data: Skill | Item } | null>(null); // 다음 씬 요청 시 보낼 사용 정보
+    const SKILL_COOLDOWN_SCENES = 2;
+
     const timerAnim = useRef(new Animated.Value(turnSeconds)).current;
+
+    const [amIReadyForNext, setAmIReadyForNext] = useState(false);
+    const [nextSceneReadyState, setNextSceneReadyState] = useState({ ready_users: [], total_users: 0 });
+    const [turnWaitingState, setTurnWaitingState] = useState({ submitted_users: [], total_users: 0 });
+
+    const [worldState, setWorldState] = useState<World | undefined>(undefined);
+    const [partyState, setPartyState] = useState<PartyEntry[] | undefined>(undefined);
+    const [shariBlockData, setShariBlockData] = useState<ShariBlock | undefined>(undefined);
+
+    const [isHudModalVisible, setIsHudModalVisible] = useState(false);
+    const [hasNewHudInfo, setHasNewHudInfo] = useState(false);
+
+    useEffect(() => {
+        if (shariBlockData?.update && Object.keys(shariBlockData.update).length > 0) {
+            setHasNewHudInfo(true);
+        }
+    }, [shariBlockData]);
 
     useEffect(() => {
         let ws: WebSocket | null = null;
@@ -161,6 +186,14 @@ export default function GameEngineRealtime({
                     const data = JSON.parse(event.data);
                     console.log("GameEngine received message:", data);
 
+                    if (data.type === "game_update" && data.payload.event === "turn_waiting") {
+                        setTurnWaitingState(data.payload);
+                    }
+
+                    if (data.type === "game_update" && data.payload.event === "next_scene_ready_state_update") {
+                        setNextSceneReadyState(data.payload);
+                    }
+
                     if (data.type === "game_update" && data.payload.event === "scene_update") {
                         setCurrentScene(data.payload.scene);
                         setPhase("choice");
@@ -170,13 +203,46 @@ export default function GameEngineRealtime({
                         setSubmitting(false);
                         setAiChoices({});
                         setIsLoading(false);
+                        setPartyState(undefined);
+                        setShariBlockData(undefined);
+                        setIsGeneratingNextScene(false);
+                        setAmIReadyForNext(false); // 👈 내 준비 상태 초기화
+                        setNextSceneReadyState({ ready_users: [], total_users: 0 });
+                        pageTurnSound?.replayAsync();
+                        phaseAnim.setValue(0);
+                        Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+                        } else if (data.type === "game_update" && data.payload.event === "game_loaded") {
+                        const { scene, playerState } = data.payload;
+                        setCurrentScene(scene); // 씬 정보 설정
+ 
+                        // 불러온 스킬/아이템 상태 복원
+                        if (playerState) {
+                            setUsedItems(new Set(playerState.usedItems || [])); // Array를 Set으로 변환
+                            setSkillCooldowns(playerState.skillCooldowns || {});
+                        }
+ 
+                        // 새 씬 시작과 동일한 공통 로직 수행
+                        setPhase("choice");
+                        setMyChoiceId(null);
+                        setRoundResult(null);
+                        setDiceResult(null);
+                        setCinematicText("");
+                        setSubmitting(false);
+                        setAiChoices({});
+                        setIsLoading(false);
                         setIsGeneratingNextScene(false);
                         pageTurnSound?.replayAsync();
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+
                     } else if (data.type === "game_update" && data.payload.event === "turn_resolved") {
-                        setCinematicText(data.payload.narration);
-                        setRoundResult(data.payload.roundResult);
+                        const { narration, roundResult, world_update, party_update, shari, personal_narrations } = data.payload;
+                        setCinematicText(narration);
+                        setRoundResult(roundResult);
+                        if (world_update) setWorldState(world_update);
+                        if (party_update) setPartyState(party_update);
+                        if (shari) setShariBlockData(shari);
+                        setTurnWaitingState({ submitted_users: [], total_users: 0 }); // 대기 상태 초기화
                         setPhase("cinematic");
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -340,6 +406,7 @@ export default function GameEngineRealtime({
                 modifier: myModifier,
                 total: myTotal,
                 characterName: myCharacter.name, // 내 캐릭터 이름 추가
+                characterId: myCharacter.id,
             };
             
             setDiceResult(`🎲 d20: ${myDice} + ${myAppliedStatKorean}(${myStatValue}) + 보정(${myModifier}) = ${myTotal} → ${resultText}`);
@@ -376,29 +443,45 @@ export default function GameEngineRealtime({
         const randomChoice = myChoices[Math.floor(Math.random() * myChoices.length)];
         submitChoice(randomChoice.id);
     };
-    
-    const handleNextScene = () => {
-        if (!ws || !myRole || !myChoiceId || !currentScene || isGeneratingNextScene) return;
 
-        setIsGeneratingNextScene(true);
+    const handleUseSkill = (skill: Skill) => {
+        if (!currentScene) return;
+        const cooldownEndSceneIndex = currentScene.index + SKILL_COOLDOWN_SCENES;
+        setSkillCooldowns(prev => ({ ...prev, [skill.name]: cooldownEndSceneIndex }));
+        setPendingUsage({ type: 'skill', data: skill });
+        Alert.alert("스킬 준비 완료", `'${skill.name}' 스킬을 다음 행동에 사용합니다.`);
+    };
+
+    const handleUseItem = (item: Item) => {
+        setUsedItems(prev => new Set(prev).add(item.name));
+        setPendingUsage({ type: 'item', data: item });
+        Alert.alert("아이템 사용", `'${item.name}' 아이템을 사용했습니다. (1회성)`);
+    };
+    
+    const handleReadyForNextScene = () => {
+        if (!ws || !myRole || !myChoiceId || !currentScene || amIReadyForNext) return;
+
+        setAmIReadyForNext(true); // 내 상태를 '준비됨'으로 변경
+        setIsGeneratingNextScene(true); // UI를 '대기 중'으로 변경
 
         const myLastChoice = myChoices.find(c => c.id === myChoiceId);
         if (!myLastChoice) {
-            setIsGeneratingNextScene(false); // [추가] 오류 시 상태 초기화
+            setAmIReadyForNext(false);
+            setIsGeneratingNextScene(false);
             return;
         }
 
+        // ✅ [수정] 'ready_for_next_scene' 액션을 서버에 전송
         ws.send(JSON.stringify({
-            type: "request_next_scene",
-            history: { // history 객체 안에 필요한 정보를 담습니다.
-                lastChoice: {
-                    role: myRole,
-                    text: myLastChoice.text,
-                },
-                lastNarration: cinematicText, // 이전 턴의 결과 텍스트를 함께 보냅니다.
+            type: "ready_for_next_scene",
+            history: { 
+                lastChoice: { role: myRole, text: myLastChoice.text },
+                lastNarration: cinematicText,
                 sceneIndex: currentScene.index,
+                usage: pendingUsage,
             }
         }));
+        setPendingUsage(null);
     };
 
     const handleSaveGame = () => {
@@ -432,7 +515,11 @@ export default function GameEngineRealtime({
             description: roundSpec?.title, // 현재 템플릿에서는 title이 주된 설명이므로 동일하게 사용
             choices: choicesFormatted,
             selectedChoice: selectedChoiceFormatted,
-            sceneIndex: currentScene.index
+            sceneIndex: currentScene.index,
+            playerState: {
+                usedItems: Array.from(usedItems), // Set을 Array로 변환하여 JSON 직렬화
+                skillCooldowns: skillCooldowns,
+            }
         };
 
         // 웹소켓으로 데이터 전송
@@ -508,6 +595,21 @@ export default function GameEngineRealtime({
     return (
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.mainContainer}>
+                <TouchableOpacity 
+                    style={styles.hudIconContainer} 
+                    onPress={() => {
+                        setIsHudModalVisible(true);
+                        setHasNewHudInfo(false); // 모달을 열면 '새 정보' 알림을 끔
+                    }}
+                >
+                    <Ionicons name="information-circle-outline" size={28} color="#E0E0E0" />
+                    {/* 새로운 정보가 있을 때 느낌표(!) 배지 표시 */}
+                    {hasNewHudInfo && (
+                        <View style={styles.notificationBadge}>
+                            <Text style={styles.notificationText}>!</Text>
+                        </View>
+                    )}
+                </TouchableOpacity>
                 {/* [수정] selectedCharacter 대신 myCharacter 사용 */}
                 <View style={styles.characterPanel}>
                     <Text style={styles.characterName}>{myCharacter.name}</Text>
@@ -521,15 +623,95 @@ export default function GameEngineRealtime({
                             {myCharacter.description}
                         </Text>
                     )}
-                    <Text style={styles.roleText}>{myRole}</Text>
-                    <View style={styles.statsBox}>
-                        <Text style={styles.statsTitle}>능력치</Text>
-                        {Object.entries(myCharacter.stats).map(([stat, value]) => (
-                            <Text key={stat} style={styles.statText}>
-                                {stat}: <Text style={{ color: "#E2C044", fontWeight: "bold" }}>{value}</Text>
-                            </Text>
-                        ))}
-                    </View>
+
+                   <ScrollView 
+                       style={{width: '100%', flex: 1}} 
+                       showsVerticalScrollIndicator={false}
+                   >
+                       <View style={styles.collapsibleContainer}>
+                            <TouchableOpacity style={styles.collapsibleHeader} onPress={() => setIsStatsVisible(!isStatsVisible)}>
+                                <Text style={styles.skillsItemsTitle}>능력치</Text>
+                                <Ionicons name={isStatsVisible ? "chevron-up" : "chevron-down"} size={20} color="#E0E0E0" />
+                            </TouchableOpacity>
+                            {isStatsVisible && (
+                                <View style={styles.collapsibleContent}>
+                                    {Object.entries(myCharacter.stats).map(([stat, value]) => (
+                                        <Text key={stat} style={styles.statText}>
+                                            {stat}: <Text style={{ color: "#E2C044", fontWeight: "bold" }}>{value}</Text>
+                                        </Text>
+                                    ))}
+                                </View>
+                            )}
+                        </View>
+
+                        {/* ✨ 스킬 토글 섹션 */}
+                        {myCharacter.skills && myCharacter.skills.length > 0 && (
+                            <View style={styles.collapsibleContainer}>
+                                <TouchableOpacity style={styles.collapsibleHeader} onPress={() => setIsSkillsVisible(!isSkillsVisible)}>
+                                    <Text style={styles.skillsItemsTitle}>스킬</Text>
+                                    <Ionicons name={isSkillsVisible ? "chevron-up" : "chevron-down"} size={20} color="#E0E0E0" />
+                                </TouchableOpacity>
+                                {isSkillsVisible && (
+                                    <View style={styles.collapsibleContent}>
+                                        {myCharacter.skills.map((skill) => {
+                                            const isOnCooldown = (skillCooldowns[skill.name] ?? 0) > (currentScene?.index ?? 0);
+                                            return (
+                                                <View key={skill.name} style={styles.skillItem}>
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.skillItemName}>- {skill.name}</Text>
+                                                        <Text style={styles.skillItemDesc}>{skill.description}</Text>
+                                                    </View>
+                                                    <TouchableOpacity 
+                                                        style={[styles.useButton, (isOnCooldown || pendingUsage) && styles.disabledUseButton]}
+                                                        disabled={isOnCooldown || !!pendingUsage}
+                                                        onPress={() => handleUseSkill(skill)}
+                                                    >
+                                                        <Text style={styles.useButtonText}>
+                                                            {isOnCooldown 
+                                                                ? `대기중(${skillCooldowns[skill.name] - (currentScene?.index ?? 0)}턴)` 
+                                                                : "사용"}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        {/* ✨ 아이템 토글 섹션 */}
+                        {myCharacter.items && myCharacter.items.length > 0 && (
+                            <View style={styles.collapsibleContainer}>
+                                <TouchableOpacity style={styles.collapsibleHeader} onPress={() => setIsItemsVisible(!isItemsVisible)}>
+                                    <Text style={styles.skillsItemsTitle}>아이템</Text>
+                                    <Ionicons name={isItemsVisible ? "chevron-up" : "chevron-down"} size={20} color="#E0E0E0" />
+                                </TouchableOpacity>
+                                {isItemsVisible && (
+                                    <View style={styles.collapsibleContent}>
+                                        {myCharacter.items.map((item) => {
+                                            const isUsed = usedItems.has(item.name);
+                                            return (
+                                                <View key={item.name} style={styles.skillItem}>
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.skillItemName}>- {item.name}</Text>
+                                                        <Text style={styles.skillItemDesc}>{item.description}</Text>
+                                                    </View>
+                                                    <TouchableOpacity 
+                                                        style={[styles.useButton, (isUsed || pendingUsage) && styles.disabledUseButton]}
+                                                        disabled={isUsed || !!pendingUsage}
+                                                        onPress={() => handleUseItem(item)}
+                                                    >
+                                                        <Text style={styles.useButtonText}>{isUsed ? "사용완료" : "사용"}</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+                            </View>
+                        )}
+                    </ScrollView>
                 </View>
 
                 <View style={styles.gamePanel}>
@@ -600,7 +782,11 @@ export default function GameEngineRealtime({
                     {phase === "sync" && (
                         <Animated.View style={[styles.center, { opacity: phaseAnim }]}>
                             <ActivityIndicator size="large" color="#E2C044"/>
-                            <Text style={styles.subtitle}>GM이 다음 이야기를 준비하는 중...</Text>
+                            <Text style={styles.subtitle}>다른 플레이어의 행동을 기다리는 중...</Text>
+                            {/* ✅ [추가] 대기 현황 텍스트 */}
+                            <Text style={styles.subtitle}>
+                                ({turnWaitingState.submitted_users.length}/{turnWaitingState.total_users}명 제출 완료)
+                            </Text>
                         </Animated.View>
                     )}
 
@@ -644,14 +830,21 @@ export default function GameEngineRealtime({
 
                             {/* [수정] 다음 씬으로 넘어가는 버튼 */}
                             <TouchableOpacity
-                                style={[styles.primary, isGeneratingNextScene && styles.disabledButton]}
-                                onPress={handleNextScene}
-                                disabled={isGeneratingNextScene}
+                                style={[styles.primary, (amIReadyForNext || isGeneratingNextScene) && styles.disabledButton]}
+                                onPress={handleReadyForNextScene}
+                                disabled={amIReadyForNext || isGeneratingNextScene}
                             >
                                 <Text style={styles.primaryText}>
-                                    {isGeneratingNextScene ? "이야기 생성 중..." : "다음 ▶"}
+                                    {amIReadyForNext ? "다른 플레이어 대기 중..." : "다음 이야기 준비 완료"}
                                 </Text>
                             </TouchableOpacity>
+
+                            {/* ✅ [추가] 현재 준비 상태를 보여주는 UI */}
+                            {isGeneratingNextScene && (
+                                <Text style={styles.subtitle}>
+                                    ({nextSceneReadyState.ready_users.length}/{nextSceneReadyState.total_users}명 준비 완료)
+                                </Text>
+                            )}
                         </Animated.View>
                     )}
 
@@ -711,7 +904,10 @@ export default function GameEngineRealtime({
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>라운드 결과 요약</Text>
-                        <ScrollView style={styles.resultsScrollView}>
+                        <ScrollView 
+                            style={styles.resultsScrollView}
+                            showsVerticalScrollIndicator={false} 
+                        >
                             {roundResult?.results?.map((result, index) => {
                                 const choiceText = roundSpec?.choices?.[result.role]?.find(c => c.id === result.choiceId)?.text || "선택 정보를 찾을 수 없음";
                                 const appliedStatKr = statMapping[result.appliedStat as EnglishStat] ?? result.appliedStat;
@@ -740,6 +936,24 @@ export default function GameEngineRealtime({
                             <Text style={styles.modalButtonText}>닫기</Text>
                         </TouchableOpacity>
                     </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={isHudModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsHudModalVisible(false)}
+            >
+                <View style={styles.modalContainer}>
+                    {/* ShariHud 컴포넌트를 모달 내부에 렌더링 */}
+                    <ShariHud
+                        world={worldState}
+                        party={partyState}
+                        shari={shariBlockData}
+                        allCharacters={allCharacters}
+                        onClose={() => setIsHudModalVisible(false)} // 닫기 버튼용 함수 전달
+                    />
                 </View>
             </Modal>
 
@@ -849,6 +1063,46 @@ const styles = StyleSheet.create({
         color: "#D4D4D4",
         fontSize: 14,
         lineHeight: 22,
+    },
+    skillsItemsBox: {
+        width: "100%",
+        marginBottom: 15,
+        padding: 15,
+        backgroundColor: "#0B1021",
+        borderRadius: 12,
+    },
+    skillItem: {
+        marginBottom: 12,
+        flexDirection: 'row', // 가로 정렬
+        alignItems: 'center', // 세로 중앙 정렬
+        justifyContent: 'space-between',
+    },
+    skillItemName: {
+        color: "#E2C044", // 노란색으로 강조
+        fontWeight: "bold",
+        fontSize: 14,
+        marginBottom: 4,
+    },
+    skillItemDesc: {
+        color: "#A0A0A0", // 회색으로 설명 표시
+        fontSize: 13,
+        lineHeight: 18,
+        paddingLeft: 8, // 이름과 맞추기 위해 살짝 들여쓰기
+    },
+    useButton: {
+        backgroundColor: '#4CAF50',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        marginLeft: 10,
+    },
+    disabledUseButton: {
+        backgroundColor: '#5A5A5A',
+    },
+    useButtonText: {
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+        fontSize: 12,
     },
     gamePanel: {
         flex: 1,
@@ -1002,7 +1256,7 @@ const styles = StyleSheet.create({
     },
     returnButton: {
         position: 'absolute',
-        top: 95,
+        top: 145,
         right: 20,
         zIndex: 9999,
         backgroundColor: 'rgba(44, 52, 78, 0.8)',
@@ -1117,5 +1371,58 @@ const styles = StyleSheet.create({
         color: '#D4D4D4',
         fontSize: 15,
         lineHeight: 22,
+    },
+    collapsibleContainer: {
+        width: "100%",
+        backgroundColor: "#0B1021",
+        borderRadius: 12,
+        marginBottom: 15,
+        padding: 15,
+    },
+    collapsibleHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    collapsibleContent: {
+        marginTop: 10,
+        paddingTop: 10,
+        borderTopWidth: 1,
+        borderTopColor: '#444',
+    },
+    skillsItemsTitle: {
+        fontSize: 16,
+        fontWeight: "bold",
+        color: "#E0E0E0",
+    },
+    hudIconContainer: {
+        position: 'absolute',
+        top: 90,
+        right: 20,
+        zIndex: 100,
+        width: 44,
+        height: 44,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(44, 52, 78, 0.8)',
+        borderRadius: 22,
+        borderWidth: 1,
+        borderColor: '#444',
+    },
+    notificationBadge: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: '#E53E3E',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    notificationText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
 });
