@@ -194,6 +194,12 @@ export default function HomeScreen() {
     require('../assets/images/main/background_image7.jpg'), 
     require('../assets/images/main/background_image8.jpg'), 
   ];
+  const handleTermsPress = () => {
+      // 현재 로그인 모달을 먼저 닫고
+      setLoginModalVisible(false);
+      // 새로운 페이지로 이동합니다.
+      router.push('/legal/terms');
+    };
 
   const selectedBackgroundImage = useMemo(() => {
     const randomIndex = Math.floor(Math.random() * backgroundImages.length);
@@ -352,6 +358,14 @@ return (
                 {/* 텍스트 */}
                 <Text style={[styles.socialButtonText, styles.kakaoButtonText]}>Kakao로 로그인</Text>
               </TouchableOpacity>
+                             {/* 이용약관 텍스트 링크 */}
+              <View style={styles.termsContainer}>
+                <Text style={styles.termsText}>로그인은 </Text>
+                <TouchableOpacity onPress={handleTermsPress}>
+                  <Text style={[styles.termsText, styles.termsLink]}>이용약관</Text>
+                </TouchableOpacity>
+                <Text style={styles.termsText}>에 동의하는 것으로 간주됩니다.</Text>
+              </View>
             </View>
           </View>
         </Modal>
@@ -562,6 +576,22 @@ header: {
   kakaoIcon: { fontSize: 20, fontFamily: 'neodgm', fontWeight: 'bold', color: '#3c1e1e' },
   socialButtonText: { fontSize: 16,  fontFamily: 'neodgm', fontWeight: '600', color: '#fff', flex: 1, textAlign: 'center' },
   kakaoButtonText: { color: '#3c1e1e' },
+  // --- 이용약관 텍스트 스타일 ---
+  termsContainer: {
+    flexDirection: 'row', // 텍스트들을 가로로 배열
+    marginTop: 20,
+    flexWrap: 'wrap', // 화면이 좁을 경우 줄바꿈 허용
+    justifyContent: 'center',
+  },
+  termsText: {
+    color: '#aaa',
+    fontSize: 16, // Dongle 폰트에 맞게 조정
+    fontFamily: 'Dongle',
+  },
+  termsLink: {
+    color: '#61dafb', // 링크 색상
+    textDecorationLine: 'underline', // 밑줄
+  },
 
     // --- 배경 효과 ---
   starContainer: { position: 'absolute', width: '100%', height: '100%', zIndex: 0 },
