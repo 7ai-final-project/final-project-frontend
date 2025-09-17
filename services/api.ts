@@ -17,14 +17,24 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+export interface Skill {
+  name: string;
+  description: string;
+}
+
+export interface Item {
+  name: string;
+  description: string;
+}
+
 export interface Character {
   id: string;
   name: string;
   description: string;
   image: any;
   stats: Record<string, number>;
-  skills: string[];
-  items: string[];
+  skills: Skill[];
+  items: Item[];
 }
 
 export interface PaginatedCharacterResponse {

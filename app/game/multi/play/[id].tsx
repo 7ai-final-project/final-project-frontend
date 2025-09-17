@@ -6,6 +6,7 @@ import { useLocalSearchParams } from "expo-router";
 import GameSetup from "@/components/game/GameSetup";
 import GameEngineRealtime from "@/components/game/GameEngineRealtime";
 import { Character as ApiCharacter } from "@/services/api";
+import { useAuth } from "@/hooks/useAuth"; // ✅ 1. Auth hook import
 
 // --- 타입 정의 (기존과 동일) ---
 interface GameStartPayload {
@@ -13,9 +14,20 @@ interface GameStartPayload {
   aiCharacters: ApiCharacter[];
   allCharacters: ApiCharacter[];
 }
+// ✅ 2. 불러온 데이터의 원본 타입을 명확히 정의
+interface LoadedCharacterHistory {
+  assignments: { [userId: string]: ApiCharacter };
+  aiCharacters: ApiCharacter[];
+  allCharacters: ApiCharacter[];
+}
 interface LoadedSessionData {
+<<<<<<< HEAD
   choice_history: { summary?: string };
   character_history: GameStartPayload;
+=======
+  choice_history: { summary?: string; };
+  character_history: LoadedCharacterHistory; // ✅ 3. 타입 적용
+>>>>>>> origin/develop
 }
 type GamePhase = "loading" | "summary" | "setup" | "playing";
 
@@ -32,6 +44,7 @@ export default function GameScreen() {
     loadedSessionData?: string;    // JSON stringified LoadedSessionData
   }>();
 
+<<<<<<< HEAD
   const [gamePhase, setGamePhase] = useState<GamePhase>("loading");
   const [gameStartData, setGameStartData] = useState<GameStartPayload | null>(null);
   const [summary, setSummary] = useState<string>("");
@@ -58,22 +71,64 @@ export default function GameScreen() {
       } catch (error) {
         console.error("세션 데이터 파싱 실패:", error);
         setGamePhase("setup");
+=======
+  const { user } = useAuth(); // ✅ 4. 현재 사용자 정보 가져오기
+  const [gamePhase, setGamePhase] = useState<GamePhase>('loading');
+  const [gameStartData, setGameStartData] = useState<GameStartPayload | null>(null);
+  const [summary, setSummary] = useState<string>('');
+  
+  useEffect(() => {
+    // '불러오기'이며, 세션 데이터와 사용자 정보가 모두 있을 때 실행
+    if (params.isLoaded === 'true' && params.loadedSessionData && user) { // ✅ 5. user 로딩 확인
+      try {
+        const session: LoadedSessionData = JSON.parse(params.loadedSessionData);
+        const loadedHistory = session.character_history;
+
+        // ✅ 6. [핵심] assignments 맵에서 내 캐릭터 찾기
+        const myCharacter = loadedHistory.assignments[user.id];
+
+        if (myCharacter) {
+          // ✅ 7. GameEngineRealtime이 요구하는 형태로 데이터 변환
+          const transformedPayload: GameStartPayload = {
+            myCharacter: myCharacter,
+            aiCharacters: loadedHistory.aiCharacters,
+            allCharacters: loadedHistory.allCharacters,
+          };
+          
+          setGameStartData(transformedPayload); // 변환된 데이터로 상태 설정
+          setSummary(session.choice_history?.summary || "저장된 줄거리가 없습니다.");
+          setGamePhase('summary'); // 요약 화면으로 이동
+
+        } else {
+          console.error("저장된 데이터에서 현재 유저의 캐릭터를 찾을 수 없습니다.");
+          setGamePhase('setup'); // 에러 발생 시 설정 화면으로 이동
+        }
+
+      } catch (error) {
+        console.error("세션 데이터 파싱 또는 변환 실패:", error);
+        setGamePhase('setup'); 
+>>>>>>> origin/develop
       }
     } else if (params.isLoaded === "false") {
       setGamePhase("setup");
     }
-  }, [params.isLoaded, params.loadedSessionData]);
+  }, [params.isLoaded, params.loadedSessionData, user]); // ✅ 8. user를 의존성 배열에 추가
 
   const handleGameStartFromSetup = (payload: GameStartPayload) => {
     setGameStartData(payload);
     setGamePhase("playing");
   };
 
+<<<<<<< HEAD
   const handleGameStartFromSummary = () => {
     setGamePhase("playing");
   };
 
   if (gamePhase === "loading" || !params.id || !params.topic) {
+=======
+  // ... 이하 렌더링 로직은 변경할 필요 없습니다 ...
+  if (gamePhase === 'loading' || !params.id || !params.topic) {
+>>>>>>> origin/develop
     return (
       <SafeAreaView style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#E2C044" />
@@ -82,7 +137,11 @@ export default function GameScreen() {
     );
   }
 
+<<<<<<< HEAD
   if (gamePhase === "summary") {
+=======
+  if (gamePhase === 'summary') {
+>>>>>>> origin/develop
     return (
       <SafeAreaView style={styles.centerContainer}>
         <View style={styles.summaryContainer}>
@@ -98,7 +157,11 @@ export default function GameScreen() {
     );
   }
 
+<<<<<<< HEAD
   if (gamePhase === "setup" || gamePhase === "playing") {
+=======
+  if (gamePhase === 'setup' || gamePhase === 'playing') {
+>>>>>>> origin/develop
     return (
       <SafeAreaView style={styles.fullContainer}>
         {gameStartData && gamePhase === "playing" ? (
@@ -121,15 +184,36 @@ export default function GameScreen() {
             onStart={handleGameStartFromSetup}
           />
         ) : (
+<<<<<<< HEAD
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="#E2C044" />
             <Text style={styles.loadingText}>캐릭터 설정 정보를 불러오는 중...</Text>
           </View>
+=======
+          (params.characters && params.participants) ? (
+            <GameSetup
+              roomId={params.id}
+              topic={params.topic}
+              characters={params.characters}
+              participants={params.participants}
+              isOwner={params.isOwner === 'true'}
+              onStart={handleGameStartFromSetup}
+            />
+          ) : (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator size="large" color="#E2C044" />
+              <Text style={styles.loadingText}>캐릭터 설정 정보를 불러오는 중...</Text>
+            </View>
+          )
+>>>>>>> origin/develop
         )}
       </SafeAreaView>
     );
   }
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/develop
   return <SafeAreaView style={styles.fullContainer} />;
 }
 

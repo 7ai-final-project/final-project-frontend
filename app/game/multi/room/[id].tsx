@@ -93,7 +93,7 @@ export default function RoomScreen() {
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
   const [notificationModalContent, setNotificationModalContent] = useState({ title: "", message: "" });
 
-  // ✅ [오류 수정 1] 타입을 NodeJS.Timeout에서 number로 변경
+ const [isGameLoaded, setIsGameLoaded] = useState(false);
   const countdownIntervalRef = useRef<number | null>(null);
   const isStartingRef = useRef(false);
   const chatSocketRef = useRef<WebSocket | null>(null);
@@ -133,6 +133,15 @@ export default function RoomScreen() {
         const data = JSON.parse(ev.data);
         const message = data.message;
 
+        if (data.type === "room_broadcast" && message?.type === "options_update") {
+            const { options } = message; // 'data'가 아닌 'message'에서 옵션을 가져옵니다.
+            setSelectedScenarioId(options.scenarioId);
+            setSelectedGenreId(options.genreId);
+            setSelectedDifficultyId(options.difficultyId);
+            setSelectedModeId(options.modeId);
+            return;
+        }
+
         if (data.type === "room_state") {
           if (roomRef.current?.status === 'play') {
             fetchRoomDetail(roomId).then((res) => setRoom(res.data));
@@ -169,13 +178,11 @@ export default function RoomScreen() {
               difficulty: message.difficulty,
               mode: message.mode,
               genre: message.genre,
-              characters: loadedSessionRef.current ? undefined : JSON.stringify(charactersRef.current),
-              participants: loadedSessionRef.current ? undefined : JSON.stringify(roomRef.current?.selected_by_room),
-              isOwner: String(roomRef.current?.owner === user?.name),
-              isLoaded: loadedSessionRef.current ? 'true' : 'false',
-              loadedSessionData: loadedSessionRef.current ? JSON.stringify(loadedSessionRef.current) 
-                : undefined,
-            };
+              characters: JSON.stringify(message.characters),              participants: JSON.stringify(message.participants),
+              isOwner: String(roomRef.current?.owner === user?.id),
+              isLoaded: 'false', // '새 게임 시작'이므로 항상 false입니다. 불러오기 로직은 분리되어 있습니다.
+              loadedSessionData: undefined, // 새 게임이므로 불러온 데이터는 없습니다.
+          };
             
             countdownIntervalRef.current = setInterval(() => {
               secondsLeft -= 1;
@@ -228,11 +235,11 @@ export default function RoomScreen() {
   };
 
   // ✅ [오류 수정 2] useMemo 선언들을 useEffect 위로 이동
-  const isOwner = useMemo(() => room?.owner === user?.name && !!user?.name, [room, user]);
+  const isOwner = useMemo(() => room?.owner === user?.id && !!user?.id, [room, user]);
   const allReady = useMemo(() => room?.selected_by_room?.every((p) => p.is_ready) && (room?.selected_by_room?.length ?? 0) > 0, [room]);
   const selectedScenarioTitle = useMemo(() => scenarios.find(s => s.id === selectedScenarioId)?.title, [scenarios, selectedScenarioId]);
   const canStart = isOwner && allReady && room?.status === "waiting" && !!selectedScenarioTitle && !!selectedDifficultyId && !!selectedModeId && !!selectedGenreId && characters.length > 0;
-  const myParticipant = room?.selected_by_room?.find((p) => p.username === user?.name);
+  const myParticipant = room?.selected_by_room?.find((p) => p.id === user?.id);
   
   const selectedDifficultyName = useMemo(() => difficulties.find(d => d.id === selectedDifficultyId)?.name, [difficulties, selectedDifficultyId]);
   const selectedModeName = useMemo(() => modes.find(m => m.id === selectedModeId)?.name, [modes, selectedModeId]);
@@ -325,24 +332,26 @@ export default function RoomScreen() {
     }
   };
 
-  const handleOptionSelect = async () => {
+  const handleOptionSelect = () => { // 'async' 키워드 제거
     if (!isOwner) return;
     if (!selectedScenarioId || !selectedDifficultyId || !selectedModeId || !selectedGenreId) {
       Alert.alert("알림", "모든 게임 옵션을 선택해야 합니다.");
       return;
     }
-    try {
-      await saveRoomOptions(roomId, {
-        scenario: selectedScenarioId,
-        difficulty: selectedDifficultyId,
-        mode: selectedModeId,
-        genre: selectedGenreId,
-      });
-      setIsTopicModalVisible(false);
-    } catch (error) {
-      console.error("옵션 저장 실패:", error);
-      Alert.alert("오류", "옵션 저장에 실패했습니다.");
+    
+    // 기존의 HTTP API 호출(saveRoomOptions) 대신 WebSocket으로 메시지를 전송합니다.
+    if (wsRef.current) {
+      wsRef.current.send(JSON.stringify({
+        action: "set_options",
+        options: {
+          scenarioId: selectedScenarioId,
+          difficultyId: selectedDifficultyId,
+          modeId: selectedModeId,
+          genreId: selectedGenreId,
+        }
+      }));
     }
+    setIsTopicModalVisible(false);
   };
 
   const handleLoadGame = async () => {
@@ -368,18 +377,24 @@ export default function RoomScreen() {
           setSelectedGenreId(loadedGenre.id);
           setSelectedModeId(loadedMode.id);
 
-          // ✅ [핵심 수정] 불러온 옵션 ID들을 서버 DB에도 다시 저장합니다.
-          await saveRoomOptions(roomId, {
-            scenario: loadedScenario.id,
-            difficulty: loadedDifficulty.id,
-            mode: loadedMode.id,
-            genre: loadedGenre.id,
-          });
+          if (wsRef.current) {
+            wsRef.current.send(JSON.stringify({
+              action: "set_options",
+              options: {
+                scenarioId: loadedScenario.id,
+                difficultyId: loadedDifficulty.id,
+                modeId: loadedMode.id,
+                genreId: loadedGenre.id,
+              }
+            }));
+          }
 
           setNotificationModalContent({
             title: "불러오기 성공",
             message: "저장된 게임 설정이 적용되었습니다.\n'준비 완료' 후 게임을 시작하세요.",
           });
+
+          setIsGameLoaded(true);
 
         } else {
           setNotificationModalContent({
@@ -406,9 +421,37 @@ export default function RoomScreen() {
   };
 
   const onStartGame = () => {
-    if (canStart && wsRef.current) {
-      wsRef.current.send(JSON.stringify({ action: "start_game" }));
-    }
+      if (canStart && wsRef.current) {
+        // 이 함수는 이제 '새 게임' 시작 전용입니다.
+        wsRef.current.send(JSON.stringify({ action: "start_game" }));
+      }
+  };
+
+  // ✅ [2단계] '불러온 게임 시작'을 위한 새 함수 추가
+  const onStartLoadedGame = () => {
+      if (!loadedSessionRef.current) {
+          Alert.alert("오류", "불러온 게임 데이터가 없습니다.");
+          return;
+      }
+      if (!canStart) {
+          Alert.alert("알림", "모든 플레이어가 준비를 완료해야 시작할 수 있습니다.");
+          return;
+      }
+
+      // WebSocket을 통하지 않고, 불러온 데이터를 가지고 바로 게임 화면으로 이동합니다.
+      router.push({
+          pathname: "/game/multi/play/[id]",
+          params: {
+              id: roomId,
+              topic: selectedScenarioTitle || "",
+              difficulty: selectedDifficultyName || "",
+              // ✅ isLoaded 플래그를 'true'로 설정하는 것이 핵심입니다.
+              isLoaded: 'true',
+              // ✅ 불러온 세션 데이터를 문자열로 변환하여 전달합니다.
+              loadedSessionData: JSON.stringify(loadedSessionRef.current),
+              isOwner: String(isOwner),
+          },
+      });
   };
 
   const onEndGame = () => {
@@ -453,7 +496,11 @@ export default function RoomScreen() {
               {isOwner && (
                 // ✅ [수정] 버튼들을 감싸는 View 추가
                 <View style={styles.ownerButtonRow}>
-                  <TouchableOpacity style={styles.gameOptionButton} onPress={() => setIsTopicModalVisible(true)}>
+                  <TouchableOpacity 
+                    style={[styles.gameOptionButton, isGameLoaded && styles.btnDisabled]} 
+                    onPress={() => setIsTopicModalVisible(true)}
+                    disabled={isGameLoaded}
+                  >
                     <Ionicons name="settings-sharp" size={20} color="#E2C044" />
                     <Text style={styles.gameOptionButtonText}>옵션 설정</Text>
                   </TouchableOpacity>
@@ -477,7 +524,7 @@ export default function RoomScreen() {
                 </TouchableOpacity>
                 
                 {isOwner && room.status === 'waiting' && (
-                  <TouchableOpacity style={[styles.btn, styles.startBtn, !canStart && styles.btnDisabled]} onPress={onStartGame} disabled={!canStart}>
+                  <TouchableOpacity style={[styles.btn, styles.startBtn, !canStart && styles.btnDisabled]} onPress={isGameLoaded ? onStartLoadedGame : onStartGame} disabled={!canStart}>
                     <Ionicons name="play-sharp" size={22} color="#fff" />
                     <Text style={styles.btnText}>게임 시작</Text>
                   </TouchableOpacity>
@@ -507,7 +554,7 @@ export default function RoomScreen() {
                 {room.selected_by_room?.map((p) => (
                   <View key={p.id} style={styles.participantRow}>
                     <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      {room.owner === p.username && <Ionicons name="key" size={16} color="#E2C044" style={{ marginRight: 8 }} />}
+                      {room.owner === p.id && <Ionicons name="key" size={16} color="#E2C044" style={{ marginRight: 8 }} />}
                       <Text style={styles.participantName}>{p.username}</Text>
                     </View>
                     <View style={p.is_ready ? styles.ready : styles.notReady}>
