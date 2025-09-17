@@ -1,92 +1,70 @@
-// frontend/util/ttrpg.ts
+// util/ttrpg.ts
 
-// ── 한·영 혼용 스탯 라벨 매핑 ─────────────────────────────────────────────
-const KOR_STATS = ["힘", "민첩", "지식", "의지", "매력", "운", "체력"] as const;
-
-const EN_TO_KO: Record<string, string> = {
-  strength: "힘",
-  str: "힘",
-  agility: "민첩",
-  dex: "민첩",
-  intelligence: "지식",
-  int: "지식",
-  wisdom: "의지",
-  wis: "의지",
-  charisma: "매력",
-  cha: "매력",
-  luck: "운",
-  lck: "운",
-  hp: "체력",
-  health: "체력",
+// 주제별 능력치 매핑을 위한 객체
+export const statMapping = {
+    'strength': '힘',
+    'intelligence': '지혜',
+    'agility': '민첩',
+    'hp': '체력',
+    'wisdom': '지혜',
+    'luck': '행운',
 };
 
-// 표시용 라벨: 가능한 모든 키(한·영)를 한국어 라벨로 매핑
-export const statLabelMap: Record<string, string> = {
-  // 한글 원본
-  힘: "힘",
-  민첩: "민첩",
-  지식: "지식",
-  의지: "의지",
-  매력: "매력",
-  운: "운",
-  체력: "체력",
-  // 영어/약어
-  strength: "힘",
-  str: "힘",
-  agility: "민첩",
-  dex: "민첩",
-  intelligence: "지식",
-  int: "지식",
-  wisdom: "의지",
-  wis: "의지",
-  charisma: "매력",
-  cha: "매력",
-  luck: "운",
-  lck: "운",
-  hp: "체력",
-  health: "체력",
+// 두 주제의 모든 능력치를 포함하는 통합된 타입
+export type CombinedCharacterStats = {
+    strength?: number;
+    intelligence?: number;
+    agility?: number;
+    hp?: number;
+    wisdom?: number;
+    luck?: number;
+    // 이 타입은 `characterData.ts`의 `stats` 객체와 일치해야 합니다.
+    // 여기서는 `stats` 객체의 키를 영문으로 통일하여 사용합니다.
+    // 하지만, 캐릭터 데이터 자체는 한글 키를 사용하므로 매핑이 필요합니다.
 };
 
-// 선택지 타입
 export type Grade = "SP" | "S" | "F" | "SF";
 
 export type Choice = {
-  id: string;
-  text: string;
-  appliedStat: string;         // 한글 또는 영문 가능
-  modifier: number;
-  tags?: string[];             // 스킬/아이템 태그 매칭용(옵션)
+    id: string;
+    text: string;
+    // `appliedStat`은 이제 두 주제의 모든 능력치를 포괄합니다.
+    appliedStat: keyof typeof statMapping; 
+    modifier: number;
+};
+
+export type SceneTurnSpec = {
+    role: string;
+    title: string;
+    description: string;
+    choices: Choice[];
+    fragments: Record<string, string>;
+    statChanges: Record<string, any>;
 };
 
 export interface SceneRoundSpec {
   title: string;
-  description: string;
+  description: string; // ✅ 이 줄을 추가하거나 전체를 교체하세요.
   choices: {
-    [roleId: string]: Choice[];
+    [roleId: string]: {
+      id: string;
+      text: string;
+      appliedStat: string;
+      modifier: number;
+    }[];
   };
 }
 
 export type SceneTemplate = {
-  id: string;
-  index: number;
-  roleMap: Record<string /* character name */, string /* roleKey */>;
-  round?: SceneRoundSpec;
-  turns?: any[];
-  nextScene?: Record<string, any>;
+    id: string;
+    index: number;
+    roleMap: Record<string /* character name */, string /* roleKey */>;
+    round?: SceneRoundSpec; 
+    turns?: SceneTurnSpec[];
+    nextScene?: { [key: string]: any };
 };
 
 export type PerRoleResult = {
-<<<<<<< HEAD
-  role: string;
-  choiceId: string;
-  grade: Grade;
-  dice: number;
-  appliedStat: string;
-  statValue: number;
-  modifier: number;
-  total: number;
-  characterName: string;
-=======
     role: string;
     choiceId: string;
     grade: Grade;
@@ -97,54 +75,23 @@ export type PerRoleResult = {
     total: number;
     characterName: string;
     characterId: string;
->>>>>>> origin/develop
 };
 
 export type RoundResult = {
-  sceneIndex: number;
-  results: PerRoleResult[];
+    sceneIndex: number;
+    results: PerRoleResult[];
 };
 
-// API Character 타입 가져오기
-import type { Character } from "@/services/api";
+export function getSceneTemplate(templates: SceneTemplate[], index: number) {
+    return templates.find((t) => t.index === index) ?? null;
+}
 
-// ── 유틸 함수들 ────────────────────────────────────────────────────────────
-/** 입력 statKey(한·영 아무거나)를 한국어 기준 키로 정규화 */
-export const normalizeToKo = (statKey: string): string => {
-  if (!statKey) return statKey;
-  if (KOR_STATS.includes(statKey as any)) return statKey; // 이미 한글
-  const lower = statKey.toLowerCase();
-  return EN_TO_KO[lower] ?? statKey; // 미지정 키면 그대로 반환
-};
+// 캐릭터의 주제에 따라 올바른 능력치 값을 가져오는 함수
+// `characterData.ts`의 캐릭터 유니온 타입을 사용해야 합니다.
+import { Character } from '@/services/api'
 
-/** 화면 표시용 라벨을 반환 */
-export const getStatLabel = (statKey: string): string => {
-  return statLabelMap[statKey] ?? statKey;
-};
-
-/** 캐릭터 stats에서 statKey(한·영)를 찾아 값 반환(없으면 0) */
-export const getStatValue = (character: Character, statKey: string): number => {
-  const stats = (character as any)?.stats ?? {};
-  if (!stats || typeof stats !== "object") return 0;
-
-  // 그대로 존재하면 우선 사용
-  if (statKey in stats && typeof stats[statKey] === "number") {
-    return stats[statKey];
-  }
-
-  // 한국어 정규화 후 다시 시도
-  const ko = normalizeToKo(statKey);
-  if (ko in stats && typeof stats[ko] === "number") {
-    return stats[ko];
-  }
-
-  // 영어 키가 stats에 직접 있을 수 있으므로 보조 체크
-  const lower = statKey.toLowerCase();
-  if (lower in stats && typeof stats[lower] === "number") {
-    return stats[lower];
-  }
-
-  return 0;
+export const getStatValue = (character: Character, stat: keyof Character['stats']): number => {
+    return character.stats?.[stat] ?? 0;
 };
 
 export type ShariRoll = {
