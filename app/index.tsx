@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 import { useKakaoAuth } from '../hooks/useKakaoAuth';
 import { useFonts } from 'expo-font';
+import ProfileModal from '../components/ProfileModal';
 import OptionsModal from '../components/OptionsModal';
 
 // 텍스트가 영어인지 확인하는 헬퍼 함수를 만듭니다. 
@@ -355,6 +356,11 @@ return (
           </View>
         </Modal>
 
+      <ProfileModal
+          visible={profileModalVisible}
+          onClose={() => setProfileModalVisible(false)}
+          user={user}
+        />
 
       {/* 4. 옵션 모달 UI 구현 */}
       <OptionsModal
