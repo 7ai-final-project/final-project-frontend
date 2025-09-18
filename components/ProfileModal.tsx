@@ -1,8 +1,8 @@
 // frontend/components/ProfileModal.tsx
-
-import React from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, Image, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import api from '../services/api';
 
 // 이 컴포넌트가 받을 Props의 타입을 정의합니다.
 interface ProfileModalProps {
@@ -15,19 +15,134 @@ interface ProfileModalProps {
     email?: string;
     picture?: string;
   } | null;
+  // 닉네임 업데이트 함수를 props로 받습니다
+  onUpdateNickname?: (newNickname: string) => void;
 }
 
-const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user }) => {
+const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user, onUpdateNickname }) => {
+  // 닉네임 편집 모드 상태
+  const [isEditingNickname, setIsEditingNickname] = useState(false);
+  // 임시 닉네임 값
+  const [tempNickname, setTempNickname] = useState('');
+  // 저장 중 상태
+  const [isSaving, setIsSaving] = useState(false);
+  // 에러 메시지 상태
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // user가 변경될 때마다 tempNickname을 초기화
+  useEffect(() => {
+    if (user) {
+      setTempNickname(user.nickname);
+    }
+  }, [user]);
+
   // user 데이터가 없으면 모달을 렌더링하지 않습니다. (안전장치)
   if (!user) {
     return null;
   }
 
+  // 닉네임 편집 시작
+  const handleStartEditNickname = () => {
+    setTempNickname(user.nickname);
+    setIsEditingNickname(true);
+  };
+
+  // 닉네임 편집 취소
+  const handleCancelEditNickname = () => {
+    setTempNickname(user.nickname);
+    setIsEditingNickname(false);
+    setErrorMessage('');
+  };
+
+  // 닉네임 저장
+  const handleSaveNickname = async () => {
+    if (isSaving) return;
+
+    console.log(`nickname : ${tempNickname.trim()}, 길이 : ${tempNickname.trim().length}`);
+
+    // 빈 닉네임 체크
+    if (!tempNickname.trim()) {
+      setErrorMessage('닉네임을 입력해주세요.');
+      return;
+    }
+
+    // 닉네임 길이 체크 (2자 이상 10자 이하)
+    if (tempNickname.trim().length < 2 || tempNickname.trim().length > 10) {
+      setErrorMessage('닉네임은 2자 이상 10자 이하로 입력해주세요.');
+      return;
+    }
+
+    // 팀원 코드와 동일한 정규식 사용 (한글 자모음 포함)
+    const nicknameRegex = /^[a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ]*$/;
+    if (!nicknameRegex.test(tempNickname.trim())) {
+      setErrorMessage('닉네임은 한글, 영문, 숫자만 사용할 수 있습니다.');
+      return;
+    }
+
+    setIsSaving(true);
+    setErrorMessage('');
+
+    try {
+      console.log('API 요청 시작:', {
+        url: '/auth/user/update',
+        data: { nickname: tempNickname.trim() }
+      });
+
+      const response = await api.put('/auth/user/update', { nickname: tempNickname.trim() });
+
+      console.log('API 응답 성공:', response.status, response.data);
+
+      if (response.status === 409) {
+        setErrorMessage('이미 사용 중인 닉네임입니다. 다른 닉네임을 사용해주세요.');
+        setIsSaving(false);
+        return;
+      }
+
+      // 성공시 즉시 화면에 반영 - user 객체 직접 업데이트
+      if (user) {
+        user.nickname = tempNickname.trim();
+      }
+
+      // 부모 컴포넌트에도 알림
+      if (onUpdateNickname) {
+        onUpdateNickname(tempNickname.trim());
+      }
+      
+      Alert.alert('성공', '닉네임이 성공적으로 변경되었습니다!');
+      
+      // 편집 모드만 종료 (모달은 열어둠)
+      setIsEditingNickname(false);
+      setErrorMessage('');
+      
+    } catch (error: any) {
+      console.error('닉네임 업데이트 실패:', error);
+      
+      // 팀원 코드와 동일한 에러 처리 방식
+      if (error.response && error.response.data && error.response.data.message) {
+        setErrorMessage(error.response.data.message);
+      } else if (error.response?.status === 409) {
+        setErrorMessage('이미 사용 중인 닉네임입니다. 다른 닉네임을 사용해주세요.');
+      } else {
+        setErrorMessage('닉네임 저장 중 오류가 발생했습니다. 다시 시도해주세요.');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 모달이 닫힐 때 편집 모드도 종료
+  const handleModalClose = () => {
+    setIsEditingNickname(false);
+    setTempNickname(user.nickname);
+    setErrorMessage('');
+    onClose();
+  };
+
   return (
-    <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
+    <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={handleModalClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.profileModalBox}>
-          <TouchableOpacity style={styles.closeIcon} onPress={onClose}>
+          <TouchableOpacity style={styles.closeIcon} onPress={handleModalClose}>
             <Ionicons name="close" size={24} color="#aaa" />
           </TouchableOpacity>
           
@@ -35,8 +150,66 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user }) =
             source={user.picture ? { uri: user.picture } : require('../assets/images/default_profile.png')} 
             style={styles.profileImage} 
           />
+          
           <View style={styles.profileTextContainer}>
-            <Text style={styles.profileName}>{`${user.name} (${user.nickname})` || '이름 없음'}</Text>
+            <View style={styles.nameContainer}>
+              <Text style={styles.profileName}>{user.name}</Text>
+            </View>
+            
+            <View style={styles.nicknameContainer}>
+              {isEditingNickname ? (
+                // 편집 모드: TextInput과 저장/취소 버튼
+                <View style={styles.nicknameEditContainer}>
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={[styles.nicknameInput, errorMessage ? styles.inputError : null]}
+                      value={tempNickname}
+                      onChangeText={setTempNickname}
+                      placeholder="닉네임을 입력하세요"
+                      placeholderTextColor="#aaa"
+                      autoFocus={true}
+                      selectTextOnFocus={true}
+                      maxLength={10}
+                      editable={!isSaving}
+                      autoCapitalize="none"
+                      keyboardAppearance="dark"
+                    />
+                    <View style={styles.editButtonsContainer}>
+                      <TouchableOpacity 
+                        style={[styles.saveButton, isSaving && styles.disabledButton]} 
+                        onPress={handleSaveNickname}
+                        disabled={isSaving}
+                      >
+                        <Ionicons 
+                          name={isSaving ? "hourglass" : "checkmark"} 
+                          size={16} 
+                          color={isSaving ? "#aaa" : "#4CAF50"} 
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.cancelButton, isSaving && styles.disabledButton]} 
+                        onPress={handleCancelEditNickname}
+                        disabled={isSaving}
+                      >
+                        <Ionicons name="close" size={16} color="#f44336" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  {errorMessage ? (
+                    <Text style={styles.errorText}>{errorMessage}</Text>
+                  ) : null}
+                </View>
+              ) : (
+                // 일반 모드: 닉네임과 편집 버튼
+                <View style={styles.nicknameDisplayContainer}>
+                  <Text style={styles.profileNickname}>({user.nickname})</Text>
+                  <TouchableOpacity style={styles.editNicknameButton} onPress={handleStartEditNickname}>
+                    <Ionicons name="pencil" size={16} color="#aaa" />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+            
             <Text style={styles.profileEmail}>{user.email || '이메일 정보 없음'}</Text>
           </View>
         </View>
@@ -47,13 +220,18 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user }) =
 
 // 이 컴포넌트에서만 사용하는 스타일을 여기에 정의합니다.
 const styles = StyleSheet.create({
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.6)', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
   profileModalBox: {
     width: '90%',
-    maxWidth: 350,
+    maxWidth: 400,
     backgroundColor: '#2a2d47',
     borderRadius: 16,
-    padding: 20,
+    padding: 24,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
@@ -79,16 +257,80 @@ const styles = StyleSheet.create({
   profileTextContainer: {
     flex: 1,
   },
+  nameContainer: {
+    marginBottom: 4,
+  },
   profileName: {
     fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
     fontFamily: 'neodgm',
   },
+  nicknameContainer: {
+    marginBottom: 8,
+  },
+  nicknameDisplayContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profileNickname: {
+    fontSize: 18,
+    color: '#fff',
+    fontFamily: 'neodgm',
+    marginRight: 8,
+  },
+  editNicknameButton: {
+    padding: 4,
+  },
+  nicknameEditContainer: {
+    flexDirection: 'column',
+    flex: 1,
+    minWidth: 0,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+  },
+  nicknameInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#fff',
+    fontFamily: 'neodgm',
+    backgroundColor: '#1a1d35',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#444',
+    marginRight: 8,
+  },
+  inputError: {
+    borderColor: '#f44336',
+  },
+  editButtonsContainer: {
+    flexDirection: 'row',
+  },
+  saveButton: {
+    padding: 4,
+    marginRight: 4,
+  },
+  cancelButton: {
+    padding: 4,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#f44336',
+    fontFamily: 'neodgm',
+    marginTop: 4,
+  },
   profileEmail: {
     fontSize: 18,
     color: '#fff',
-    marginTop: 4,
     fontFamily: 'neodgm',
   },
 });
