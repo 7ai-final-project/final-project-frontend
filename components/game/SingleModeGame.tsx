@@ -322,6 +322,14 @@ export default function SingleModeGame({
       <ScrollView contentContainerStyle={styles.container}>
         {/* --- 1. 헤더 --- */}
         <View style={styles.header}>
+          <View style={styles.headerLeft}>
+          {/* 홈 버튼 (새로 추가) */}
+            <TouchableOpacity 
+              style={styles.headerButton} 
+              onPress={() => router.replace('/storymode')} // 스토리 목록으로 이동
+            >
+              <Ionicons name="home-outline" size={28} color="#F4E4BC" />
+            </TouchableOpacity>
           {/* 1. 왼쪽: 뒤로가기 버튼 */}
           <TouchableOpacity
             style={styles.headerButton}
@@ -336,7 +344,6 @@ export default function SingleModeGame({
               }
             }}
           >
-            {/* 아이콘은 항상 활성화된 것처럼 보이도록 색상 조건을 제거합니다. */}
             <Ionicons name="arrow-back" size={28} color="#F4E4BC" />
           </TouchableOpacity>
 
@@ -356,6 +363,7 @@ export default function SingleModeGame({
               <Ionicons name="settings-outline" size={28} color="#F4E4BC" />
             </TouchableOpacity>
           </View>
+        </View>
         </View>
 
         {/* --- 2. 메인 콘텐츠 (좌우 분할) --- */}
@@ -458,9 +466,16 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     flexShrink: 0,
   },
+  headerLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    gap: 10,
+  },
   headerButton: {
     alignItems: "center",
-    padding: 5,
+    padding: 8,
   },
   headerButtonText: {
     color: "#F4E4BC",
@@ -468,7 +483,9 @@ const styles = StyleSheet.create({
     fontFamily: "neodgm",
   },
   headerRight: {
+    flex: 1,
     flexDirection: "row",
+    justifyContent: 'flex-end',
     alignItems: "center",
     gap: 10,
   },
@@ -477,6 +494,8 @@ const styles = StyleSheet.create({
     fontSize: 28, // neodgm 폰트는 크기가 작으므로 키워줍니다.
     fontFamily: "neodgm",
     fontWeight: "bold",
+    flex: 8, // 공간을 2의 비율로 차지
+    textAlign: 'center',
   },
   mainContent: {
     flex: 1, // 헤더를 제외한 나머지 공간을 모두 차지
