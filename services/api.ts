@@ -142,6 +142,7 @@ export const resolveTurn = (data: {
     currentScene: any;
     usage: any;
     gameState: any;
+    allCharacters: Character[];
 }) => {
     return api.post("/game/single/proceed/", data);
 };

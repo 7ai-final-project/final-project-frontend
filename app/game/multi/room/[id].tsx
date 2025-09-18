@@ -178,7 +178,8 @@ export default function RoomScreen() {
               difficulty: message.difficulty,
               mode: message.mode,
               genre: message.genre,
-              characters: JSON.stringify(message.characters),              participants: JSON.stringify(message.participants),
+              characters: JSON.stringify(message.characters),
+              participants: JSON.stringify(message.participants),
               isOwner: String(roomRef.current?.owner === user?.id),
               isLoaded: 'false', // '새 게임 시작'이므로 항상 false입니다. 불러오기 로직은 분리되어 있습니다.
               loadedSessionData: undefined, // 새 게임이므로 불러온 데이터는 없습니다.

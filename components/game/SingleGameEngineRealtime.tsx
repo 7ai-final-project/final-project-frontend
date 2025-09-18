@@ -328,9 +328,10 @@ export default function GameEngineRealtime({
                     currentScene: currentScene,
                     usage: pendingUsage,
                     gameState: gameState,
+                    allCharacters: allCharacters,
                 });
 
-                const { narration, roundResult, nextGameState, shari } = response.data;
+                const { narration, roundResult, nextGameState, shari, party_state } = response.data;
 
                 setCinematicText(narration);
                 setRoundResult(roundResult);
@@ -338,6 +339,9 @@ export default function GameEngineRealtime({
                 if (shari) { // ✅ shari 데이터가 있으면 상태를 업데이트합니다.
                     setShariBlockData(shari);
                     setWorldState(prev => ({ ...prev, ...shari.update }));
+                }
+                if (party_state) { // ✅ party_state가 있으면 상태 업데이트
+                    setPartyState(party_state);
                 }
                 setPhase("cinematic");
 
