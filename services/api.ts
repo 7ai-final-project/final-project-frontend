@@ -1,5 +1,6 @@
 import axios from "axios";
 import { storage } from "../services/storage";  // ✅ AsyncStorage 유틸 가져오기
+import { PerRoleResult, SceneTemplate } from "@/util/ttrpg";
 
 const api = axios.create({
   baseURL: "http://127.0.0.1:8000/",
@@ -86,6 +87,80 @@ export const fetchCharactersByTopic = async (topic: string): Promise<Character[]
   }
 
   return allCharacters;
+};
+
+// ------------------------------------------------------------------
+// ✅ [추가] Single Player Game API
+// ------------------------------------------------------------------
+
+/**
+ * 싱글플레이어 게임의 첫 장면(Scene) 데이터를 요청합니다.
+ * @param data - 게임 시작에 필요한 정보 (주제, 캐릭터 목록, 불러오기 여부)
+ */
+export const getInitialScene = (data: {
+    topic: string;
+    myCharacter: Character; // ✅ 이 줄을 추가하세요
+    allCharacters: Character[];
+    isLoadedGame: boolean;
+}) => {
+    // allCharacters 대신 characters 키로 백엔드에 전달 (기존 방식 유지)
+    return api.post("/game/single/initial/", { ...data, characters: data.allCharacters });
+};
+
+
+/**
+ * 플레이어의 선택 결과를 서버에 보내고, AI 행동이 반영된 다음 스토리와 씬을 받아옵니다.
+ * @param data - 플레이어의 주사위 결과, AI 동료 정보, 현재 씬 정보 등
+ */
+export const submitChoiceAndGetNextScene = (data: {
+  playerResult: PerRoleResult;
+  aiCharacters: Character[];
+  currentScene: SceneTemplate | null;
+  usage: { type: 'skill' | 'item'; data: Skill | Item } | null;
+  gameState: any;
+}) => api.post("game/single/proceed/", data);
+
+
+/**
+ * 싱글플레이어 게임의 현재 상태를 서버에 저장합니다.
+ * @param saveData - 저장할 게임 데이터
+ */
+export const saveGame = (data: { 
+    gameState: any;
+    characterHistory: any;
+    characterId: string;
+    difficulty: string;
+    genre: string;
+    mode: string;
+}) => {
+    return api.post("/game/single/save/", data);
+};
+
+export const resolveTurn = (data: {
+    playerResult: any;
+    aiCharacters: Character[];
+    currentScene: any;
+    usage: any;
+    gameState: any;
+}) => {
+    return api.post("/game/single/proceed/", data);
+};
+
+// ✅ [추가] 다음 씬을 요청하는 새로운 함수
+export const getNextScene = (data: {
+    gameState: any;
+    lastNarration: string;
+    currentSceneIndex: number;
+}) => {
+    return api.post("/game/single/next-scene/", data);
+};
+
+export const checkSingleGameSession = (scenarioId: string) => {
+    return api.get(`/game/single/session-check/?scenario_id=${scenarioId}`);
+};
+
+export const continueGame = (sessionId: string) => {
+    return api.post("/game/single/continue/", { session_id: sessionId });
 };
 
 export default api;
