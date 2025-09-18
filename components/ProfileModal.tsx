@@ -59,15 +59,18 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user, onU
     if (isSaving) return;
 
     console.log(`nickname : ${tempNickname.trim()}, 길이 : ${tempNickname.trim().length}`);
+    console.log('handleSaveNickname 함수 시작'); // 디버그 로그 추가
 
     // 빈 닉네임 체크
     if (!tempNickname.trim()) {
+      console.log('빈 닉네임 에러'); // 디버그 로그
       setErrorMessage('닉네임을 입력해주세요.');
       return;
     }
 
     // 닉네임 길이 체크 (2자 이상 10자 이하)
     if (tempNickname.trim().length < 2 || tempNickname.trim().length > 10) {
+      console.log('닉네임 길이 에러'); // 디버그 로그
       setErrorMessage('닉네임은 2자 이상 10자 이하로 입력해주세요.');
       return;
     }
@@ -75,10 +78,26 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user, onU
     // 팀원 코드와 동일한 정규식 사용 (한글 자모음 포함)
     const nicknameRegex = /^[a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ]*$/;
     if (!nicknameRegex.test(tempNickname.trim())) {
+      console.log('닉네임 정규식 에러'); // 디버그 로그
       setErrorMessage('닉네임은 한글, 영문, 숫자만 사용할 수 있습니다.');
       return;
     }
 
+    console.log('검증 통과, Alert 표시 시도'); // 디버그 로그
+
+    // 확인 다이얼로그 표시 (간단한 alert 사용)
+    const isConfirmed = confirm('닉네임을 정말 수정하시겠습니까?');
+    
+    if (isConfirmed) {
+      console.log('사용자가 확인을 선택함');
+      await performNicknameUpdate();
+    } else {
+      console.log('사용자가 취소를 선택함');
+    }
+  };
+
+  // 실제 닉네임 업데이트 수행
+  const performNicknameUpdate = async () => {
     setIsSaving(true);
     setErrorMessage('');
 
@@ -108,7 +127,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user, onU
         onUpdateNickname(tempNickname.trim());
       }
       
-      Alert.alert('성공', '닉네임이 성공적으로 변경되었습니다!');
+      alert('닉네임이 성공적으로 변경되었습니다!');
       
       // 편집 모드만 종료 (모달은 열어둠)
       setIsEditingNickname(false);
@@ -228,10 +247,10 @@ const styles = StyleSheet.create({
   },
   profileModalBox: {
     width: '90%',
-    maxWidth: 400,
+    maxWidth: 380, // 350에서 380으로 증가
     backgroundColor: '#2a2d47',
     borderRadius: 16,
-    padding: 24,
+    padding: 24, // 20에서 24로 증가
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
@@ -285,26 +304,27 @@ const styles = StyleSheet.create({
   nicknameEditContainer: {
     flexDirection: 'column',
     flex: 1,
-    minWidth: 0,
+    minWidth: 0, // 추가: flexbox에서 텍스트 오버플로우 방지
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    minWidth: 0,
+    minWidth: 0, // 추가: flexbox에서 텍스트 오버플로우 방지
   },
   nicknameInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 16, // 18에서 16으로 약간 줄임
     color: '#fff',
     fontFamily: 'neodgm',
     backgroundColor: '#1a1d35',
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10, // 12에서 10으로 줄임
     paddingVertical: 8,
     borderWidth: 1,
     borderColor: '#444',
-    marginRight: 8,
+    marginRight: 6, // 8에서 6으로 줄임
+    minWidth: 0, // 추가: 텍스트 오버플로우 방지
   },
   inputError: {
     borderColor: '#f44336',
