@@ -10,7 +10,8 @@ interface ProfileModalProps {
   onClose: () => void;
   // user 객체의 타입을 좀 더 명확하게 정의하면 좋습니다.
   user: {
-    name?: string;
+    name: string;
+    nickname: string;
     email?: string;
     picture?: string;
   } | null;
@@ -35,7 +36,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user }) =
             style={styles.profileImage} 
           />
           <View style={styles.profileTextContainer}>
-            <Text style={styles.profileName}>{user.name || '이름 없음'}</Text>
+            <Text style={styles.profileName}>{`${user.name} (${user.nickname})` || '이름 없음'}</Text>
             <Text style={styles.profileEmail}>{user.email || '이메일 정보 없음'}</Text>
           </View>
         </View>

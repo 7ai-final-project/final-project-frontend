@@ -5,16 +5,11 @@ import { router } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 import { useKakaoAuth } from '../hooks/useKakaoAuth';
+import { useMicrosoftAuth } from '../hooks/useMicrosoftAuth';
 import { useFonts } from 'expo-font';
 import ProfileModal from '../components/ProfileModal';
 import OptionsModal from '../components/OptionsModal';
-
-// 텍스트가 영어인지 확인하는 헬퍼 함수를 만듭니다. 
- const isEnglish = (text: string): boolean => {
-// 정규식을 사용하여 문자열에 영어 알파벳이 포함되어 있는지 확인합니다.
- const englishRegex = /[a-zA-Z]/;
- return englishRegex.test(text);
- };
+import NicknameInputModal from '../components/main/NicknameInputModal';
 
 const StarryBackground = () => {
   const stars = useRef([...Array(30)].map(() => ({
@@ -50,13 +45,7 @@ const StarryBackground = () => {
       {stars.map((star, index) => (
         <Animated.View
           key={index}
-          style={[
-            styles.star,
-            star.style,
-            {
-              opacity: star.anim,
-            },
-          ]}
+          style={[styles.star, star.style, { opacity: star.anim }]}
         />
       ))}
     </View>
@@ -94,7 +83,6 @@ const MedievalButton: React.FC<MedievalButtonProps> = ({
       onPress();
     }
   };
-
 
   // getButtonSize 함수를 제거하고, 스타일에서 직접 크기를 관리합니다.
   const buttonSizeStyle = size === 'large' ? styles.largeButton : styles.mediumButton;
@@ -176,6 +164,7 @@ export default function HomeScreen() {
   const [loginModalVisible, setLoginModalVisible] = useState(false);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false); // 옵션 모달 상태
   const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [nicknameInputModalVisible, setNicknameInputModalVisible] = useState(false);
   const [backgroundColor, setBackgroundColor] = useState('#0B1021'); // 배경색 상태
 
   const [isBgmOn, setIsBgmOn] = useState(true);
@@ -183,6 +172,7 @@ export default function HomeScreen() {
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1); // 0.9: 작게, 1: 보통, 1.1: 크게
 
   const { user, setUser, loading, handleLogout } = useAuth();
+  const [tempLoginUser, setTempLoginUser] = useState<any>(null);
 
   const backgroundImages = [
     require('../assets/images/main/background_image1.jpg'), 
@@ -194,28 +184,59 @@ export default function HomeScreen() {
     require('../assets/images/main/background_image7.jpg'), 
     require('../assets/images/main/background_image8.jpg'), 
   ];
+
   const handleTermsPress = () => {
-      // 현재 로그인 모달을 먼저 닫고
       setLoginModalVisible(false);
-      // 새로운 페이지로 이동합니다.
       router.push('/legal/terms');
-    };
+  };
 
   const selectedBackgroundImage = useMemo(() => {
     const randomIndex = Math.floor(Math.random() * backgroundImages.length);
     return backgroundImages[randomIndex];
   }, []);
-  const handleSocialLoginSuccess = (loginUser: any) => {
-    setUser(loginUser);
-    setLoginModalVisible(false); // 로그인 모달창 닫기
+
+  // NicknameInputModal에서 닉네임 저장 후 호출될 함수
+  const handleNicknameSaved = async (newNickname: string) => {
+    if(tempLoginUser) {
+      // tempLoginUser 객체의 nickname을 업데이트하고, 최종적으로 user 상태에 저장
+      const updatedUser = { ...tempLoginUser, nickname: newNickname };
+      setUser(updatedUser); 
+      setNicknameInputModalVisible(false); // 닉네임 입력 모달 닫기
+      setLoginModalVisible(false);  // 로그인 모달도 닫기
+      setTempLoginUser(null);       // 임시 사용자 정보 초기화
+    }
   };
 
-  // const { microsoftPromptAsync } = useMicrosoftAuth(handleSocialLoginSuccess);
+  const handleSocialLoginSuccess = (loginUser: any) => {
+    setLoginModalVisible(false); // 일단 로그인 모달 닫기
+
+    if(!loginUser.nickname) {
+      // 닉네임이 없으면 임시 사용자 정보에 저장 후, 닉네임 입력 모달을 띄우기
+      setTempLoginUser(loginUser);
+      setNicknameInputModalVisible(true);
+    } else {
+      // 닉네임이 있으면 바로 user 상태 업데이트
+      setUser(loginUser); 
+    }
+  };
+
+  const handleNicknameInputModalClose = async (saved: boolean) => {
+    setNicknameInputModalVisible(false); // 닉네임 입력 모달 닫기
+
+    if(!saved && tempLoginUser) {
+      // 닉네임이 저장되지 않고 모달이 닫혔으며, 임시 로그인 상태였으면 토큰 제거
+      console.log('닉네임 입력 취소 또는 실패, 토큰 제거를 시도합니다.');
+      await handleLogout();
+      setTempLoginUser(null);       // 임시 사용자 정보 초기화
+      setLoginModalVisible(false);  // 로그인 모달도 닫기
+    }
+  };
+
+  const { microsoftPromptAsync } = useMicrosoftAuth(handleSocialLoginSuccess);
   const { googlePromptAsync } = useGoogleAuth(handleSocialLoginSuccess);
   const { kakaoPromptAsync } = useKakaoAuth(handleSocialLoginSuccess);
 
-
-  if (loading) {
+  if(loading) {
    return (
     <ImageBackground 
       source={selectedBackgroundImage}
@@ -231,7 +252,6 @@ export default function HomeScreen() {
     );
   }
 
-
 return (
 <ImageBackground 
     source={selectedBackgroundImage}
@@ -246,9 +266,9 @@ return (
           
           {/* ★★★ 3. 로그인/설정 버튼 영역을 새로 구성합니다. ★★★ */}
           <View style={styles.headerRight}>
-            {user ? (
+            {user && user.nickname ? (
               <View style={styles.loggedInBox}>
-                <Text style={[styles.loggedInText, { fontSize: 16 * fontSizeMultiplier }]}>{user.name}님</Text>
+                <Text style={[styles.loggedInText, { fontSize: 16 * fontSizeMultiplier }]}>{user.nickname}님</Text>
                 <TouchableOpacity style={styles.profileButton} onPress={() => setProfileModalVisible(true)}>
                   <Ionicons name="person-circle-outline" size={32} color="#F4E4BC" />
                 </TouchableOpacity>
@@ -271,8 +291,7 @@ return (
 
         <View style={styles.main}>
         {/* user 상태가 'null' 또는 'undefined'일 때 (즉, 로그인하지 않았을 때)만 이 안의 내용을 보여줍니다. */}
-          {!user && (
-            
+          {!user || !user.nickname ? (
             <> 
               {/* ★★★ 2. 기존 Text를 TypingText 컴포넌트로 교체합니다! ★★★ */}
               <TypingText 
@@ -292,9 +311,7 @@ return (
                 {/*<Text style={[styles.newsText, { fontSize: 14 * fontSizeMultiplier }]}>- '멀티모드'에 신규 시나리오가 추가되었습니다!</Text>*/}
               </View>
             </>
-          )}
-
-          {user && (
+          ) : (
             <View style={styles.modeContainer}>
               <MedievalButton onPress={() => router.push('/storymode')}>
                 스토리 모드
@@ -389,6 +406,13 @@ return (
           backgroundColor={backgroundColor}
           setBackgroundColor={setBackgroundColor}
         />
+
+      <NicknameInputModal
+        visible={nicknameInputModalVisible}
+        onClose={handleNicknameInputModalClose}
+        onSave={handleNicknameSaved}
+        initialNickname={tempLoginUser?.nickname || ''}
+      />
       </View>
     </ImageBackground> 
   );
