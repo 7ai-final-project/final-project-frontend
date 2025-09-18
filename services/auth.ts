@@ -6,6 +6,7 @@ const BASE_API_URL = 'http://127.0.0.1:8000';
 interface User {
   id: string;
   name: string;
+  nickname: string;
   email?: string;
 }
 
