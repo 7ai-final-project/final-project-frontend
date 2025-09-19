@@ -11,12 +11,17 @@ import {
   ActivityIndicator,
 } from 'react-native';
 
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router'; // This part is correct
 import {
   fetchScenarios,
   fetchDifficulties,
   fetchModes,
   fetchGenres,
-} from '../../../services/api'; 
+  fetchCharactersByTopic,
+  Character as ApiCharacter,
+  checkSingleGameSession,
+} from '../../../services/api';
 
 // --- 인터페이스 정의 ---
 interface Scenario {
@@ -36,6 +41,18 @@ interface Genre {
   id: string;
   name: string;
 }
+interface LoadedSessionData {
+  id: string;
+  scenario: string;
+  difficulty: string;
+  genre: string;
+  mode: string;
+  character: string;
+  choice_history: any;
+  character_history: any;
+  status: string;
+}
+
 
 // --- 색상 및 공통 스타일 변수 정의 ---
 const COLORS = {
@@ -63,20 +80,24 @@ export default function GameStarterScreen() {
   const [isScenarioModalVisible, setScenarioModalVisible] = useState(false);
   const [isGameStartModalVisible, setGameStartModalVisible] = useState(false);
   const [countdown, setCountdown] = useState(5);
-  const [isGameLoading, setGameLoading] = useState(false);
   const countdownIntervalRef = useRef<number | null>(null);
+
+  const [isContinueModalVisible, setContinueModalVisible] = useState(false);
+  const [loadedSession, setLoadedSession] = useState<LoadedSessionData | null>(null);
 
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [difficulties, setDifficulties] = useState<Difficulty[]>([]);
   const [modes, setModes] = useState<Mode[]>([]);
   const [genres, setGenres] = useState<Genre[]>([]);
 
+  const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
+  const [characters, setCharacters] = useState<ApiCharacter[]>([]);
+
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
   const [selectedDifficultyId, setSelectedDifficultyId] = useState<string | null>(null);
   const [selectedModeId, setSelectedModeId] = useState<string | null>(null);
   const [selectedGenreId, setSelectedGenreId] = useState<string | null>(null);
-  
-  // 선택된 옵션의 이름들을 저장할 상태
+
   const [selectedOptions, setSelectedOptions] = useState({
     difficulty: '',
     mode: '',
@@ -111,6 +132,25 @@ export default function GameStarterScreen() {
   }, []);
 
   useEffect(() => {
+    const loadCharacters = async () => {
+      if (selectedScenario?.title) {
+        console.log(`[index.tsx] 시나리오 변경 감지: ${selectedScenario.title}`);
+        try {
+          // fetchCharactersByTopic 함수를 사용하여 시나리오 주제에 맞는 캐릭터 목록을 가져옵니다.
+          const chars = await fetchCharactersByTopic(selectedScenario.title);
+          setCharacters(chars);
+          console.log(`[index.tsx] 캐릭터 ${chars.length}명 로딩 완료`);
+        } catch (error) {
+          console.error("캐릭터 목록 로딩 실패:", error);
+          Alert.alert("오류", "캐릭터 정보를 불러오는 데 실패했습니다.");
+        }
+      }
+    };
+
+    loadCharacters();
+  }, [selectedScenario]);
+
+  useEffect(() => {
     if (isGameStartModalVisible && countdown > 0) {
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = setInterval(() => {
@@ -119,7 +159,6 @@ export default function GameStarterScreen() {
     } else if (countdown === 0) {
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
       setGameStartModalVisible(false);
-      setGameLoading(true);
     }
     return () => {
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
@@ -127,111 +166,219 @@ export default function GameStarterScreen() {
   }, [isGameStartModalVisible, countdown]);
 
   // --- 이벤트 핸들러 ---
-  const handleOpenScenarioModal = (scenario: Scenario) => {
-    setSelectedScenario(scenario);
-    // 모달을 열 때 선택 상태 초기화
+  const handleOpenScenarioModal = async (scenario: Scenario) => {
+    setSelectedScenario(scenario); // 먼저 현재 시나리오를 상태에 저장
+    try {
+      // API 호출하여 저장된 세션 확인
+      const response = await checkSingleGameSession(scenario.id);
+      if (response.status === 200 && response.data) {
+        setLoadedSession(response.data); // 세션 데이터 저장
+        setContinueModalVisible(true); // '이어서 하기' 모달 열기
+      }
+    } catch (error: any) {
+      if (error.response && error.response.status === 404) {
+        // 저장된 게임이 없으면 '새 게임' 설정 모달 열기
+        handleStartNewGame();
+      } else {
+        console.error("세션 확인 중 오류:", error);
+        Alert.alert("오류", "저장된 게임 정보를 확인하는 중 문제가 발생했습니다.");
+      }
+    }
+  };
+
+  const handleStartNewGame = () => {
+    setContinueModalVisible(false); // '이어서 하기' 모달 닫기
     setSelectedDifficultyId(null);
     setSelectedModeId(null);
     setSelectedGenreId(null);
-    setScenarioModalVisible(true);
+    setScenarioModalVisible(true); // 옵션 설정 모달 열기
   };
-  
+
+  const handleContinueGame = () => {
+    if (!loadedSession) return;
+    setContinueModalVisible(false);
+    
+    router.push({
+      pathname: '/game/single/play',
+      params: {
+        topic: loadedSession.scenario,
+        difficulty: loadedSession.difficulty,
+        mode: loadedSession.mode,
+        genre: loadedSession.genre,
+        isLoaded: 'true',
+        loadedSessionData: JSON.stringify(loadedSession), // ✅ session ID 대신 전체 데이터 전달
+      },
+    });
+  };
+
   const handleConfirmScenarioOptions = () => {
     if (!selectedScenario || !selectedDifficultyId || !selectedModeId || !selectedGenreId) {
       Alert.alert("알림", "모든 옵션을 선택해야 합니다.");
       return;
     }
+    
+    // ✅ [핵심 수정] 캐릭터가 아직 로딩되지 않았다면, 여기서 로딩 상태를 확인하고 대기합니다.
+    if (characters.length === 0) {
+      Alert.alert("알림", "캐릭터 정보를 불러오는 중입니다. 잠시만 기다려주세요.");
+      return;
+    }
 
-    // 선택된 옵션의 이름을 찾아 상태에 저장
     const difficultyName = difficulties.find(d => d.id === selectedDifficultyId)?.name || '';
     const modeName = modes.find(m => m.id === selectedModeId)?.name || '';
     const genreName = genres.find(g => g.id === selectedGenreId)?.name || '';
 
-    setSelectedOptions({
-      difficulty: difficultyName,
-      mode: modeName,
-      genre: genreName,
-    });
-
+    // 모든 준비가 완료되면 바로 라우터 이동
     setScenarioModalVisible(false);
-    setGameStartModalVisible(true);
-    setCountdown(5); // 카운트다운 초기화
+    
+    // 이 부분이 핵심입니다. 타이머 모달을 스킵하고 바로 게임 화면으로 이동합니다.
+    router.push({
+      pathname: '/game/single/play',
+      params: {
+        topic: selectedScenario?.title, 
+        difficulty: difficultyName,
+        mode: modeName,
+        genre: genreName,
+        isLoaded: 'false',
+        characters: JSON.stringify(characters),
+      },
+    });
   };
 
   const handleCancelGameStart = () => {
     setGameStartModalVisible(false);
-    // 선택 상태 초기화
     setSelectedScenario(null);
     setSelectedDifficultyId(null);
     setSelectedModeId(null);
     setSelectedGenreId(null);
   };
-  
-  const handleGoBack = () => {
-    setGameLoading(false);
+
+  // ⚠️ `handleGoBack`와 `isGameLoading` 관련 코드를 제거합니다.
+  // const handleGoBack = () => { setGameLoading(false); };
+
+  const handlePrevScenario = () => {
+    setCurrentScenarioIndex((prevIndex) => Math.max(0, prevIndex - 1));
+  };
+
+  const handleNextScenario = () => {
+    setCurrentScenarioIndex((prevIndex) => Math.min(scenarios.length - 1, prevIndex + 1));
   };
   
+  const handleGoBackToScenario = () => {
+    setScenarioModalVisible(false);
+  };
+
+  const handleGoHome = () => {
+    setScenarioModalVisible(false);
+    setGameStartModalVisible(false);
+    setSelectedScenario(null);
+    setSelectedDifficultyId(null);
+    setSelectedModeId(null);
+    setSelectedGenreId(null);
+    setCurrentScenarioIndex(0);
+    
+    // 이 부분이 핵심입니다.
+    router.push('/');
+  };
+
   // --- UI 렌더링 ---
+  // ⚠️ `isGameLoading` 조건부 렌더링 블록을 제거합니다.
 
-  // 게임 로딩 화면
-  if (isGameLoading) {
-    return (
-      <SafeAreaView style={styles.gameLoadingContainer}>
-        <Text style={styles.gameLoadingText}>게임은 아직 구현 중입니다.</Text>
-        <Text style={styles.gameLoadingSubText}>최대한 빨리 완성해서 돌아오겠습니다!</Text>
-        <TouchableOpacity style={styles.goBackButton} onPress={handleGoBack}>
-          <Text style={styles.goBackText}>돌아가기</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
-
-  // 로딩 인디케이터
   if (isLoading) {
     return (
       <SafeAreaView style={styles.center}>
+        {/* 홈 버튼 추가 */}
+        <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
+          <Ionicons name="home" size={24} color={COLORS.subText} />
+        </TouchableOpacity>
         <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>게임 옵션을 불러오는 중...</Text>
       </SafeAreaView>
     );
   }
 
+  const currentScenario = scenarios[currentScenarioIndex];
+  const canGoPrev = currentScenarioIndex > 0;
+  const canGoNext = currentScenarioIndex < scenarios.length - 1;
+
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* 홈 버튼 추가 */}
+      <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
+        <Ionicons name="home" size={24} color={COLORS.subText} />
+      </TouchableOpacity>
       <View style={styles.container}>
         <Text style={styles.mainTitle}>시나리오 선택</Text>
         <Text style={styles.subText}>원하는 시나리오를 선택하여 게임 옵션을 설정하세요.</Text>
 
-        <ScrollView contentContainerStyle={styles.scenarioListContainer}>
-          {scenarios.map((scenario) => (
-            <TouchableOpacity
-              key={scenario.id}
-              style={styles.scenarioCard}
-              onPress={() => handleOpenScenarioModal(scenario)}
-            >
-              <Text style={styles.scenarioTitle}>{scenario.title}</Text>
-              <Text style={styles.scenarioDescription}>{scenario.description}</Text>
+        <View style={styles.scenarioCarousel}>
+          {canGoPrev && (
+            <TouchableOpacity style={styles.arrowButton} onPress={handlePrevScenario}>
+              <Ionicons name="chevron-back" size={40} color={COLORS.primary} />
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          )}
+          {currentScenario && (
+            <TouchableOpacity
+              style={styles.scenarioCard}
+              onPress={() => handleOpenScenarioModal(currentScenario)}
+            >
+              <Text style={styles.scenarioTitle}>{currentScenario.title}</Text>
+              <Text style={styles.scenarioDescription}>{currentScenario.description}</Text>
+            </TouchableOpacity>
+          )}
+          {canGoNext && (
+            <TouchableOpacity style={styles.arrowButton} onPress={handleNextScenario}>
+              <Ionicons name="chevron-forward" size={40} color={COLORS.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* 시나리오 옵션 선택 모달 */}
       <Modal
         transparent={true}
+        visible={isContinueModalVisible}
+        animationType="fade"
+        onRequestClose={() => setContinueModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>{loadedSession?.scenario}</Text>
+            <Text style={styles.modalSubTitle}>지난 줄거리</Text>
+            {/* 줄거리 요약 표시 */}
+            <ScrollView style={styles.summaryBox}>
+              <Text style={styles.summaryText}>
+                {loadedSession?.choice_history?.summary || "저장된 줄거리가 없습니다."}
+              </Text>
+            </ScrollView>
+            <Text style={styles.modalSubTitle}>어떻게 하시겠습니까?</Text>
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.backButton]}
+                onPress={handleStartNewGame}
+              >
+                <Text style={styles.buttonText}>새 게임</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={handleContinueGame}
+              >
+                <Text style={styles.buttonText}>이어서 하기</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        transparent={true}
         visible={isScenarioModalVisible}
         animationType="fade"
-        onRequestClose={() => setScenarioModalVisible(false)}
+        onRequestClose={handleGoBackToScenario}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>{selectedScenario?.title}</Text>
             
             <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
-              <View style={styles.modalScenarioInfo}>
-                <Text style={styles.scenarioDescription}>{selectedScenario?.description}</Text>
-              </View>
-
               <Text style={styles.modalSubTitle}>장르 선택</Text>
               {genres.map((genre) => (
                 <TouchableOpacity
@@ -265,23 +412,32 @@ export default function GameStarterScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+            
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.backButton]}
+                onPress={handleGoBackToScenario}
+              >
+                <Text style={styles.buttonText}>돌아가기</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.modalConfirmButton}
-              onPress={handleConfirmScenarioOptions}
-            >
-              <Text style={styles.confirmText}>선택 완료</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={handleConfirmScenarioOptions}
+              >
+                <Text style={styles.buttonText}>선택 완료</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
 
-      {/* 게임 시작 확인 모달 (타이머) */}
+      {/* 게임 시작 확인 모달 (타이머)
       <Modal
         transparent={true}
         visible={isGameStartModalVisible}
         animationType="fade"
-        onRequestClose={() => handleCancelGameStart()}
+        onRequestClose={handleCancelGameStart}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.countdownModalBox}>
@@ -309,7 +465,7 @@ export default function GameStarterScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </Modal> */}
     </SafeAreaView>
   );
 }
@@ -325,6 +481,13 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  homeButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    padding: 10,
   },
   center: {
     flex: 1,
@@ -343,16 +506,21 @@ const styles = StyleSheet.create({
     color: COLORS.subText,
     marginBottom: 20,
   },
-  scenarioListContainer: {
+  scenarioCarousel: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  arrowButton: {
+    padding: 10,
   },
   scenarioCard: {
     backgroundColor: COLORS.cardBackground,
     padding: 25,
     borderRadius: 12,
-    marginBottom: 15,
-    width: "80%",
+    marginHorizontal: 15,
+    width: "60%",
     borderWidth: 1,
     borderColor: COLORS.border,
     alignItems: 'center',
@@ -392,16 +560,10 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 22,
-    color: COLORS.primary, // 시나리오 제목을 강조
+    color: COLORS.primary,
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: "center",
-  },
-  modalScenarioInfo: {
-    marginBottom: 20,
-    padding: 15,
-    borderRadius: 8,
-    backgroundColor: COLORS.border,
   },
   modalSubTitle: { color: COLORS.subText, marginBottom: 10, fontSize: 16 },
   topicOption: {
@@ -415,15 +577,27 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   topicText: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
-  modalConfirmButton: {
+  modalButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  modalButton: {
     padding: 15,
     borderRadius: 8,
-    backgroundColor: COLORS.button,
-    marginTop: 20,
     alignItems: 'center',
+    flex: 1,
   },
-  confirmText: {
-    color: '#fff',
+  backButton: {
+    backgroundColor: COLORS.subText,
+    marginRight: 10,
+  },
+  confirmButton: {
+    backgroundColor: COLORS.primary,
+    marginLeft: 10,
+  },
+  buttonText: {
+    color: COLORS.background,
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -479,39 +653,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-
-  // 게임 구현 중 화면
-  gameLoadingContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  gameLoadingText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: COLORS.text,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  gameLoadingSubText: {
-    fontSize: 16,
-    color: COLORS.subText,
+  summaryBox: {
+    width: '100%',
+    maxHeight: 150,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 10,
+    padding: 15,
     marginBottom: 20,
-    textAlign: 'center',
-  },
-  goBackButton: {
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: COLORS.button,
-    marginTop: 20,
-    width: '50%',
-    alignItems: 'center',
-  },
-  goBackText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
+    },
+  summaryText: {
+    fontSize: 14,
+    color: '#D4D4D4',
+    lineHeight: 22,
   },
 });

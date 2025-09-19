@@ -64,7 +64,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ roomId, chatSocketRef }) => {
             if (data.type === 'history') {
               const historyMessages = data.messages.map((msg: any) => ({
                 userId: msg.user_id, // 👈 user_id 추가
-                username: msg.user || "system",
+                username: msg.username || "system",
                 message: msg.message || "",
                 timestamp: formatTimestamp(msg.created_at),
               }));
@@ -75,7 +75,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ roomId, chatSocketRef }) => {
               if (newMessageData && newMessageData.message) {
                 const newMessage = {
                   userId: newMessageData.user_id, // 👈 user_id 추가
-                  username: newMessageData.user || "system",
+                  username: newMessageData.username || "system",
                   message: newMessageData.message,
                   timestamp: formatTimestamp(newMessageData.created_at),
                 };
