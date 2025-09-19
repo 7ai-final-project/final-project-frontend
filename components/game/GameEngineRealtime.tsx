@@ -142,6 +142,11 @@ export default function GameEngineRealtime({
     const [isHudModalVisible, setIsHudModalVisible] = useState(false);
     const [hasNewHudInfo, setHasNewHudInfo] = useState(false);
 
+    // ⬇️ 장면 이미지 표시용 상태
+    const [sceneImageUrl, setSceneImageUrl] = useState<string | null>(null);
+    const [imgLoading, setImgLoading] = useState(false);
+
+
     useEffect(() => {
         if (shariBlockData?.update && Object.keys(shariBlockData.update).length > 0) {
             setHasNewHudInfo(true);
@@ -242,6 +247,21 @@ export default function GameEngineRealtime({
                         if (world_update) setWorldState(world_update);
                         if (party_update) setPartyState(party_update);
                         if (shari) setShariBlockData(shari);
+                        // ✅ 이미지 URL 경로를 넓게 커버
+                        const imageUrl =
+                        data?.payload?.image?.url ??
+                        data?.payload?.roundResult?.image?.url ??
+                        data?.payload?.gm_result?.image?.url ??
+                        data?.payload?.result?.image?.url ??
+                        null;
+
+                        console.log("🎨 incoming imageUrl:", imageUrl); // (디버깅 필요시 유지)
+                        if (imageUrl) {
+                            setImgLoading(true);
+                            setSceneImageUrl(imageUrl);
+                        } else {
+                            setSceneImageUrl(null);
+}
                         setTurnWaitingState({ submitted_users: [], total_users: 0 }); // 대기 상태 초기화
                         setPhase("cinematic");
                         phaseAnim.setValue(0);
@@ -810,6 +830,21 @@ export default function GameEngineRealtime({
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
                             <Text style={styles.title}>{title}</Text>
                             {diceResult && <Text style={styles.resultText}>{diceResult}</Text>}
+                            {/* ✅ 여기에 '장면 이미지' 블록을 추가하세요 (ScrollView 위) */}
+                            {sceneImageUrl ? (
+                            <View style={styles.sceneImageWrap}>
+                                <Image
+                                source={{ uri: sceneImageUrl }}
+                                style={styles.sceneImage}
+                                resizeMode="cover"
+                                onLoadStart={() => setImgLoading(true)}
+                                onLoadEnd={() => setImgLoading(false)}
+                                onError={() => setImgLoading(false)}
+                                />
+                                {imgLoading && <ActivityIndicator style={styles.imgSpinner} />}
+                            </View>
+                            ) : null}
+                            {/* ✅ 여기까지 */}
                             <ScrollView style={styles.cinematicBox}>
                                 <Text style={styles.cinematicText}>{cinematicText}</Text>
                             </ScrollView>
@@ -1425,4 +1460,26 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: 'bold',
     },
+    sceneImageWrap: {
+    width: "100%",
+    aspectRatio: 1,      // 1024x1024 기본 가정
+    borderRadius: 12,
+    overflow: "hidden",
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#444",
+    backgroundColor: "#0B1021",
+    },
+    sceneImage: {
+    width: "100%",
+    height: "100%",
+    },
+    imgSpinner: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginLeft: -10,
+    marginTop: -10,
+    },
+
 });
