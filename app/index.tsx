@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, ReactNode } from 'react';
-import { SafeAreaView, View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Pressable, Switch, ViewStyle, TextStyle, ImageBackground } from 'react-native';
+import { useWindowDimensions, View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Pressable, ImageBackground } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
@@ -11,13 +11,27 @@ import ProfileModal from '../components/ProfileModal';
 import OptionsModal from '../components/OptionsModal';
 import NicknameInputModal from '../components/main/NicknameInputModal';
 
+interface MedievalButtonProps {
+  children: ReactNode;
+  onPress?: () => void;
+  disabled?: boolean;
+  size?: 'medium' | 'large';
+  isMobile?: boolean; 
+}
+
+interface TypingTextProps {
+  text: string;
+  speed?: number;
+  style?: any;
+}
+
 const StarryBackground = () => {
   const stars = useRef([...Array(30)].map(() => ({
     anim: new Animated.Value(0),
     style: {
       top: `${Math.random() * 100}%`,
       left: `${Math.random() * 100}%`,
-    } as ViewStyle,
+    } as any,
   }))).current;
 
   useEffect(() => {
@@ -52,41 +66,36 @@ const StarryBackground = () => {
   );
 };
 
-interface MedievalButtonProps {
-  children: ReactNode;
-  onPress?: () => void;
-  disabled?: boolean;
-  size?: 'medium' | 'large';
-}
-
-const MedievalButton: React.FC<MedievalButtonProps> = ({
+function MedievalButton({
   children,
   onPress,
   disabled = false,
   size = 'medium',
-}) => {
+  isMobile = false,
+}: MedievalButtonProps) {
   const [isPressed, setIsPressed] = useState<boolean>(false);
   const scaleAnim = useState(new Animated.Value(1))[0];
-
+  
+  const buttonSizeStyle = isMobile  ? styles.mobileMediumButton : (size === 'large' ? styles.largeButton : styles.mediumButton);
+  const textSizeStyle = isMobile ? styles.mobileMediumButtonText : (size === 'large' ? styles.largeButtonText : styles.mediumButtonText);
+  
   const handlePressIn = (): void => {
     if (!disabled) {
       setIsPressed(true);
       Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true }).start();
     }
   };
+
   const handlePressOut = (): void => {
     setIsPressed(false);
     Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
   };
+
   const handlePress = (): void => {
     if (!disabled && onPress) {
       onPress();
     }
   };
-
-  // getButtonSize 함수를 제거하고, 스타일에서 직접 크기를 관리합니다.
-  const buttonSizeStyle = size === 'large' ? styles.largeButton : styles.mediumButton;
-  const textSizeStyle = size === 'large' ? styles.largeButtonText : styles.mediumButtonText;
 
   return (
     <Pressable 
@@ -108,21 +117,14 @@ const MedievalButton: React.FC<MedievalButtonProps> = ({
       </Animated.View>
     </Pressable>
   );
-};
-
-interface TypingTextProps {
-  text: string;
-  speed?: number; // 타이핑 속도 (ms)
-  style?: TextStyle | TextStyle[];  // 텍스트 스타일을 적용하기 위한 prop
 }
 
-const TypingText: React.FC<TypingTextProps> = ({ text, speed = 50, style }) => {
+function TypingText({ text, speed = 50, style }: TypingTextProps) {
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(true);
 
   useEffect(() => {
-    // 컴포넌트가 나타날 때 타이핑을 시작합니다.
-    setDisplayedText(''); // 텍스트 초기화
+    setDisplayedText(''); 
     setIsTyping(true);
 
     let i = 0;
@@ -132,48 +134,40 @@ const TypingText: React.FC<TypingTextProps> = ({ text, speed = 50, style }) => {
         i++;
       } else {
         clearInterval(typingInterval);
-        setIsTyping(false); // 타이핑이 끝나면 isTyping을 false로 설정
+        setIsTyping(false); 
       }
     }, speed);
 
-    // 컴포넌트가 사라질 때 인터벌을 정리합니다 (메모리 누수 방지)
     return () => clearInterval(typingInterval);
-  }, [text, speed]); // text나 speed prop이 바뀌면 효과를 다시 시작합니다.
+  }, [text, speed]); 
 
   return (
-    // Text 컴포넌트에 전달받은 스타일을 적용합니다.
     <Text style={style}>
       {displayedText}
-      {/* 타이핑 중일 때만 깜빡이는 커서를 보여줍니다. */}
       {isTyping && <Text style={{ opacity: 0.5 }}>|</Text>}
     </Text>
   );
-};
+}
 
 export default function HomeScreen() {
-  // 1. 상태 변수 추가 및 이름 명확화
-  const [fontsLoaded, fontError] = useFonts({
-    'neodgm': require('../assets/fonts/neodgm.ttf'),
-  });
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
 
-   useEffect(() => {
-    if (fontError) throw fontError;
-  }, [fontError]);
-
-
+  const [fontsLoaded, fontError] = useFonts({'neodgm': require('../assets/fonts/neodgm.ttf'),});
+  
   const [loginModalVisible, setLoginModalVisible] = useState(false);
-  const [optionsModalVisible, setOptionsModalVisible] = useState(false); // 옵션 모달 상태
+  const [optionsModalVisible, setOptionsModalVisible] = useState(false); 
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [nicknameInputModalVisible, setNicknameInputModalVisible] = useState(false);
-  const [backgroundColor, setBackgroundColor] = useState('#0B1021'); // 배경색 상태
-
+  const [backgroundColor, setBackgroundColor] = useState('#0B1021'); 
+  
   const [isBgmOn, setIsBgmOn] = useState(true);
   const [isSfxOn, setIsSfxOn] = useState(true);
-  const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1); // 0.9: 작게, 1: 보통, 1.1: 크게
-
+  const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1); 
+  
   const { user, setUser, loading, handleLogout } = useAuth();
   const [tempLoginUser, setTempLoginUser] = useState<any>(null);
-
+  
   const backgroundImages = [
     require('../assets/images/main/background_image1.jpg'), 
     require('../assets/images/main/background_image2.jpg'), 
@@ -184,7 +178,11 @@ export default function HomeScreen() {
     require('../assets/images/main/background_image7.jpg'), 
     require('../assets/images/main/background_image8.jpg'), 
   ];
-
+  
+  useEffect(() => {
+    if (fontError) throw fontError;
+  }, [fontError]);
+  
   const handleTermsPress = () => {
       setLoginModalVisible(false);
       router.push('/legal/terms');
@@ -195,40 +193,35 @@ export default function HomeScreen() {
     return backgroundImages[randomIndex];
   }, []);
 
-  // NicknameInputModal에서 닉네임 저장 후 호출될 함수
   const handleNicknameSaved = async (newNickname: string) => {
     if(tempLoginUser) {
-      // tempLoginUser 객체의 nickname을 업데이트하고, 최종적으로 user 상태에 저장
       const updatedUser = { ...tempLoginUser, nickname: newNickname };
       setUser(updatedUser); 
-      setNicknameInputModalVisible(false); // 닉네임 입력 모달 닫기
-      setLoginModalVisible(false);  // 로그인 모달도 닫기
-      setTempLoginUser(null);       // 임시 사용자 정보 초기화
+      setNicknameInputModalVisible(false); 
+      setLoginModalVisible(false);  
+      setTempLoginUser(null);       
     }
   };
 
   const handleSocialLoginSuccess = (loginUser: any) => {
-    setLoginModalVisible(false); // 일단 로그인 모달 닫기
+    setLoginModalVisible(false); 
 
     if(!loginUser.nickname) {
-      // 닉네임이 없으면 임시 사용자 정보에 저장 후, 닉네임 입력 모달을 띄우기
       setTempLoginUser(loginUser);
       setNicknameInputModalVisible(true);
     } else {
-      // 닉네임이 있으면 바로 user 상태 업데이트
       setUser(loginUser); 
     }
   };
 
   const handleNicknameInputModalClose = async (saved: boolean) => {
-    setNicknameInputModalVisible(false); // 닉네임 입력 모달 닫기
+    setNicknameInputModalVisible(false); 
 
     if(!saved && tempLoginUser) {
-      // 닉네임이 저장되지 않고 모달이 닫혔으며, 임시 로그인 상태였으면 토큰 제거
       console.log('닉네임 입력 취소 또는 실패, 토큰 제거를 시도합니다.');
       await handleLogout();
-      setTempLoginUser(null);       // 임시 사용자 정보 초기화
-      setLoginModalVisible(false);  // 로그인 모달도 닫기
+      setTempLoginUser(null);       
+      setLoginModalVisible(false);  
     }
   };
 
@@ -261,127 +254,104 @@ return (
  <View style={styles.container}>
         <StarryBackground />
         
-        <View style={styles.header}>
-          <Text style={styles.logo}>Story TRPG</Text>
+        <View style={isMobile ? styles.headerMobile : styles.header}>
+          <Text style={isMobile ? styles.logoMobile : styles.logo}>Story TRPG</Text>
           
-          {/* ★★★ 3. 로그인/설정 버튼 영역을 새로 구성합니다. ★★★ */}
-          <View style={styles.headerRight}>
+          <View style={isMobile ? styles.headerRightMobile : styles.headerRight}>
             {user && user.nickname ? (
-              <View style={styles.loggedInBox}>
-                <Text style={[styles.loggedInText, { fontSize: 16 * fontSizeMultiplier }]}>{user.nickname}님</Text>
-                <TouchableOpacity style={styles.profileButton} onPress={() => setProfileModalVisible(true)}>
-                  <Ionicons name="person-circle-outline" size={32} color="#F4E4BC" />
+              <View style={isMobile ? styles.loggedInBoxMobile : styles.loggedInBox}>
+                <Text style={[isMobile ? styles.loggedInTextMobile : styles.loggedInText, { fontSize: (isMobile ? 14 : 16) * fontSizeMultiplier }]}>{user.nickname}님</Text>
+                <TouchableOpacity style={isMobile ? styles.profileButtonMobile : styles.profileButton} onPress={() => setProfileModalVisible(true)}>
+                  <Ionicons name="person-circle-outline" size={isMobile ? 28 : 32} color="#F4E4BC" />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                  <Text style={styles.loginText}>Logout</Text>
+                <TouchableOpacity style={isMobile ? styles.logoutButtonMobile : styles.logoutButton} onPress={handleLogout}>
+                  <Text style={isMobile ? styles.loginTextMobile : styles.loginText}>Logout</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={styles.loginButton} onPress={() => setLoginModalVisible(true)}>
-                <Text style={styles.loginText}>Login</Text>
+              <TouchableOpacity style={isMobile ? styles.loginButtonMobile : styles.loginButton} onPress={() => setLoginModalVisible(true)}>
+                <Text style={isMobile ? styles.loginTextMobile : styles.loginText}>Login</Text>
               </TouchableOpacity>
             )}
-            {/* 톱니바퀴 모양의 설정 버튼을 추가합니다. */}
-            <TouchableOpacity style={styles.settingsButton} onPress={() => setOptionsModalVisible(true)}>
-              <Ionicons name="settings-sharp" size={28} color="#E2C044" />
+            <TouchableOpacity style={isMobile ? styles.settingsButtonMobile : styles.settingsButton} onPress={() => setOptionsModalVisible(true)}>
+              <Ionicons name="settings-sharp" size={isMobile ? 24 : 28} color="#E2C044" />
             </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.main}>
-        {/* user 상태가 'null' 또는 'undefined'일 때 (즉, 로그인하지 않았을 때)만 이 안의 내용을 보여줍니다. */}
+        <View style={isMobile ? styles.mainMobile : styles.main}>
           {!user || !user.nickname ? (
             <> 
-              {/* ★★★ 2. 기존 Text를 TypingText 컴포넌트로 교체합니다! ★★★ */}
               <TypingText 
-                text=" 전전래동화 기반 TRPG 세계에 오신 것을 환영합니다 " 
-                style={[styles.title, { fontSize: 22 * fontSizeMultiplier }]}
-                speed={70} // 타이핑 속도를 조절할 수 있습니다 (숫자가 작을수록 빠름)
+                text="전전래동화 기반 TRPG 세계에 오신 것을 환영합니다" 
+                style={[isMobile ? styles.titleMobile : styles.title, { fontSize: (isMobile ? 18 : 22) * fontSizeMultiplier }]}
+                speed={70} 
               />
-              {/* <TypingText 
-                text="We offer a role-playing game (TRPG) based on Korean old tales. 
-                Choose a story with your friends and embark on an adventure!!" 
-                style={[styles.description, { fontSize: 32 * fontSizeMultiplier, lineHeight: 24 * fontSizeMultiplier }]}
-                speed={30}
-              />*/}
 
-              <View style={styles.newsContainer}>
-                <Text style={styles.newsTitle}>✨ 로그인하여 모험을 시작하세요!✨ </Text>
-                {/*<Text style={[styles.newsText, { fontSize: 14 * fontSizeMultiplier }]}>- '멀티모드'에 신규 시나리오가 추가되었습니다!</Text>*/}
+              <View style={isMobile ? styles.newsContainerMobile : styles.newsContainer}>
+                <Text style={isMobile ? styles.newsTitleMobile : styles.newsTitle}>✨ 로그인하여 모험을 시작하세요!✨ </Text>
               </View>
             </>
           ) : (
-            <View style={styles.modeContainer}>
-              <MedievalButton onPress={() => router.push('/storymode')}>
+            <View style={isMobile ? styles.modeContainerMobile : styles.modeContainer}>
+              <MedievalButton isMobile={isMobile} onPress={() => router.push('/storymode')}>
                 스토리 모드
               </MedievalButton>
-              <MedievalButton onPress={() => router.push('/game/single')}>
+              <MedievalButton isMobile={isMobile} onPress={() => router.push('/game/single')}>
                 싱글 모드
               </MedievalButton>
-              <MedievalButton onPress={() => router.push('/game/multi')}>
+              <MedievalButton isMobile={isMobile} onPress={() => router.push('/game/multi')}>
                 멀티 모드
               </MedievalButton>
             </View>
           )}
         </View>
 
-      {/* 로그인 모달 */}
        <Modal visible={loginModalVisible} animationType="fade" transparent={true} onRequestClose={() => setLoginModalVisible(false)}>
           <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
+            <View style={isMobile ? styles.modalBoxMobile : styles.modalBox}>
               <TouchableOpacity style={styles.closeIcon} onPress={() => setLoginModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#aaa" />
               </TouchableOpacity>
               
-              <Text style={styles.modalTitle}>로그인</Text>
+              <Text style={isMobile ? styles.modalTitleMobile : styles.modalTitle}>로그인</Text>
 
-              {/* Microsoft 로그인 버튼 */}
               <TouchableOpacity
-                style={styles.socialLoginButton}
+                style={[isMobile ? styles.socialLoginButtonMobile : styles.socialLoginButton, styles.socialLoginButton]}
                 onPress={() => microsoftPromptAsync()}
               >
-                {/* 아이콘을 담을 View */}
                 <View style={styles.socialIconContainer}>
                   <Ionicons name="logo-microsoft" size={24} color="#fff" />
                 </View>
-                {/* 텍스트 */}
-                <Text style={styles.socialButtonText}>Microsoft로 로그인</Text>
+                <Text style={[isMobile ? styles.socialButtonTextMobile : styles.socialButtonText, styles.socialButtonText]}>Microsoft로 로그인</Text>
               </TouchableOpacity>
               
-              {/* Google 로그인 버튼 */}
               <TouchableOpacity
-                style={styles.socialLoginButton}
+                style={[isMobile ? styles.socialLoginButtonMobile : styles.socialLoginButton, styles.googleButton]}
                 onPress={() => googlePromptAsync()}
               >
-                {/* 아이콘을 담을 View */}
                 <View style={styles.socialIconContainer}>
-                  <Ionicons name="logo-google" size={24} color="#fff" />
+                  <Ionicons name="logo-google" size={24} color="#333" />
                 </View>
-                {/* 텍스트 */}
-                <Text style={styles.socialButtonText}>Google로 로그인</Text>
+                <Text style={[isMobile ? styles.socialButtonTextMobile : styles.socialButtonText, styles.googleButtonText]}>Google로 로그인</Text>
               </TouchableOpacity>
               
-              {/* Kakao 로그인 버튼 */}
               <TouchableOpacity
-                style={[styles.socialLoginButton, styles.kakaoButton]}
+                style={[isMobile ? styles.socialLoginButtonMobile : styles.socialLoginButton, styles.kakaoButton]}
                 onPress={() => kakaoPromptAsync()}
               >
-                {/* 아이콘을 담을 View */}
                 <View style={[styles.socialIconContainer, styles.kakaoIconContainer]}>
-                  {/* 카카오 로고는 아이콘 폰트에 없으므로, 텍스트로 'K'를 표현합니다. */}
                   <Text style={styles.kakaoIcon}>K</Text>
                 </View>
-                {/* 텍스트 */}
-                <Text style={[styles.socialButtonText, styles.kakaoButtonText]}>Kakao로 로그인</Text>
+                <Text style={[isMobile ? styles.socialButtonTextMobile : styles.socialButtonText, styles.kakaoButtonText]}>Kakao로 로그인</Text>
               </TouchableOpacity>
-                             {/* 이용약관 텍스트 링크 */}
-              <View style={styles.termsContainer}>
-                <Text style={styles.termsText}>로그인은 </Text>
+              <View style={isMobile ? styles.termsContainerMobile : styles.termsContainer}>
+                <Text style={isMobile ? styles.termsTextMobile : styles.termsText}>로그인은 </Text>
                 <TouchableOpacity onPress={handleTermsPress}>
-                  <Text style={[styles.termsText, styles.termsLink]}>이용약관</Text>
+                  <Text style={[isMobile ? styles.termsTextMobile : styles.termsText, styles.termsLink]}>이용약관</Text>
                 </TouchableOpacity>
-                <Text style={styles.termsText}>에 동의하는 것으로 간주됩니다.</Text>
+                <Text style={isMobile ? styles.termsTextMobile : styles.termsText}>에 동의하는 것으로 간주됩니다.</Text>
               </View>
             </View>
           </View>
@@ -393,7 +363,6 @@ return (
           user={user}
         />
 
-      {/* 4. 옵션 모달 UI 구현 */}
       <OptionsModal
           visible={optionsModalVisible}
           onClose={() => setOptionsModalVisible(false)}
@@ -419,15 +388,13 @@ return (
 }
 
 const styles = StyleSheet.create({
-  // --- 기본 레이아웃 ---
   backgroundImage: { flex: 1, width: '100%', height: '100%' },
   container: { flex: 1, paddingTop: 40 },
   main: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
+  mainMobile: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 15 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { color: '#fff', fontSize: 18 , fontFamily: 'neodgm'},
-  vt323Font: {fontFamily: 'VT323'},
-
-header: {
+  header: {
     width: '100%',
     paddingHorizontal: 20,
     paddingVertical: 10, 
@@ -436,34 +403,84 @@ header: {
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
-  // ★★★ 3. 헤더 오른쪽 영역과 설정 버튼 스타일을 추가합니다. ★★★
+  headerMobile: {
+    width: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 8, 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 15,
   },
+  headerRightMobile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   settingsButton: {
     padding: 5,
   },
+  settingsButtonMobile: {
+    padding: 3,
+  },
   logo: { fontSize: 20, fontWeight: 'bold', color: '#E2C044', fontFamily: 'neodgm' },
+  logoMobile: { fontSize: 18, fontWeight: 'bold', color: '#E2C044', fontFamily: 'neodgm' },
   loginButton: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
     backgroundColor: '#7C3AED',
     borderRadius: 8,
+    height: 40,                 
+    justifyContent: 'center',   
+    alignItems: 'center',       
+    alignSelf: 'flex-start',   
   },
-  loginText: { color: '#fff', fontWeight: '600' , fontFamily: 'neodgm' },
+  loginButtonMobile: {
+    paddingHorizontal: 12,
+    backgroundColor: '#7C3AED',
+    borderRadius: 6,
+    height: 36,                
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  loginText: { 
+    color: '#fff',
+    fontWeight: '600',
+    fontFamily: 'neodgm',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loginTextMobile: { color: '#fff', fontWeight: '600' , fontFamily: 'neodgm', fontSize: 14 },
   loggedInBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+  loggedInBoxMobile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
   profileButton: {
     padding: 5,
+  },
+  profileButtonMobile: {
+    padding: 3,
   },
   loggedInText: { 
     color: '#fff', 
     fontSize: 16, 
+    fontFamily: 'neodgm',
+    fontWeight: '600',
+  },
+  loggedInTextMobile: { 
+    color: '#fff', 
+    fontSize: 14, 
     fontFamily: 'neodgm',
     fontWeight: '600',
   },
@@ -473,7 +490,12 @@ header: {
     backgroundColor: '#DC2626',
     borderRadius: 8,
   },
- // --- 프로필 모달 스타일 ---
+  logoutButtonMobile: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#DC2626',
+    borderRadius: 6,
+  },
   profileInfoContainer: {
     width: '100%',
     paddingVertical: 10,
@@ -493,16 +515,14 @@ header: {
     fontFamily: 'neodgm',
     fontWeight: '600',
   },
-  // --- 메인 콘텐츠 (환영 메시지 & 소식 창) ---
   title: { fontSize: 22, fontWeight: 'bold', color: '#F4E1D2', textAlign: 'center', marginBottom: 20 , fontFamily: 'neodgm',},
-  description: { fontSize: 16, fontFamily: 'neodgm', color: '#D1C4E9', textAlign: 'center', lineHeight: 24 },
+  titleMobile: { fontSize: 18, fontWeight: 'bold', color: '#F4E1D2', textAlign: 'center', marginBottom: 15 , fontFamily: 'neodgm',},
   newsContainer: { width: '30%', backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: 15, borderRadius: 10, marginTop: 30, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
+  newsContainerMobile: { width: '90%', backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: 10, borderRadius: 8, marginTop: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
   newsTitle: { color: '#E2C044', fontWeight: 'bold', fontSize: 16, fontFamily: 'neodgm', textAlign: 'center', marginBottom: 5 },
-  newsText: { color: '#D1C4E9' , fontFamily: 'neodgm', textAlign: 'center' },
+  newsTitleMobile: { color: '#E2C044', fontWeight: 'bold', fontSize: 14, fontFamily: 'neodgm', textAlign: 'center', marginBottom: 5 },
   modeContainer: { flexDirection: 'column', marginTop: 30, gap: 20, alignItems: 'center' },
-
-  // ★★★ 여기가 추가된 부분입니다! (중세 버튼 전체) ★★★
-  // --- 중세 버튼 스타일 ---
+  modeContainerMobile: { flexDirection: 'column', marginTop: 20, gap: 15, alignItems: 'center' },
   buttonContainer: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -510,29 +530,29 @@ header: {
   },
   mediumButton: { width: 280, height: 70 },
   largeButton: { width: 320, height: 80 },
+  mobileMediumButton: { width: 220, height: 60 },
   outerBorder: {
     position: 'absolute',
     width: '100%', height: '100%',
-    backgroundColor: '#4a2c1a', // 아주 어두운 나무색
+    backgroundColor: '#4a2c1a', 
     borderRadius: 18,
     borderWidth: 2,
     borderColor: '#2a180e',
   },  
- innerBorder: {
+  innerBorder: {
     position: 'absolute',
     width: '95%', height: '90%',
-    backgroundColor: '#8B4513', // 중간 나무색
+    backgroundColor: '#8B4513', 
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: '#c88a5a', // 밝은 하이라이트
+    borderColor: '#c88a5a', 
   },
   buttonBody: {
     width: '90%', height: '80%',
-    backgroundColor: '#6a381a', // 안쪽 어두운 판
+    backgroundColor: '#6a381a', 
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    // 그림자 효과
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.5,
@@ -540,10 +560,10 @@ header: {
     elevation: 5,
   },
   pressed: {
-    backgroundColor: '#4a2c1a', // 눌렸을 때 더 어두워짐
+    backgroundColor: '#4a2c1a', 
   },
   buttonText: {
-    color: '#f0e6d2', // 밝은 양피지 색
+    color: '#f0e6d2', 
     fontWeight: 'bold',
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 1, height: 1 },
@@ -551,8 +571,7 @@ header: {
   },
   mediumButtonText: { fontSize: 20,  fontFamily: 'neodgm', },
   largeButtonText: { fontSize: 24,  fontFamily: 'neodgm', },
-  
-  // 체인 장식 스타일
+  mobileMediumButtonText: { fontSize: 18, fontFamily: 'neodgm', },
   chain: {
     position: 'absolute',
     width: 8,
@@ -572,52 +591,133 @@ header: {
     backgroundColor: '#c88a5a',
     borderRadius: 4,
   },
-  
-  disabled: {
-    opacity: 0.6,
-  },
-  
-  disabledBody: {
-    backgroundColor: '#696969',
-  },
-  
-  disabledText: {
-    color: '#A0A0A0',
-  },
-
-  // --- 모달 공통 ---
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  modalBox: { width: '85%', maxWidth: 400, backgroundColor: '#2a2d47', borderRadius: 16, padding: 24, alignItems: 'center', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, position: 'relative' },
-  modalTitle: { fontSize: 20,  fontFamily: 'neodgm', fontWeight: 'bold', color: '#fff', marginBottom: 20 },
-  closeIcon: { position: 'absolute', top: 12, right: 12, padding: 6 },
-
-  // --- 로그인 모달 (아이콘 포함) ---
-  loginModalBox: { width: '85%', maxWidth: 400, backgroundColor: '#2a2d47', borderRadius: 16, padding: 24, alignItems: 'center', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, position: 'relative' },
-  socialLoginButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4285f4', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 12, marginBottom: 16, width: '100%', elevation: 2 },
-  kakaoButton: { backgroundColor: '#fee500' },
-  socialIconContainer: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  kakaoIconContainer: { backgroundColor: 'transparent' },
-  kakaoIcon: { fontSize: 20, fontFamily: 'neodgm', fontWeight: 'bold', color: '#3c1e1e' },
-  socialButtonText: { fontSize: 16,  fontFamily: 'neodgm', fontWeight: '600', color: '#fff', flex: 1, textAlign: 'center' },
-  kakaoButtonText: { color: '#3c1e1e' },
-  // --- 이용약관 텍스트 스타일 ---
-  termsContainer: {
-    flexDirection: 'row', // 텍스트들을 가로로 배열
-    marginTop: 20,
-    flexWrap: 'wrap', // 화면이 좁을 경우 줄바꿈 허용
+  modalOverlay: { 
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
+    alignItems: 'center'
+  },
+  modalBox: { 
+    width: '85%',
+    maxWidth: 400,
+    backgroundColor: '#2a2d47',
+    borderRadius: 16, padding: 24,
+    alignItems: 'center',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    position: 'relative'
+  },
+  modalBoxMobile: {
+     width: '95%',
+     maxWidth: 350,
+     backgroundColor: '#2a2d47',
+     borderRadius: 12,
+     padding: 20,
+     alignItems: 'center',
+     elevation: 10,
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 2 },
+     shadowOpacity: 0.25,
+     shadowRadius: 3.84,
+     position: 'relative'
+  },
+  modalTitle: { fontSize: 20,  fontFamily: 'neodgm', fontWeight: 'bold', color: '#fff', marginBottom: 20 },
+  modalTitleMobile: { fontSize: 18,  fontFamily: 'neodgm', fontWeight: 'bold', color: '#fff', marginBottom: 15 },
+  closeIcon: { position: 'absolute', top: 12, right: 12, padding: 6 },
+  socialLoginButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4285f4',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginBottom: 12,
+    width: '100%',
+    height: 48,
+    elevation: 2,
+  },
+  socialLoginButtonMobile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4285f4',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    marginBottom: 10,
+    width: '100%',
+    height: 44,
+    elevation: 2,
+  },
+  googleButton: {
+    backgroundColor: '#fff',
+  },
+  googleButtonText: {
+    color: '#333',
+  },
+  kakaoButton: {
+    backgroundColor: '#fee500',
+  },
+  socialIconContainer: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  kakaoIconContainer: { backgroundColor: 'transparent' },
+  kakaoIcon: {
+    fontSize: 24,
+    fontFamily: 'neodgm',
+    fontWeight: 'bold',
+    color: '#3c1e1e',
+  },
+  socialButtonText: {
+    fontSize: 15,
+    fontFamily: 'neodgm',
+    fontWeight: '600',
+    color: '#fff',
+  },
+  socialButtonTextMobile: {
+    fontSize: 13,
+    fontFamily: 'neodgm',
+    fontWeight: '600',
+    color: '#fff',
+  },
+  kakaoButtonText: {
+    color: '#3c1e1e',
+  },
+  termsContainer: {
+    flexDirection: 'row', 
+    marginTop: 20,
+    flexWrap: 'wrap', 
+    justifyContent: 'center',
+  },
+  termsContainerMobile: {
+    flexDirection: 'row', 
+    marginTop: 15,
+    flexWrap: 'wrap', 
+    justifyContent: 'center',
+    paddingHorizontal: 10,
   },
   termsText: {
     color: '#aaa',
-    fontSize: 16, // Dongle 폰트에 맞게 조정
-    fontFamily: 'Dongle',
+    fontSize: 14, 
+    fontFamily: 'neodgm',
+  },
+  termsTextMobile: {
+    color: '#aaa',
+    fontSize: 12, 
+    fontFamily: 'neodgm',
   },
   termsLink: {
-    color: '#61dafb', // 링크 색상
-    textDecorationLine: 'underline', // 밑줄
+    color: '#61dafb', 
+    textDecorationLine: 'underline', 
   },
-
-    // --- 배경 효과 ---
   starContainer: { position: 'absolute', width: '100%', height: '100%', zIndex: 0 },
   star: { position: 'absolute', width: 2, height: 2, backgroundColor: 'white', borderRadius: 1 },
 });
