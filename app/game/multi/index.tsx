@@ -189,8 +189,16 @@ export default function MultiModeLobby() {
     <SafeAreaView style={styles.container}>
       {/* ... (헤더 및 FlatList는 이전과 거의 동일) ... */}
       <View style={styles.headerContainer}>
+        {/* 왼쪽: 홈으로 이동 아이콘 */}
+        <TouchableOpacity style={styles.headerIcon} onPress={() => router.push('/')}>
+          <Ionicons name="arrow-back" size={32} color="#61dafb" />
+        </TouchableOpacity>
+        
+        {/* 중앙: 타이틀 */}
         <Text style={styles.header}>멀티 모드 로비</Text>
-        <TouchableOpacity style={styles.createRoomButton} onPress={() => setCreateRoomModalVisible(true)}>
+
+        {/* 오른쪽: 방 만들기 아이콘 */}
+        <TouchableOpacity style={styles.headerIcon} onPress={() => setCreateRoomModalVisible(true)}>
           <Ionicons name="add-circle" size={32} color="#61dafb" />
         </TouchableOpacity>
       </View>
@@ -264,9 +272,17 @@ export default function MultiModeLobby() {
 const styles = StyleSheet.create({
   // ... (기존 스타일)
   container: { flex: 1, backgroundColor: "#0B1021", paddingTop: 20 },
-  headerContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, marginBottom: 10 },
+  headerContainer: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", // 아이템들을 양쪽 끝으로 분산
+    alignItems: "center", 
+    paddingHorizontal: 20, 
+    marginBottom: 10 
+  },
   header: { fontSize: 28, fontWeight: "bold", color: "#E2C044" },
-  createRoomButton: { padding: 5 },
+  headerIcon: {
+    padding: 5,
+  },
   emptyListText: { color: "#D1C4E9", fontSize: 16, textAlign: "center", marginTop: 50 },
   roomCard: { padding: 15, marginHorizontal: 20, marginVertical: 8, backgroundColor: "#1E293B", borderRadius: 10, borderColor: "#334155", borderWidth: 1 },
   roomCardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },

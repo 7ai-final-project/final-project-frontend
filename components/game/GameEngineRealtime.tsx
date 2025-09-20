@@ -842,12 +842,16 @@ export default function GameEngineRealtime({
                                 onError={() => setImgLoading(false)}
                                 />
                                 {imgLoading && <ActivityIndicator style={styles.imgSpinner} />}
+
+                                <ScrollView style={styles.cinematicBox}>
+                                    <Text style={styles.cinematicText}>{cinematicText}</Text>
+                                </ScrollView>
                             </View>
-                            ) : null}
-                            {/* ✅ 여기까지 */}
-                            <ScrollView style={styles.cinematicBox}>
-                                <Text style={styles.cinematicText}>{cinematicText}</Text>
-                            </ScrollView>
+                            ) : (
+                                <ScrollView style={styles.cinematicBox_noImage}>
+                                    <Text style={styles.cinematicText}>{cinematicText}</Text>
+                                </ScrollView>
+                            )}
 
                             <TouchableOpacity
                                 style={styles.secondary}
@@ -1234,6 +1238,17 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     cinematicBox: {
+        position: 'absolute',      // ✅ 이미지 위에 띄우기 위해 절대 위치로 설정
+        bottom: 0,                 // ✅ 이미지 하단에 배치
+        left: 0,
+        right: 0,
+        maxHeight: '40%',          // ✅ 자막 박스의 최대 높이를 이미지의 40%로 제한
+        backgroundColor: 'rgba(0, 0, 0, 0.7)', // ✅ 반투명한 배경으로 자막 가독성 확보
+        padding: 16,
+        borderTopLeftRadius: 12,   // ✅ 위쪽 모서리만 둥글게 처리하여 이미지와 자연스럽게 연결
+        borderTopRightRadius: 12,
+    },
+    cinematicBox_noImage: {        // ✅ 이미지가 없을 때 사용할 기존 스타일
         flex: 1,
         marginTop: 16,
         backgroundColor: "#222736",
@@ -1241,11 +1256,6 @@ const styles = StyleSheet.create({
         padding: 16,
         borderWidth: 1,
         borderColor: "#444",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 4,
     },
     cinematicText: {
         color: "#E0E0E0",
@@ -1461,7 +1471,8 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     sceneImageWrap: {
-    width: "100%",
+    width: "40%",
+    alignSelf: 'center',
     aspectRatio: 1,      // 1024x1024 기본 가정
     borderRadius: 12,
     overflow: "hidden",

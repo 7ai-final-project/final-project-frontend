@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   TextInput,
+  ImageBackground,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { storage } from "../../../../services/storage";
@@ -69,10 +70,19 @@ export default function RoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const roomId = id as string;
 
+  const backgroundImages = [
+    require('../../../../assets/images/game/multi_mode/background/gameroom_image_1.png'),
+    require('../../../../assets/images/game/multi_mode/background/gameroom_image_2.png'),
+  ];
+
+  const [selectedBackgroundImage, setSelectedBackgroundImage] = useState(
+    backgroundImages[Math.floor(Math.random() * backgroundImages.length)]
+  );
+
   // --- 상태 및 Ref 선언 ---
   const [room, setRoom] = useState<RoomType | null>(null);
   const roomRef = useRef<RoomType | null>(null);
-  
+
   const [characters, setCharacters] = useState<Character[]>([]);
   const charactersRef = useRef<Character[]>([]);
 
@@ -93,7 +103,8 @@ export default function RoomScreen() {
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
   const [notificationModalContent, setNotificationModalContent] = useState({ title: "", message: "" });
 
- const [isGameLoaded, setIsGameLoaded] = useState(false);
+  const [isGameLoaded, setIsGameLoaded] = useState(false);
+  const [isLoadingGame, setIsLoadingGame] = useState(false);
   const countdownIntervalRef = useRef<number | null>(null);
   const isStartingRef = useRef(false);
   const chatSocketRef = useRef<WebSocket | null>(null);
@@ -129,34 +140,42 @@ export default function RoomScreen() {
       ws.onclose = () => setWsMsg("🔌 연결 종료");
       ws.onerror = (e) => console.error("WebSocket Error:", e);
 
+      // ✨ 해결책: 메시지 처리 로직을 명확하게 분리하여 수정
       ws.onmessage = (ev: MessageEvent) => {
         const data = JSON.parse(ev.data);
-        const message = data.message;
 
-        if (data.type === "room_broadcast" && message?.type === "options_update") {
-            const { options } = message; // 'data'가 아닌 'message'에서 옵션을 가져옵니다.
-            setSelectedScenarioId(options.scenarioId);
-            setSelectedGenreId(options.genreId);
-            setSelectedDifficultyId(options.difficultyId);
-            setSelectedModeId(options.modeId);
-            return;
-        }
-
+        // 1. type이 최상위에 있는 메시지를 먼저 처리합니다.
         if (data.type === "room_state") {
           if (roomRef.current?.status === 'play') {
             fetchRoomDetail(roomId).then((res) => setRoom(res.data));
           } else {
             setRoom((prevRoom) => {
               if (!prevRoom) return null;
+              // 참가자 목록(selected_by_room)을 새 데이터로 교체합니다.
               return { ...prevRoom, selected_by_room: data.selected_by_room };
             });
           }
-          return;
+          return; // 처리가 끝났으므로 함수 종료
         }
 
-        if (data.type === "room_broadcast" && message?.event === "game_start") {
+        // 2. 'room_broadcast' 타입 내부에 실제 내용이 있는 메시지를 처리합니다.
+        if (data.type === "room_broadcast") {
+          const message = data.message;
+          if (!message) return;
+
+          // 옵션 업데이트 처리
+          if (message.type === "options_update") {
+            const { options } = message;
+            setSelectedScenarioId(options.scenarioId);
+            setSelectedGenreId(options.genreId);
+            setSelectedDifficultyId(options.difficultyId);
+            setSelectedModeId(options.modeId);
+          }
+          // 게임 시작 처리
+          else if (message.event === "game_start") {
             if (isStartingRef.current) return;
             isStartingRef.current = true;
+            // ... (기존 게임 시작 카운트다운 로직은 변경 없음) ...
             setWsMsg("⏳ 게임 카운트다운...");
             setIsCountdownModalVisible(true);
             const gameOptions = {
@@ -181,9 +200,9 @@ export default function RoomScreen() {
               characters: JSON.stringify(message.characters),
               participants: JSON.stringify(message.participants),
               isOwner: String(roomRef.current?.owner === user?.id),
-              isLoaded: 'false', // '새 게임 시작'이므로 항상 false입니다. 불러오기 로직은 분리되어 있습니다.
-              loadedSessionData: undefined, // 새 게임이므로 불러온 데이터는 없습니다.
-          };
+              isLoaded: 'false', 
+              loadedSessionData: undefined,
+            };
             
             countdownIntervalRef.current = setInterval(() => {
               secondsLeft -= 1;
@@ -203,14 +222,14 @@ export default function RoomScreen() {
                 setCountdownModalContent("");
               }
             }, 1000);
-            return;
-        }
-
-        if (data.type === "room_deleted") {
-          Alert.alert("알림", "방이 삭제되어 로비로 이동합니다.", [
-            { text: "확인", onPress: () => router.replace("/game/multi") },
-          ]);
-          return;
+          }
+          // 방 삭제 처리 (기존 코드의 버그 수정)
+          else if (message.type === "room_deleted") {
+            Alert.alert("알림", "방이 삭제되어 로비로 이동합니다.", [
+              { text: "확인", onPress: () => router.replace("/game/multi") },
+            ]);
+          }
+          return; // 처리가 끝났으므로 함수 종료
         }
       };
     } catch (error) {
@@ -246,6 +265,17 @@ export default function RoomScreen() {
   const selectedModeName = useMemo(() => modes.find(m => m.id === selectedModeId)?.name, [modes, selectedModeId]);
   const selectedGenreName = useMemo(() => genres.find(g => g.id === selectedGenreId)?.name, [genres, selectedGenreId]);
 
+  const startGameDisabledReason = useMemo(() => {
+    if (!isOwner) return null;
+    if (room?.status !== 'waiting') return "게임이 이미 진행 중입니다.";
+    if (!selectedScenarioId || !selectedDifficultyId || !selectedModeId || !selectedGenreId) {
+      return "모든 게임 옵션을 선택해야 합니다.";
+    }
+    if (!allReady) return "모든 플레이어가 준비를 완료해야 합니다.";
+    if (characters.length === 0) return "캐릭터 정보를 불러오는 중입니다...";
+    return null;
+  }, [isOwner, allReady, room?.status, selectedScenarioId, selectedDifficultyId, selectedModeId, selectedGenreId, characters.length]);
+
   useEffect(() => {
     const loadGameOptions = async () => {
       try {
@@ -274,16 +304,27 @@ export default function RoomScreen() {
       }
     };
 
+    
     const initialize = async () => {
       await loadGameOptions();
-      if (!roomId) return;
+      if (!roomId || !user) return;
+
       try {
+        // 1. 방 정보를 먼저 조회하여 비공개 방인지 확인합니다.
         const roomDetails = await fetchRoomDetail(roomId);
+        
         if (roomDetails.data.room_type === 'private') {
+          // 비공개 방이면, 비밀번호 모달을 띄웁니다.
+          // setRoom은 비밀번호 입력 후 handleJoinPrivateRoom에서 처리됩니다.
+          setRoom(roomDetails.data); // 모달에 방 정보를 표시하기 위해 먼저 설정
           setIsPasswordModalVisible(true);
         } else {
-          const res = await joinRoom(roomId);
-          setRoom(res.data);
+          // 2. ✨ 공개 방이면, 이전처럼 joinRoom의 응답을 직접 사용합니다.
+          // 이 방식이 가장 안정적이고 확실합니다.
+          const joinRes = await joinRoom(roomId);
+          setRoom(joinRes.data);
+
+          // 3. 방 상태가 성공적으로 설정된 후에 웹소켓을 연결합니다.
           connectWebSocket();
         }
       } catch (error) {
@@ -304,6 +345,12 @@ export default function RoomScreen() {
   
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { charactersRef.current = characters; }, [characters]);
+  useEffect(() => {
+    if (room) {
+      const randomImage = backgroundImages[Math.floor(Math.random() * backgroundImages.length)];
+      setSelectedBackgroundImage(randomImage);
+    }
+  }, [room?.id]);
 
   useEffect(() => {
     const loadCharacters = async () => {
@@ -357,6 +404,7 @@ export default function RoomScreen() {
 
   const handleLoadGame = async () => {
     if (!roomId) return;
+    setIsLoadingGame(true);
     try {
       const response = await fetchMySession(roomId);
       const sessionData = response.data;
@@ -392,7 +440,7 @@ export default function RoomScreen() {
 
           setNotificationModalContent({
             title: "불러오기 성공",
-            message: "저장된 게임 설정이 적용되었습니다.\n'준비 완료' 후 게임을 시작하세요.",
+            message: "저장된 게임 설정이 적용되었습니다.\n모든 참가자가 '준비 완료'하면 게임을 시작할 수 있습니다.",
           });
 
           setIsGameLoaded(true);
@@ -417,8 +465,10 @@ export default function RoomScreen() {
         message: "저장된 게임을 불러오는 데 실패했거나 기록이 없습니다.",
       });
       setLoadedSession(null);
+    } finally {
+      setIsLoadingGame(false);
+      setIsNotificationModalVisible(true);
     }
-    setIsNotificationModalVisible(true);
   };
 
   const onStartGame = () => {
@@ -488,9 +538,15 @@ export default function RoomScreen() {
                 <Text style={styles.desc}>{room.description}</Text>
                 <View style={styles.divider} />
                 <Text style={styles.status}><Ionicons name="game-controller" size={14} color="#ccc" /> 상태: {room.status}</Text>
+              </View>
+
+              {/* 개선 사항: 게임 옵션을 별도의 그룹으로 묶어 가독성 향상 */}
+              <View style={styles.optionsBox}>
+                <Text style={styles.optionsBoxTitle}>게임 설정</Text>
                 <Text style={styles.status}><Ionicons name="book" size={14} color="#ccc" /> 주제: {selectedScenarioTitle || "선택되지 않음"}</Text>
-                <Text style={styles.status}><Ionicons name="color-palette" size={14} color="#ccc" /> 장르: {selectedGenreName || "선택되지 않음"}</Text>
-                <Text style={styles.status}><Ionicons name="star" size={14} color="#ccc" /> 난이도: {selectedDifficultyName || "선택되지 않음"}</Text>
+                {/* 개선 사항: 아이콘에 의미에 맞는 색상 부여 */}
+                <Text style={styles.status}><Ionicons name="color-palette" size={14} color="#A78BFA" /> 장르: {selectedGenreName || "선택되지 않음"}</Text>
+                <Text style={styles.status}><Ionicons name="star" size={14} color="#E2C044" /> 난이도: {selectedDifficultyName || "선택되지 않음"}</Text>
                 <Text style={styles.status}><Ionicons name="swap-horizontal" size={14} color="#ccc" /> 방식: {selectedModeName || "선택되지 않음"}</Text>
               </View>
 
@@ -506,10 +562,20 @@ export default function RoomScreen() {
                     <Text style={styles.gameOptionButtonText}>옵션 설정</Text>
                   </TouchableOpacity>
 
-                  {/* ✅ [추가] 불러오기 버튼 */}
-                  <TouchableOpacity style={styles.gameOptionButton} onPress={handleLoadGame}>
-                    <Ionicons name="cloud-download" size={20} color="#E2C044" />
-                    <Text style={styles.gameOptionButtonText}>불러오기</Text>
+                  <TouchableOpacity 
+                    style={[styles.gameOptionButton, isLoadingGame && styles.btnDisabled]} 
+                    onPress={handleLoadGame}
+                    disabled={isLoadingGame}
+                  >
+                    {/* 개선 사항: 불러오기 버튼에 로딩 인디케이터 적용 */}
+                    {isLoadingGame ? (
+                      <ActivityIndicator size="small" color="#E2C044" />
+                    ) : (
+                      <>
+                        <Ionicons name="cloud-download" size={20} color="#E2C044" />
+                        <Text style={styles.gameOptionButtonText}>불러오기</Text>
+                      </>
+                    )}
                   </TouchableOpacity>
                 </View>
               )}
@@ -525,10 +591,21 @@ export default function RoomScreen() {
                 </TouchableOpacity>
                 
                 {isOwner && room.status === 'waiting' && (
-                  <TouchableOpacity style={[styles.btn, styles.startBtn, !canStart && styles.btnDisabled]} onPress={isGameLoaded ? onStartLoadedGame : onStartGame} disabled={!canStart}>
-                    <Ionicons name="play-sharp" size={22} color="#fff" />
-                    <Text style={styles.btnText}>게임 시작</Text>
-                  </TouchableOpacity>
+                  <View style={{ alignItems: 'center' }}>
+                    <TouchableOpacity 
+                      style={[styles.btn, styles.startBtn, !canStart && styles.btnDisabled]} 
+                      onPress={isGameLoaded ? onStartLoadedGame : onStartGame} 
+                      disabled={!canStart}
+                    >
+                      <Ionicons name="play-sharp" size={22} color="#fff" />
+                      {/* 개선 사항: isGameLoaded 상태에 따라 버튼 텍스트 변경 */}
+                      <Text style={styles.btnText}>{isGameLoaded ? '불러온 게임 시작' : '새 게임 시작'}</Text>
+                    </TouchableOpacity>
+                    {/* 개선 사항: 버튼이 비활성화된 경우, 그 이유를 텍스트로 표시 */}
+                    {startGameDisabledReason && (
+                      <Text style={styles.disabledReasonText}>{startGameDisabledReason}</Text>
+                    )}
+                  </View>
                 )}
                 {isOwner && room.status === 'play' && (
                   <TouchableOpacity style={[styles.btn, styles.endBtn]} onPress={onEndGame}>
@@ -551,7 +628,11 @@ export default function RoomScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-              <View style={styles.participantsBox}>
+              <ImageBackground 
+                source={selectedBackgroundImage}
+                resizeMode="cover"
+                style={styles.participantsBox}
+                imageStyle={styles.participantsBoxImage}>
                 {room.selected_by_room?.map((p) => (
                   <View key={p.id} style={styles.participantRow}>
                     <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -564,7 +645,7 @@ export default function RoomScreen() {
                     </View>
                   </View>
                 ))}
-              </View>
+              </ImageBackground>
               <Text style={styles.wsMsg}>{wsMsg}</Text>
             </View>
           </View>
@@ -636,11 +717,30 @@ const styles = StyleSheet.create({
     borderColor: "#2C344E",
     gap: 8,
   },
+  // 개선 사항: 옵션 그룹을 위한 새로운 스타일 추가
+  optionsBox: {
+    backgroundColor: "#161B2E",
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2C344E",
+    gap: 10,
+  },
+  optionsBoxTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#E0E0E0',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2C344E',
+    paddingBottom: 8,
+  },
   title: { fontSize: 24, fontWeight: "bold", color: "#E0E0E0", marginBottom: 4 },
   desc: { fontSize: 14, color: "#A0A0A0", marginBottom: 12, fontStyle: 'italic' },
   divider: { height: 1, backgroundColor: '#2C344E', marginVertical: 8 },
-  status: { fontSize: 14, color: "#ccc", alignItems: 'center' },
+  status: { fontSize: 15, color: "#ccc", alignItems: 'center', gap: 8 }, // 개선 사항: 폰트 크기 및 gap 조정
   gameOptionButton: {
+    flex: 1, // 개선 사항: ownerButtonRow 내에서 버튼이 공간을 균등하게 차지하도록 flex: 1 추가
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -658,6 +758,7 @@ const styles = StyleSheet.create({
   },
   buttonContainer: { flex: 1, justifyContent: 'flex-end', gap: 12 },
   btn: {
+    width: '100%',
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -676,6 +777,14 @@ const styles = StyleSheet.create({
   startBtn: { backgroundColor: "#7C3AED" },
   endBtn: { backgroundColor: '#E53E3E' },
   btnDisabled: { backgroundColor: "#4A5568", opacity: 0.7 },
+  // 개선 사항: '게임 시작' 버튼 비활성화 이유 텍스트 스타일 추가
+  disabledReasonText: {
+    color: '#FBBF24', // 눈에 띄는 경고 색상
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: 'center',
+    fontWeight: '600'
+  },
   participantsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -692,12 +801,18 @@ const styles = StyleSheet.create({
   },
   participantsBox: {
     flex: 1,
-    backgroundColor: "#161B2E",
     padding: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#2C344E",
     gap: 8,
+    overflow: "hidden",
+    minHeight: 200,
+  },
+  participantsBoxImage: {
+    opacity: 0.5,
+    width: '100%',
+    height: '100%',
   },
   participantRow: {
     flexDirection: "row",
@@ -748,7 +863,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: "center",
   },
-  modalSubTitle: { color: '#A0A0A0', marginBottom: 10, fontSize: 16 },
+  modalSubTitle: { color: '#A0A0A0', marginBottom: 10, fontSize: 16, marginTop: 10 }, // 개선 사항: 상단 마진 추가
   topicOption: {
     padding: 12,
     borderRadius: 8,
@@ -789,7 +904,7 @@ const styles = StyleSheet.create({
   headerButtonContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10, // 버튼 사이의 간격
+    gap: 10,
   },
   headerIconBtn: {
     padding: 8,
@@ -800,12 +915,12 @@ const styles = StyleSheet.create({
   },
   leaveButton: {
     position: 'absolute',
-    top: 50, // 상단 safe area에 맞춰 조정 가능
+    top: 50,
     right: 20,
-    zIndex: 10, // 다른 요소들 위에 보이도록 z-index 설정
+    zIndex: 10,
     padding: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(22, 27, 46, 0.8)', // 반투명 배경
+    backgroundColor: 'rgba(22, 27, 46, 0.8)',
   },
   leaveModalBox: {
     width: "30%",
@@ -855,17 +970,16 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
   },
   confirmButton: {
-    backgroundColor: '#E53E3E', // 빨간색 계열
+    backgroundColor: '#E53E3E',
   },
   cancelButton: {
-    backgroundColor: '#4A5568', // 회색 계열
+    backgroundColor: '#4A5568',
   },
   ownerButtonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 10,
   },
-  // ✅ [추가] 알림 모달을 위한 스타일들
   notificationModalBox: {
     width: "30%",
     backgroundColor: "#161B2E",

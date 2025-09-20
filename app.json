@@ -16,7 +16,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.team7aifinal06.frontend"
     },
     "web": {
       "bundler": "metro",
@@ -39,6 +40,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e842f95a-1eb1-449f-9a7c-6f9ec96c024e"
+      }
     }
   }
 }
