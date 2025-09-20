@@ -1,12 +1,10 @@
-// ✨ 이 코드로 play.tsx 파일 전체를 교체하세요 ✨
-
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet, useWindowDimensions, Platform } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import SingleModeGame from "../../components/game/SingleModeGame";
+import StoryModeGame from "../../components/game/StoryModeGame";
 import api from "../../services/api";
+import { useFonts } from "expo-font";
 
-// SceneData 타입을 여기서도 정의해줍니다. (SingleModeGame과 타입을 맞추기 위함)
 interface SceneData {
   scene: string;
   choices: string[];
@@ -17,31 +15,34 @@ interface SceneData {
   image_path: string;
 }
 
-export default function CharacterScreen() {
-  // 1. useLocalSearchParams에서 story와 함께 should_continue를 받습니다.
+export default function StorySelectorScreen() {
+  const { width, height } = useWindowDimensions();
+  const isMobile = width < 768;
+  const isLandscape = width > height;
+
+  const [fontsLoaded, fontError] = useFonts({
+    neodgm: require("../../assets/fonts/neodgm.ttf"),
+  });
+
   const { story, should_continue } = useLocalSearchParams();
+  const [initialHistory, setInitialHistory] = useState<SceneData[] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 2. gameData 대신 initialHistory 라는 이름으로 바꾸고, 타입을 SceneData 배열로 지정합니다.
-  const [initialHistory, setInitialHistory] = useState<SceneData[] | null>(
-    null
-  );
-  const [isLoading, setIsLoading] = useState(true); // 로딩 상태는 항상 true로 시작
+  useEffect(() => {
+    if (fontError) throw fontError;
+  }, [fontError]);
 
-  // 3. handleStartGame 함수가 should_continue 값을 받도록 수정합니다.
   const handleStartGame = useCallback(
     async (title: string, continueGame: string) => {
       try {
         const response = await api.post("storymode/story/start/", {
           story_title: title,
-          should_continue: continueGame, // 👈 백엔드로 '이어하기' 여부를 전달합니다.
+          should_continue: continueGame,
         });
 
-        // 4. 백엔드의 응답에 따라 initialHistory 상태를 설정합니다.
         if (response.data.saved_history) {
-          // '이어하기' 데이터가 온 경우
           setInitialHistory(response.data.saved_history);
         } else if (response.data.initial_data) {
-          // '새로 시작' 데이터가 온 경우 (배열 형태로 만들어줍니다)
           setInitialHistory([response.data.initial_data]);
         }
       } catch (error: any) {
@@ -54,30 +55,65 @@ export default function CharacterScreen() {
     []
   );
 
-  // 5. useEffect에서 should_continue 값도 확인하고 handleStartGame에 전달합니다.
   useEffect(() => {
     if (story && should_continue) {
       handleStartGame(story as string, should_continue as string);
     }
   }, [story, should_continue, handleStartGame]);
 
-  // 6. 렌더링 부분을 initialHistory 기준으로 수정합니다.
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
+  // 가로 모드일 때 사용할 컨테이너 스타일
+  const getContainerStyle = () => {
+    if (isMobile && isLandscape) {
+      return styles.containerMobileLandscape;
+    }
+    if (isMobile) {
+      return styles.containerMobile;
+    }
+    return styles.container;
+  };
+
+  // 가로 모드일 때 사용할 텍스트 스타일
+  const getLoadingTextStyle = () => {
+    if (isMobile && isLandscape) {
+      return styles.loadingTextMobileLandscape;
+    }
+    if (isMobile) {
+      return styles.loadingTextMobile;
+    }
+    return styles.loadingText;
+  };
+
+  const getErrorTextStyle = () => {
+    if (isMobile && isLandscape) {
+      return styles.errorTextMobileLandscape;
+    }
+    if (isMobile) {
+      return styles.errorTextMobile;
+    }
+    return styles.errorText;
+  };
+
   return (
-    <View style={styles.container}>
-      {isLoading ? ( // isLoading이 true일 때 먼저 로딩 화면을 보여줍니다.
+    <View style={getContainerStyle()}>
+      {isLoading ? (
         <View style={styles.content}>
           <ActivityIndicator size="large" color="#61dafb" />
-          <Text style={styles.loadingText}>게임을 불러오는 중...</Text>
+          <Text style={getLoadingTextStyle()}>
+            게임을 불러오는 중...
+          </Text>
         </View>
-      ) : initialHistory ? ( // 로딩이 끝나고 initialHistory 데이터가 있으면 게임을 렌더링합니다.
-        <SingleModeGame
+      ) : initialHistory ? (
+        <StoryModeGame
           initialData={initialHistory[0]}
           initialHistoryProp={initialHistory}
         />
       ) : (
-        // 로딩이 끝났는데 데이터가 없으면 에러를 표시합니다.
         <View style={styles.content}>
-          <Text style={styles.errorText}>
+          <Text style={getErrorTextStyle()}>
             서버 오류로 게임을 시작할 수 없습니다.
           </Text>
         </View>
@@ -87,19 +123,66 @@ export default function CharacterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#3c414e", padding: 15 },
-  content: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: {
+    flex: 1,
+    backgroundColor: "#0B1021",
+    padding: 15,
+  },
+  containerMobile: {
+    flex: 1,
+    backgroundColor: "#0B1021",
+    padding: 10,
+  },
+  containerMobileLandscape: {
+    flex: 1,
+    backgroundColor: "#0B1021",
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   loadingText: {
     marginTop: 10,
     fontSize: 18,
     fontFamily: "neodgm",
-    color: "white",
+    color: "#F4E1D2",
+  },
+  loadingTextMobile: {
+    marginTop: 8,
+    fontSize: 16,
+    fontFamily: "neodgm",
+    color: "#F4E1D2",
+  },
+  loadingTextMobileLandscape: {
+    marginTop: 6,
+    fontSize: 14,
+    fontFamily: "neodgm",
+    color: "#F4E1D2",
+    textAlign: 'center',
   },
   errorText: {
     fontSize: 18,
     fontFamily: "neodgm",
-    color: "red",
+    color: "#EF4444",
     textAlign: "center",
     marginBottom: 10,
+  },
+  errorTextMobile: {
+    fontSize: 16,
+    fontFamily: "neodgm",
+    color: "#EF4444",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  errorTextMobileLandscape: {
+    fontSize: 14,
+    fontFamily: "neodgm",
+    color: "#EF4444",
+    textAlign: "center",
+    marginBottom: 6,
   },
 });

@@ -1,27 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { ArrowLeft, X, Wifi, Settings } from "lucide-react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  FlatList,
-  ImageBackground,
-  LayoutAnimation,
-  UIManager,
-  Platform,
-  ScrollView,
-  Image,
-} from "react-native";
+import { Settings } from "lucide-react";
+import { Ionicons } from "@expo/vector-icons";
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Image, useWindowDimensions, LayoutAnimation, UIManager, Platform, ScrollView } from "react-native";
 import { router } from "expo-router";
 import api from "../../services/api";
 import OptionsModal from "../../components/OptionsModal";
+import { useFonts } from 'expo-font';
 
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -37,13 +23,14 @@ interface Story {
   image_path: string | null;
 }
 
-const storyImages: { [key: string]: any } = {
-  "Sun and Moon": require("../../assets/images/game/multi_mode/background/sun_and_moon.jpg"),
-  "well-ghost": require("../../assets/images/game/multi_mode/background/well_ghost.jpg"),
-  good_brothers: require("../../assets/images/game/multi_mode/background/good_brothers.jpg"),
-};
+const defaultStoryImage = require("../../assets/images/game/multi_mode/background/sun_and_moon.jpg");
 
 export default function StorySelectorScreen() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+
+  const [fontsLoaded, fontError] = useFonts({'neodgm': require('../../assets/fonts/neodgm.ttf'),});
+  
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
@@ -55,13 +42,16 @@ export default function StorySelectorScreen() {
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1);
   const [backgroundColor, setBackgroundColor] = useState("#1a202c");
 
+  useEffect(() => {
+    if (fontError) throw fontError;
+  }, [fontError]);
+
   // 이야기 목록 조회
   useEffect(() => {
     const fetchStories = async () => {
       try {
         const response = await api.get("storymode/story/stories/");
         const data = response.data;
-        // console.log('Fetched stories: ', data.stories);
         setStories(data.stories);
       } catch (error: any) {
         console.error("스토리 로드 중 오류 발생: ", error);
@@ -78,7 +68,6 @@ export default function StorySelectorScreen() {
     const selectedStory = stories.find((story) => story.id === selectedStoryId);
 
     if (selectedStory) {
-      // 선택된 스토리를 params로 전달하여 play.tsx로 이동
       router.push({
         pathname: "/storymode/play",
         params: {
@@ -97,16 +86,13 @@ export default function StorySelectorScreen() {
 
   const renderStoryCard = (story: Story) => {
     const isSelected = selectedStoryId === story.id;
-    const imageSource = story.image_path // 1. DB에 이미지 경로가 있는지 확인합니다.
-      ? { uri: story.image_path } // 2. 있다면, { uri: ... } 형태로 사용합니다.
-      : require("../../assets/images/game/multi_mode/background/sun_and_moon.jpg"); // 3. 없다면, 기본 이미지를 보여줍니다.
+    const imageSource = story.image_path ? { uri: story.image_path } : defaultStoryImage;
+
     return (
       <TouchableOpacity
         key={story.id}
         style={[
-          Platform.OS === "web"
-            ? styles.cardWrapperWeb
-            : styles.cardWrapperMobile,
+          isMobile ? styles.cardWrapperMobile : styles.cardWrapperWeb,
           isSelected && styles.selectedCardWrapper,
         ]}
         onPress={() => handleCardPress(story.id)}
@@ -117,12 +103,12 @@ export default function StorySelectorScreen() {
             <Image
               source={imageSource}
               style={styles.cardImage}
-              resizeMode="contain"
+              resizeMode="cover"
             />
           )}
           {!imageSource && (
             <View style={styles.placeholderImage}>
-              <Text style={{ color: "white" }}>No Image</Text>
+              <Text style={{ color: "white", fontFamily: 'neodgm' }}>No Image</Text>
             </View>
           )}
           <View style={styles.cardTitleContainer}>
@@ -140,11 +126,15 @@ export default function StorySelectorScreen() {
     );
   };
 
+  if(!fontsLoaded && !fontError) {
+    return null;
+  }
+
   // 로딩 뷰
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#61dafb" />
+        <ActivityIndicator size="large" color="#F4E4BC" />
         <Text style={styles.loadingText}>이야기를 불러오는 중...</Text>
       </View>
     );
@@ -153,19 +143,20 @@ export default function StorySelectorScreen() {
   // 스토리 선택 뷰
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={isMobile ? styles.headerMobile : styles.header}>
         <TouchableOpacity
-          style={styles.headerButton}
+          style={isMobile ? styles.headerButtonMobile : styles.headerButton}
           onPress={() => router.back()}
         >
-          <ArrowLeft size={20} color="white" />
-          <Text style={styles.headerButtonText}>Back</Text>
+          <Ionicons name="arrow-back" size={isMobile ? 24 : 28} color="#F4E4BC" />
+          {/* <ArrowLeft size={isMobile ? 20 : 24} color="#F4E4BC" /> */}
+          {/* <Text style={isMobile ? styles.headerButtonTextMobile : styles.headerButtonText}>Back</Text> */}
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>스토리 선택</Text>
-        <View style={styles.headerIcons}>
+        <Text style={isMobile ? styles.headerTitleMobile : styles.headerTitle}>스토리 리스트</Text>
+        <View style={isMobile ? styles.headerIconsMobile : styles.headerIcons}>
           <TouchableOpacity onPress={() => setOptionsModalVisible(true)}>
-            <Settings size={24} color="white" />
+            <Settings size={isMobile ? 24 : 28} color="#F4E4BC" />
           </TouchableOpacity>
         </View>
 
@@ -183,7 +174,15 @@ export default function StorySelectorScreen() {
         />
       </View>
 
-      {Platform.OS === "web" ? (
+      {isMobile ? (
+        <FlatList
+          data={stories}
+          renderItem={({ item }) => renderStoryCard(item)}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.listContainerMobile}
+          ItemSeparatorComponent={() => <View style={{ height: 15 }} />}
+        />
+      ) : (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -191,53 +190,40 @@ export default function StorySelectorScreen() {
         >
           {stories.map((story) => renderStoryCard(story))}
         </ScrollView>
-      ) : (
-        <FlatList
-          data={stories}
-          renderItem={({ item }) => renderStoryCard(item)}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainerMobile}
-          ItemSeparatorComponent={() => <View style={{ height: 20 }} />}
-        />
       )}
 
-      <View style={styles.bottomActions}>
-        {/* 선택된 스토리가 있을 때만 버튼 영역을 보여줍니다. */}
+      <View style={isMobile ? styles.bottomActionsMobile : styles.bottomActions}>
         {selectedStoryId &&
           (() => {
-            // 현재 선택된 스토리 객체를 찾습니다.
             const selectedStory = stories.find((s) => s.id === selectedStoryId);
 
-            // 저장된 데이터가 있는지 확인합니다.
             if (selectedStory?.has_saved_session) {
-              // 💾 저장된 데이터가 있을 경우: '이어하기'와 '새로하기' 버튼을 보여줍니다.
               return (
-                <View style={styles.buttonGroup}>
+                <View style={isMobile ? styles.buttonGroupMobile : styles.buttonGroup}>
                   <TouchableOpacity
-                    style={[styles.actionButton, styles.continueButton]}
-                    onPress={() => handleStorySelect(true)} // true: 이어하기
+                    style={[isMobile ? styles.actionButtonMobile : styles.actionButton, styles.continueButton]}
+                    onPress={() => handleStorySelect(true)}
                   >
-                    <Text style={styles.actionButtonText}>이어서 하기</Text>
+                    <Text style={isMobile ? styles.actionButtonTextMobile : styles.actionButtonText}>이어서 하기</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.actionButton, styles.restartButton]}
-                    onPress={() => handleStorySelect(false)} // false: 새로하기
+                    style={[isMobile ? styles.actionButtonMobile : styles.actionButton, styles.restartButton]}
+                    onPress={() => handleStorySelect(false)}
                   >
-                    <Text style={styles.actionButtonText}>처음부터 시작</Text>
+                    <Text style={isMobile ? styles.actionButtonTextMobile : styles.actionButtonText}>처음부터 시작</Text>
                   </TouchableOpacity>
                 </View>
               );
             } else {
-              // 💾 저장된 데이터가 없을 경우: '시작하기' 버튼만 보여줍니다.
               return (
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.startButton]}
-                  onPress={() => handleStorySelect(false)} // false: 새로하기
+                  style={[isMobile ? styles.actionButtonMobile : styles.actionButton, styles.startButton]}
+                  onPress={() => handleStorySelect(false)}
                 >
                   <Text
-                    style={[styles.actionButtonText, styles.startButtonText]}
+                    style={[isMobile ? styles.actionButtonTextMobile : styles.actionButtonText, styles.startButtonText]}
                   >
-                    Start Story
+                    시작하기
                   </Text>
                 </TouchableOpacity>
               );
@@ -249,37 +235,68 @@ export default function StorySelectorScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#1a202c" },
+  container: { flex: 1, backgroundColor: "#0B1021" },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#1a202c",
+    backgroundColor: "#0B1021",
   },
   loadingText: {
-    color: "white",
+    color: "#F4E1D2",
     marginTop: 10,
+    fontFamily: "neodgm",
+    fontSize: 18,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
     paddingTop: 40,
+    backgroundColor: 'transparent',
+  },
+  headerMobile: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingTop: 30,
+    backgroundColor: 'transparent',
   },
   headerButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    padding: 8,
+  },
+  headerButtonMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    padding: 6,
   },
   headerButtonText: {
-    color: "white",
+    color: "#F4E4BC",
     fontSize: 18,
     fontFamily: "neodgm",
   },
+  headerButtonTextMobile: {
+    color: "#F4E4BC",
+    fontSize: 15,
+    fontFamily: "neodgm",
+  },
   headerTitle: {
-    color: "white",
+    color: "#F4E4BC",
     fontSize: 24,
+    fontFamily: "neodgm",
+    fontWeight: "bold",
+  },
+  headerTitleMobile: {
+    color: "#F4E4BC",
+    fontSize: 20,
     fontFamily: "neodgm",
     fontWeight: "bold",
   },
@@ -287,37 +304,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
+    padding: 8,
+  },
+  headerIconsMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 6,
   },
   listContainerWeb: {
     flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 30,
+    paddingVertical: 20,
   },
   cardWrapperWeb: {
-    width: 450,
-    marginHorizontal: 12,
+    width: 380,
+    marginHorizontal: 15,
     borderRadius: 12,
-    backgroundColor: "#374151", // 카드의 기본 배경색
+    backgroundColor: "#2a2d47",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
-    overflow: "hidden", // 자식 요소가 둥근 모서리를 넘어가지 않도록
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4,
+    shadowRadius: 7,
+    elevation: 10,
+    overflow: "hidden",
   },
-
-  // --- 모바일 (세로 스크롤) 스타일 ---
   listContainerMobile: {
-    // 가로 방향 패딩을 주어 카드들이 화면 가장자리에 붙지 않도록 합니다.
-    paddingHorizontal: 20,
-    // 상하 패딩도 추가하여 전체적인 여백을 확보합니다.
-    paddingVertical: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 15,
   },
   cardWrapperMobile: {
     width: "100%",
     borderRadius: 12,
-    backgroundColor: "#374151",
+    backgroundColor: "#2a2d47",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -325,27 +346,21 @@ const styles = StyleSheet.create({
     elevation: 8,
     overflow: "hidden",
   },
-
-  // --- 카드 공통 스타일 ---
   selectedCardWrapper: {
-    borderColor: "#60a5fa",
-    borderWidth: 2,
+    borderColor: "#F4E4BC",
+    borderWidth: 3,
   },
   cardBackground: {
-    height: 250,
-    backgroundColor: "#2d3748",
+    height: 220,
+    backgroundColor: "#1c2033",
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
-  cardOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
-    borderRadius: 12,
-  },
   cardImage: {
     width: "100%",
     height: "100%",
+    borderRadius: 12,
   },
   placeholderImage: {
     width: "100%",
@@ -353,99 +368,110 @@ const styles = StyleSheet.create({
     backgroundColor: "#4a5568",
     justifyContent: "center",
     alignItems: "center",
+    borderRadius: 12,
   },
   cardTitleContainer: {
     position: "absolute",
-    bottom: 10,
+    bottom: 15,
     left: 15,
     right: 15,
-    backgroundColor: "rgba(0, 0, 0, 0.5)", // 텍스트 가독성을 위한 반투명 배경
-    padding: 5,
-    borderRadius: 5,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
   cardTitle: {
-    color: "white",
+    color: "#F4E1D2",
     fontSize: 20,
     fontFamily: "neodgm",
     fontWeight: "bold",
-    textAlign: "center", // 제목을 중앙 정렬
+    textAlign: "center",
   },
   cardContent: {
-    padding: 15,
-    backgroundColor: "#2d3748",
-    // 확장되는 부분은 둥근 모서리가 필요 없습니다.
+    padding: 18,
+    backgroundColor: "#1c2033",
   },
-  // 확장되었을 때만 보이는 세계관 텍스트
   cardWorld: {
-    color: "#a0aec0",
-    fontSize: 17,
+    color: "#D1C4E9",
+    fontSize: 16,
     fontFamily: "neodgm",
     fontStyle: "italic",
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  // 확장되었을 때만 보이는 상세 설명 텍스트
   cardDesc: {
-    color: "#e2e8f0",
+    color: "#F4E1D2",
     fontSize: 14,
     fontFamily: "neodgm",
-    lineHeight: 20,
-  },
-  selectionIndicator: {
-    position: "absolute",
-    top: -8,
-    right: -8,
-    width: 24,
-    height: 24,
-    backgroundColor: "#3b82f6",
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "white",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  selectionCheck: {
-    color: "white",
-    fontSize: 12,
-    fontFamily: "neodgm",
-    fontWeight: "bold",
+    lineHeight: 22,
   },
   bottomActions: {
     alignItems: "center",
-    padding: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 30,
     borderTopWidth: 1,
-    borderTopColor: "#2d3748",
+    borderTopColor: "#1c2033",
+    backgroundColor: '#0B1021',
+  },
+  bottomActionsMobile: {
+    alignItems: "center",
+    paddingVertical: 15,
+    paddingHorizontal: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#1c2033",
+    backgroundColor: '#0B1021',
   },
   actionButton: {
     alignItems: "center",
-    width: 200, // 또는 '80%'
-    paddingVertical: 15,
+    width: 250,
+    paddingVertical: 18,
+    borderRadius: 10,
+  },
+  actionButtonMobile: {
+    alignItems: "center",
+    width: "100%",
+    paddingVertical: 14,
     borderRadius: 8,
   },
   startButton: {
-    backgroundColor: "#2563eb",
+    backgroundColor: "#7C3AED",
   },
   buttonGroup: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 20, // 버튼 사이의 간격
+    gap: 20,
+    width: '100%',
+  },
+  buttonGroupMobile: {
+    flexDirection: "column",
+    gap: 12,
+    width: '100%',
   },
   continueButton: {
-    backgroundColor: "#1d4ed8", // '이어하기' 버튼 색상 (파란색 계열)
-    flex: 1, // 공간을 균등하게 차지
+    backgroundColor: "#3B82F6",
+    flex: 1,
   },
   restartButton: {
-    backgroundColor: "#6b7280", // '새로하기' 버튼 색상 (회색 계열)
-    flex: 1, // 공간을 균등하게 차지
-  },
-  disabledButton: {
-    backgroundColor: "#4b5563",
+    backgroundColor: "#6B7280",
+    flex: 1,
   },
   actionButtonText: {
     color: "white",
+    fontSize: 18,
+    fontFamily: "neodgm",
+    fontWeight: "600",
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  actionButtonTextMobile: {
+    color: "white",
     fontSize: 16,
     fontFamily: "neodgm",
+    fontWeight: "600",
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   startButtonText: {
-    fontWeight: "600",
   },
 });
