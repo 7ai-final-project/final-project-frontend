@@ -9,6 +9,7 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
+  ImageBackground,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -73,6 +74,11 @@ const FONT_SIZES = {
   cardTitle: 20,
   cardDescription: 14,
 };
+
+const scenarioImages = [
+  require('../../../assets/images/game/single/back_1.jpg'),
+  require('../../../assets/images/game/single/back_2.jpg'),
+];
 
 // --- 컴포넌트 시작 ---
 export default function GameStarterScreen() {
@@ -300,38 +306,47 @@ export default function GameStarterScreen() {
   const canGoPrev = currentScenarioIndex > 0;
   const canGoNext = currentScenarioIndex < scenarios.length - 1;
 
+  const currentBackgroundImage = scenarioImages[currentScenarioIndex] || null;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* 홈 버튼 추가 */}
       <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
         <Ionicons name="home" size={24} color={COLORS.subText} />
       </TouchableOpacity>
-      <View style={styles.container}>
-        <Text style={styles.mainTitle}>시나리오 선택</Text>
-        <Text style={styles.subText}>원하는 시나리오를 선택하여 게임 옵션을 설정하세요.</Text>
+      <ImageBackground
+        source={currentBackgroundImage}
+        style={styles.backgroundImage}
+        imageStyle={styles.imageStyle} // 모서리를 둥글게 하기 위한 스타일
+        resizeMode="cover" // 이미지가 컨테이너를 꽉 채우도록 설정
+      >
+        <View style={styles.container}>
+          <Text style={styles.mainTitle}>시나리오 선택</Text>
+          <Text style={styles.subText}>원하는 시나리오를 선택하여 게임 옵션을 설정하세요.</Text>
 
-        <View style={styles.scenarioCarousel}>
-          {canGoPrev && (
-            <TouchableOpacity style={styles.arrowButton} onPress={handlePrevScenario}>
-              <Ionicons name="chevron-back" size={40} color={COLORS.primary} />
-            </TouchableOpacity>
-          )}
-          {currentScenario && (
-            <TouchableOpacity
-              style={styles.scenarioCard}
-              onPress={() => handleOpenScenarioModal(currentScenario)}
-            >
-              <Text style={styles.scenarioTitle}>{currentScenario.title}</Text>
-              <Text style={styles.scenarioDescription}>{currentScenario.description}</Text>
-            </TouchableOpacity>
-          )}
-          {canGoNext && (
-            <TouchableOpacity style={styles.arrowButton} onPress={handleNextScenario}>
-              <Ionicons name="chevron-forward" size={40} color={COLORS.primary} />
-            </TouchableOpacity>
-          )}
+          <View style={styles.scenarioCarousel}>
+            {canGoPrev && (
+              <TouchableOpacity style={styles.arrowButton} onPress={handlePrevScenario}>
+                <Ionicons name="chevron-back" size={40} color={COLORS.primary} />
+              </TouchableOpacity>
+            )}
+            {currentScenario && (
+              <TouchableOpacity
+                style={styles.scenarioCard}
+                onPress={() => handleOpenScenarioModal(currentScenario)}
+              >
+                <Text style={styles.scenarioTitle}>{currentScenario.title}</Text>
+                <Text style={styles.scenarioDescription}>{currentScenario.description}</Text>
+              </TouchableOpacity>
+            )}
+            {canGoNext && (
+              <TouchableOpacity style={styles.arrowButton} onPress={handleNextScenario}>
+                <Ionicons name="chevron-forward" size={40} color={COLORS.primary} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      </View>
+      </ImageBackground>
 
       {/* 시나리오 옵션 선택 모달 */}
       <Modal
@@ -475,6 +490,23 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  backgroundImage: {
+    width: '90%',
+    height: '85%',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#47555fff',
+    borderRadius: 50
+  },
+  imageStyle: {
+    borderRadius: 50,
+    opacity: 0.3,
+    width: '100%',
+    height: '100%',
   },
   container: {
     flex: 1,
