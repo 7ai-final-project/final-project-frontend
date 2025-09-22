@@ -160,8 +160,8 @@ export default function GameEngineRealtime({
             try {
                 const nonceResponse = await getWebSocketNonce();
                 const nonce = nonceResponse.data.nonce;
-                const scheme = "ws";
-                const backendHost = "127.0.0.1:8000";
+                const scheme = "wss";
+                const backendHost = "team6-backend.koreacentral.cloudapp.azure.com";
                 const url = `${scheme}://${backendHost}/ws/multi_game/${roomId}/?nonce=${nonce}`;
                 
                 ws = new WebSocket(url);

@@ -94,7 +94,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ roomId, chatSocketRef }) => {
         const nonceResponse = await getWebSocketNonce();
         const nonce = nonceResponse.data.nonce;
         
-        const wsUrl = `ws://127.0.0.1:8000/ws/chat/${roomId}/?nonce=${nonce}`;
+        const wsUrl = `wss://team6-backend.koreacentral.cloudapp.azure.com/ws/chat/${roomId}/?nonce=${nonce}`;
         const ws = new WebSocket(wsUrl);
         chatSocketRef.current = ws;
 
