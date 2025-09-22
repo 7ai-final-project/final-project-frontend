@@ -381,6 +381,7 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
               <ScrollView contentContainerStyle={styles.choiceGrid}>
                 {!isTyping &&
                   !isChoiceLoading &&
+                  currentScene.choices.length > 0 &&
                   currentScene.choices.map(
                     (choiceText: string, index: number) => (
                       <MedievalButton
@@ -396,11 +397,26 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
                       </MedievalButton>
                     )
                   )}
+                {!isTyping &&
+                  !isChoiceLoading &&
+                  currentScene.choices.length === 0 && ( // 👈 조건: 선택지가 0개일 때 보임
+                    <TouchableOpacity
+                      style={[isMobile ? styles.actionButtonMobile : styles.actionButton, styles.startButton]}
+                      // replace를 사용하면 뒤로가기로 엔딩 화면에 다시 돌아오는 것을 방지할 수 있습니다.
+                      onPress={() => router.replace('/storymode')}
+                    >
+                      <Text style={isMobile ? styles.actionButtonTextMobile : styles.actionButtonText}>
+                        이야기 목록으로 돌아가기
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
                 {isChoiceLoading && (
                   <ActivityIndicator size="small" color="#fff" />
                 )}
               </ScrollView>
             </View>
+
             {error && <Text style={styles.errorMessage}>{error}</Text>}
           </View>
         </View>
@@ -807,5 +823,32 @@ const styles = StyleSheet.create({
     height: 8,
     backgroundColor: "#c88a5a",
     borderRadius: 4,
+  },
+  actionButton: {
+    alignItems: "center",
+    width: 250,
+    paddingVertical: 18,
+    borderRadius: 10,
+  },
+  actionButtonMobile: {
+    alignItems: "center",
+    width: "90%",
+    paddingVertical: 14,
+    borderRadius: 8,
+  },
+  startButton: {
+    backgroundColor: "#7C3AED",
+  },
+  actionButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontFamily: "neodgm",
+    fontWeight: "600",
+  },
+  actionButtonTextMobile: {
+    color: "white",
+    fontSize: 16,
+    fontFamily: "neodgm",
+    fontWeight: "600",
   },
 });

@@ -161,7 +161,7 @@ export default function GameEngineRealtime({
                 const nonceResponse = await getWebSocketNonce();
                 const nonce = nonceResponse.data.nonce;
                 const scheme = "ws";
-                const backendHost = "127.0.0.1:8000";
+                const backendHost = "20.196.72.38";
                 const url = `${scheme}://${backendHost}/ws/multi_game/${roomId}/?nonce=${nonce}`;
                 
                 ws = new WebSocket(url);

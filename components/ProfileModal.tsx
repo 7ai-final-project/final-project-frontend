@@ -1,19 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, Alert, useWindowDimensions, ScrollView } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, Alert, useWindowDimensions, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import api from '../services/api';
+import api, { fetchUserStoryProgress } from '../services/api';
 import { useFonts } from 'expo-font';
-
-interface ProfileModalProps {
-  visible: boolean;
-  onClose: () => void;
-  user: {
-    name: string;
-    nickname: string;
-    email?: string;
-  } | null;
-  onUpdateNickname?: (newNickname: string) => void;
-}
 
 // 업적 데이터 타입
 interface Achievement {
@@ -29,475 +18,266 @@ const dummyAchievements: Achievement[] = [
   { id: '1', name: '첫 번째 도전', description: '게임에 처음 접속했습니다.', icon: 'star', isUnlocked: true },
   { id: '2', name: '초보 사냥꾼', description: '몬스터 10마리를 처치했습니다.', icon: 'sword', isUnlocked: true },
   { id: '3', name: '탐험가', description: '숨겨진 지역을 발견했습니다.', icon: 'map', isUnlocked: false },
-  { id: '4', name: '골드 수집가', description: '총 1000골드를 모았습니다.', icon: 'cash', isUnlocked: true },
-  { id: '5', name: '대장장이', description: '아이템을 5개 제작했습니다.', icon: 'hammer', isUnlocked: false },
-  { id: '6', name: '전설의 시작', description: '첫 번째 보스를 물리쳤습니다.', icon: 'trophy', isUnlocked: true },
-  { id: '7', name: '미지의 영웅', description: '모든 업적을 달성했습니다.', icon: 'ribbon', isUnlocked: false },
-  { id: '8', name: '끈기의 증명', description: '100시간 이상 플레이했습니다.', icon: 'time', isUnlocked: false },
+  { id: '4', name: '골드 수집가', description: '총 1000골드를 모았습니다.', icon: 'cash', isUnlocked: false },
+  { id: '5', name: '마스터 길드원', description: '모든 퀘스트를 완료했습니다.', icon: 'shield', isUnlocked: false },
 ];
 
-// 게임 업적 섹션 컴포넌트
-const AchievementSection = ({ achievements, isMobile }: { achievements: Achievement[], isMobile: boolean }) => {
-  return (
-    <View style={isMobile ? achievementStyles.achievementContainerMobile : achievementStyles.achievementContainer}>
-      <Text style={isMobile ? achievementStyles.achievementTitleMobile : achievementStyles.achievementTitle}>
-        <Ionicons name="trophy" size={isMobile ? 18 : 22} color="#FFD700" /> 게임 업적
-      </Text>
-      <ScrollView style={achievementStyles.achievementList}>
-        {achievements.map((achievement) => (
-          <View key={achievement.id} style={isMobile ? achievementStyles.achievementItemMobile : achievementStyles.achievementItem}>
-            <Ionicons
-              name={achievement.icon as any}
-              size={isMobile ? 24 : 28}
-              color={achievement.isUnlocked ? '#FFD700' : '#888'}
-              style={achievementStyles.achievementIcon}
-            />
-            <View style={achievementStyles.achievementTextContent}>
-              <Text style={isMobile ? achievementStyles.achievementNameMobile : achievementStyles.achievementName}>
-                {achievement.name}
-              </Text>
-              <Text style={isMobile ? achievementStyles.achievementDescriptionMobile : achievementStyles.achievementDescription}>
-                {achievement.description}
-              </Text>
-            </View>
-            {achievement.isUnlocked && (
-              <Ionicons name="checkmark-circle" size={isMobile ? 20 : 24} color="#4CAF50" />
-            )}
-          </View>
-        ))}
-      </ScrollView>
-    </View>
-  );
-};
+interface ProfileModalProps {
+  visible: boolean;
+  onClose: () => void;
+  user: {
+    name: string;
+    nickname: string;
+    email?: string;
+  } | null;
+  onUpdateNickname?: (newNickname: string) => void;
+}
 
-export default function ProfileModal({ visible, onClose, user, onUpdateNickname }: ProfileModalProps) {
+// 스토리 진행률 데이터 타입
+interface StoryProgress {
+  story_id: string;
+  story_title: string;
+  total_endings: number;
+  unlocked_endings: number;
+}
+
+const AchievementSection: React.FC<{ achievements: Achievement[]; isMobile: boolean }> = ({ achievements, isMobile }) => (
+  <View style={styles.achievementContainer}>
+    <Text style={isMobile ? styles.achievementTitleMobile : styles.achievementTitle}>
+      <Ionicons name="trophy" size={isMobile ? 18 : 22} color="#FFD700" /> 업적
+    </Text>
+    <ScrollView style={styles.achievementList} showsVerticalScrollIndicator={false}>
+      {achievements.map((item) => (
+        <View key={item.id} style={isMobile ? styles.achievementItemMobile : styles.achievementItem}>
+          <Ionicons name={item.isUnlocked ? "lock-open" : "lock-closed"} size={isMobile ? 18 : 24} color={item.isUnlocked ? "#3CB371" : "#A9A9A9"} style={styles.achievementIcon} />
+          <View style={styles.achievementTextContainer}>
+            <Text style={isMobile ? styles.achievementNameMobile : styles.achievementName}>{item.name}</Text>
+            <Text style={isMobile ? styles.achievementDescMobile : styles.achievementDesc}>{item.description}</Text>
+          </View>
+        </View>
+      ))}
+    </ScrollView>
+  </View>
+);
+
+const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user, onUpdateNickname }) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
-  const [fontsLoaded, fontError] = useFonts({ 'neodgm': require('../assets/fonts/neodgm.ttf'), });
+  const [isEditing, setIsEditing] = useState(false);
+  const [newNickname, setNewNickname] = useState(user?.nickname || '');
+  const [fontsLoaded] = useFonts({
+    'neodgm': require('../assets/fonts/neodgm.ttf'),
+  });
 
-  const [isEditingNickname, setIsEditingNickname] = useState(false);
-  const [tempNickname, setTempNickname] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [storyProgressList, setStoryProgressList] = useState<StoryProgress[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    if (user) {
-      setTempNickname(user.nickname);
-    }
-  }, [user]);
-
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
-
-  if (!user) {
-    return null;
-  }
-
-  const handleStartEditNickname = () => {
-    setTempNickname(user.nickname);
-    setIsEditingNickname(true);
-  };
-
-  const handleCancelEditNickname = () => {
-    setTempNickname(user.nickname);
-    setIsEditingNickname(false);
-    setErrorMessage('');
-  };
-
-  const handleSaveNickname = async () => {
-    if (isSaving) return;
-
-    if (!tempNickname.trim()) {
-      setErrorMessage('닉네임을 입력해주세요.');
-      return;
-    }
-
-    if (tempNickname.trim().length < 2 || tempNickname.trim().length > 10) {
-      setErrorMessage('닉네임은 2자 이상 10자 이하로 입력해주세요.');
-      return;
-    }
-
-    const nicknameRegex = /^[a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ]*$/;
-    if (!nicknameRegex.test(tempNickname.trim())) {
-      setErrorMessage('닉네임은 한글, 영문, 숫자만 사용할 수 있습니다.');
-      return;
-    }
-
-    const isConfirmed = confirm('닉네임을 정말 수정하시겠습니까?');    
-    if (isConfirmed) {
-      console.log('사용자가 확인을 선택함');
-      await performNicknameUpdate();
-    } else {
-      console.log('사용자가 취소를 선택함');
-    }
-  };
-
-  const performNicknameUpdate = async () => {
-    setIsSaving(true);
-    setErrorMessage('');
-
-    try {
-      const response = await api.put('/auth/user/update', { nickname: tempNickname.trim() });
-
-      if (response.status === 409) {
-        setErrorMessage('이미 사용 중인 닉네임입니다. 다른 닉네임을 사용해주세요.');
-        setIsSaving(false);
-        return;
-      }
-
+    const fetchProgressData = async () => {
       if (user) {
-        user.nickname = tempNickname.trim();
+        setLoading(true);
+        try {
+          const response = await fetchUserStoryProgress();
+          setStoryProgressList(response.data.progress_list);
+        } catch (error) {
+          console.error("스토리 진행률 로딩 실패:", error);
+          setStoryProgressList(null);
+        } finally {
+          setLoading(false);
+        }
       }
+    };
 
-      if (onUpdateNickname) {
-        onUpdateNickname(tempNickname.trim());
-      }
-
-      Alert.alert('성공', '닉네임이 성공적으로 변경되었습니다!');
-
-      setIsEditingNickname(false);
-      setErrorMessage('');
-
-    } catch (error: any) {
-      console.error('닉네임 업데이트 실패:', error);
-
-      if (error.response && error.response.data && error.response.data.message) {
-        setErrorMessage(error.response.data.message);
-      } else if (error.response?.status === 409) {
-        setErrorMessage('이미 사용 중인 닉네임입니다. 다른 닉네임을 사용해주세요.');
-      } else {
-        setErrorMessage('닉네임 저장 중 오류가 발생했습니다. 다시 시도해주세요.');
-      }
-    } finally {
-      setIsSaving(false);
+    if (visible) {
+      fetchProgressData();
+    } else {
+      setStoryProgressList(null);
     }
-  };
+  }, [visible, user]);
 
-  const handleModalClose = () => {
-    setIsEditingNickname(false);
-    setTempNickname(user.nickname);
-    setErrorMessage('');
-    onClose();
+  if (!fontsLoaded) {
+    return null;
+  }
+
+  const handleUpdateNickname = () => {
+    if (onUpdateNickname) {
+      onUpdateNickname(newNickname);
+      setIsEditing(false);
+    }
   };
 
   return (
-    <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={handleModalClose}>
-      <View style={styles.modalOverlay}>
-        <View style={isMobile ? styles.profileModalBoxMobile : styles.profileModalBox}>
-          <TouchableOpacity style={styles.closeIcon} onPress={handleModalClose}>
-            <Ionicons name="close" size={isMobile ? 22 : 24} color="#aaa" />
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <View style={styles.centeredView}>
+        <View style={[styles.modalView, isMobile ? styles.modalViewMobile : {}]}>
+          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <Ionicons name="close" size={isMobile ? 24 : 30} color="#F4E4BC" />
           </TouchableOpacity>
-          <Text style={isMobile ? styles.modalTitleMobile : styles.modalTitle}>프로필</Text>
-
-          <View style={isMobile ? styles.profileContentMobile : styles.profileContent}>
-            <View style={isMobile ? styles.profileIconContainerMobile : styles.profileIconContainer}>
-              <Ionicons name="person-circle" size={isMobile ? 70 : 80} color="#eee" />
+          <ScrollView contentContainerStyle={styles.scrollContainer}>
+            <Ionicons name="person-circle" size={isMobile ? 80 : 100} color="#F4E4BC" />
+            
+            <View style={styles.infoContainer}>
+              <Text style={isMobile ? styles.nameTextMobile : styles.nameText}>{user?.name}</Text>
+              {isEditing ? (
+                <View style={styles.editContainer}>
+                  <TextInput
+                    style={isMobile ? styles.nicknameInputMobile : styles.nicknameInput}
+                    value={newNickname}
+                    onChangeText={setNewNickname}
+                    placeholder="새 닉네임"
+                    placeholderTextColor="#A9A9A9"
+                  />
+                  <TouchableOpacity onPress={handleUpdateNickname}>
+                    <Ionicons name="checkmark-circle" size={isMobile ? 24 : 30} color="#3CB371" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setIsEditing(false)}>
+                    <Ionicons name="close-circle" size={isMobile ? 24 : 30} color="#A9A9A9" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.nicknameContainer}>
+                  <Text style={isMobile ? styles.nicknameTextMobile : styles.nicknameText}>{user?.nickname}</Text>
+                  <TouchableOpacity onPress={() => setIsEditing(true)}>
+                    <Ionicons name="create-outline" size={isMobile ? 18 : 24} color="#A9A9A9" />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
 
-            <View style={styles.profileTextContainer}>
-              <View style={isMobile ? styles.userInfoSectionMobile : styles.userInfoSection}>
-                <Text style={isMobile ? styles.userInfoLabelMobile : styles.userInfoLabel}>닉네임</Text>
-                {isEditingNickname ? (
-                  <View style={styles.nicknameEditContainer}>
-                    <View style={styles.inputContainer}>
-                      <TextInput
-                        style={[styles.nicknameInput, errorMessage ? styles.inputError : null, isMobile ? styles.nicknameInputMobile : {}]}
-                        value={tempNickname}
-                        onChangeText={setTempNickname}
-                        placeholder="닉네임을 입력하세요"
-                        placeholderTextColor="#aaa"
-                        autoFocus={true}
-                        selectTextOnFocus={true}
-                        maxLength={10}
-                        editable={!isSaving}
-                        autoCapitalize="none"
-                        keyboardAppearance="dark"
-                      />
-                      <View style={styles.editButtonsContainer}>
-                        <TouchableOpacity
-                          style={[styles.saveButton, isSaving && styles.disabledButton]}
-                          onPress={handleSaveNickname}
-                          disabled={isSaving}
-                        >
-                          <Ionicons
-                            name={isSaving ? "hourglass" : "checkmark"}
-                            size={isMobile ? 18 : 20}
-                            color={isSaving ? "#aaa" : "#4CAF50"}
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.cancelButton, isSaving && styles.disabledButton]}
-                          onPress={handleCancelEditNickname}
-                          disabled={isSaving}
-                        >
-                          <Ionicons name="close" size={isMobile ? 18 : 20} color="#f44336" />
-                        </TouchableOpacity>
+            {/* 업적 섹션 */}
+            <AchievementSection achievements={dummyAchievements} isMobile={isMobile} />
+            
+            {/* 스토리 진행률 섹션 */}
+            <View style={styles.storyProgressContainer}>
+              <Text style={isMobile ? styles.storyProgressTitleMobile : styles.storyProgressTitle}>
+                <Ionicons name="book" size={isMobile ? 18 : 22} color="#F4E4BC" /> 플레이 기록
+              </Text>
+              {loading ? (
+                <ActivityIndicator size="small" color="#F4E4BC" style={styles.loadingIndicator} />
+              ) : (
+                <ScrollView style={styles.storyProgressList} showsVerticalScrollIndicator={false}>
+                  {storyProgressList && storyProgressList.length > 0 ? (
+                    storyProgressList.map(item => (
+                      <View key={item.story_id} style={styles.storyProgressItem}>
+                        <Text style={isMobile ? styles.progressTextMobile : styles.progressText}>
+                          {item.story_title}: {item.unlocked_endings} / {item.total_endings}
+                        </Text>
                       </View>
-                    </View>
-                    {errorMessage ? (
-                      <Text style={styles.errorText}>{errorMessage}</Text>
-                    ) : null}
-                  </View>
-                ) : (
-                  <View style={styles.nicknameDisplayContainer}>
-                    <Text style={isMobile ? styles.profileNicknameMobile : styles.profileNickname}>{user.nickname} ({user.name})</Text>
-                    <TouchableOpacity style={styles.editNicknameButton} onPress={handleStartEditNickname}>
-                      <Ionicons name="pencil" size={isMobile ? 16 : 18} color="#aaa" />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-
-              {/* 이메일 */}
-              <View style={isMobile ? styles.userInfoSectionMobile : styles.userInfoSection}>
-                <Text style={isMobile ? styles.userInfoLabelMobile : styles.userInfoLabel}>이메일</Text>
-                <Text style={isMobile ? styles.profileEmailMobile : styles.profileEmail}>{user.email || '이메일 정보 없음'}</Text>
-              </View>
+                    ))
+                  ) : (
+                    <Text style={styles.noDataText}>플레이한 스토리가 없습니다.</Text>
+                  )}
+                </ScrollView>
+              )}
             </View>
-          </View>
 
-          {/* 게임 업적 섹션 */}
-          <AchievementSection achievements={dummyAchievements} isMobile={isMobile} />
+          </ScrollView>
         </View>
       </View>
     </Modal>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  centeredView: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
-    alignItems: 'center'
-  },
-  profileModalBox: {
-    width: '85%',
-    maxWidth: 400,
-    backgroundColor: '#2a2d47',
-    borderRadius: 16,
-    padding: 24,
     alignItems: 'center',
-    elevation: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  modalView: {
+    width: '40%',
+    backgroundColor: '#2C2B29',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    position: 'relative'
+    shadowRadius: 4,
+    elevation: 5,
+    borderWidth: 2,
+    borderColor: '#F4E4BC',
   },
-  profileModalBoxMobile: {
+  modalViewMobile: {
     width: '90%',
-    maxHeight: '80%',
-    backgroundColor: '#2a2d47',
-    borderRadius: 12,
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-    alignItems: 'center',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    position: 'relative',
+    padding: 20,
   },
-  modalTitle: {
+  closeButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+  },
+  scrollContainer: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  infoContainer: {
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  nameText: {
+    color: '#fff',
+    fontSize: 24,
+    fontFamily: 'neodgm',
+  },
+  nameTextMobile: {
+    color: '#fff',
     fontSize: 20,
     fontFamily: 'neodgm',
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 20
   },
-  modalTitleMobile: {
-    fontSize: 18,
-    fontFamily: 'neodgm',
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 15
-  },
-  closeIcon: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    padding: 6
-  },
-  profileContent: {
+  nicknameContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    width: '100%',
-    marginBottom: 20,
-  },
-  profileContentMobile: {
-    flexDirection: 'column',
     alignItems: 'center',
-    width: '100%',
-    marginBottom: 15,
+    marginTop: 5,
   },
-  profileIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    overflow: 'hidden',
-    marginRight: 20,
-    borderWidth: 2,
-    borderColor: '#eee',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#3b3e5c',
+  nicknameText: {
+    color: '#A9A9A9',
+    fontSize: 18,
+    marginRight: 10,
+    fontFamily: 'neodgm',
   },
-  profileIconContainerMobile: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    overflow: 'hidden',
-    marginBottom: 15,
-    borderWidth: 2,
-    borderColor: '#eee',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#3b3e5c',
-  },
-  profileTextContainer: {
-    flex: 1,
-  },
-  userInfoSection: {
-    width: '100%',
-    marginBottom: 15,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    paddingTop: 15,
-  },
-  userInfoSectionMobile: {
-    width: '100%',
-    marginBottom: 10,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    paddingTop: 10,
-    alignItems: 'center',
-  },
-  userInfoLabel: {
-    color: '#D1C4E9',
+  nicknameTextMobile: {
+    color: '#A9A9A9',
     fontSize: 16,
-    marginBottom: 8,
-    fontWeight: '600',
-    fontFamily: 'neodgm',
-  },
-  userInfoLabelMobile: {
-    color: '#D1C4E9',
-    fontSize: 13,
-    marginBottom: 5,
-    fontWeight: '600',
-    fontFamily: 'neodgm',
-  },
-  nicknameDisplayContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  profileNickname: {
-    fontSize: 18,
-    color: '#fff',
-    fontFamily: 'neodgm',
     marginRight: 8,
-  },
-  profileNicknameMobile: {
-    fontSize: 15,
-    color: '#fff',
     fontFamily: 'neodgm',
-    marginRight: 6,
   },
-  editNicknameButton: {
-    padding: 4,
-  },
-  nicknameEditContainer: {
-    flexDirection: 'column',
-    flex: 1,
-    minWidth: 0,
-  },
-  inputContainer: {
+  editContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
-    marginBottom: 5,
+    marginTop: 5,
   },
   nicknameInput: {
-    flex: 1,
+    width: 150,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F4E4BC',
+    color: '#F4E4BC',
     fontSize: 16,
-    color: '#fff',
+    marginRight: 10,
     fontFamily: 'neodgm',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    marginRight: 6,
-    minWidth: 0,
   },
   nicknameInputMobile: {
-    fontSize: 13,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  inputError: {
-    borderColor: '#f44336',
-  },
-  editButtonsContainer: {
-    flexDirection: 'row',
-  },
-  saveButton: {
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    marginRight: 4,
-  },
-  cancelButton: {
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#f44336',
-    fontFamily: 'neodgm',
-    marginTop: 4,
-  },
-  profileEmail: {
-    fontSize: 18,
-    color: '#fff',
+    width: 120,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F4E4BC',
+    color: '#F4E4BC',
+    fontSize: 14,
+    marginRight: 8,
     fontFamily: 'neodgm',
   },
-  profileEmailMobile: {
-    fontSize: 15,
-    color: '#fff',
-    fontFamily: 'neodgm',
-  },
-});
-
-// 업적 섹션 스타일 시트
-const achievementStyles = StyleSheet.create({
   achievementContainer: {
     width: '100%',
-    marginTop: 20,
+    marginTop: 30,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
     paddingTop: 15,
-  },
-  achievementContainerMobile: {
-    width: '100%',
-    marginTop: 15,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    paddingTop: 10,
-    alignItems: 'center',
   },
   achievementTitle: {
     color: '#FFD700',
@@ -541,33 +321,91 @@ const achievementStyles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
   },
   achievementIcon: {
-    marginRight: 10,
+    marginRight: 15,
   },
-  achievementTextContent: {
+  achievementTextContainer: {
     flex: 1,
   },
   achievementName: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'neodgm',
+  },
+  achievementNameMobile: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: 'neodgm',
+  },
+  achievementDesc: {
+    color: '#A9A9A9',
+    fontSize: 12,
+    marginTop: 4,
+    fontFamily: 'neodgm',
+  },
+  achievementDescMobile: {
+    color: '#A9A9A9',
+    fontSize: 10,
+    marginTop: 2,
+    fontFamily: 'neodgm',
+  },
+
+  storyProgressContainer: {
+    width: '100%',
+    marginTop: 30,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    paddingTop: 15,
+  },
+  storyProgressTitle: {
+    color: '#F4E4BC',
+    fontSize: 18,
+    fontFamily: 'neodgm',
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  storyProgressTitleMobile: {
+    color: '#F4E4BC',
+    fontSize: 16,
+    fontFamily: 'neodgm',
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  storyProgressList: {
+    maxHeight: 200,
+    width: '100%',
+    paddingHorizontal: 5,
+  },
+  storyProgressItem: {
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+  },
+  progressText: {
     fontSize: 16,
     color: '#fff',
     fontFamily: 'neodgm',
-    fontWeight: 'bold',
-    marginBottom: 2,
   },
-  achievementNameMobile: {
+  progressTextMobile: {
     fontSize: 14,
     color: '#fff',
     fontFamily: 'neodgm',
-    fontWeight: 'bold',
-    marginBottom: 2,
   },
-  achievementDescription: {
-    fontSize: 13,
-    color: '#bbb',
+  noDataText: {
+    color: '#A9A9A9',
+    textAlign: 'center',
     fontFamily: 'neodgm',
+    marginTop: 20,
   },
-  achievementDescriptionMobile: {
-    fontSize: 11,
-    color: '#bbb',
-    fontFamily: 'neodgm',
+  loadingIndicator: {
+    marginTop: 20,
+    marginBottom: 20,
   },
 });
+
+export default ProfileModal;

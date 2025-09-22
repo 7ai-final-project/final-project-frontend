@@ -131,7 +131,7 @@ export default function RoomScreen() {
       const nonceResponse = await getWebSocketNonce();
       const nonce = nonceResponse.data.nonce;
       const scheme = "ws";
-      const backendHost = "127.0.0.1:8000";
+      const backendHost = "20.196.72.38";
       const url = `${scheme}://${backendHost}/ws/game/${roomId}/?nonce=${nonce}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
