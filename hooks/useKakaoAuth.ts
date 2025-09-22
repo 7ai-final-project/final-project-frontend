@@ -13,7 +13,9 @@ if(!KAKAO_REST_API_KEY) {
 }
 
 // 리다이렉트 URI 생성
-const REDIRECT_URI = AuthSession.makeRedirectUri({});
+const REDIRECT_URI = AuthSession.makeRedirectUri({
+  useProxy: true,
+});
 
 export const useKakaoAuth = (onSuccess: (user: any) => void) => {
   const kakaoDiscovery = {

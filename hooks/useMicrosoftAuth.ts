@@ -17,7 +17,9 @@ if(!MICROSOFT_CLIENT_ID) {
 }
 
 // 리다이렉트 URI 생성
-const REDIRECT_URI = AuthSession.makeRedirectUri({});
+const REDIRECT_URI = AuthSession.makeRedirectUri({
+  useProxy: true,
+});
 
 export const useMicrosoftAuth = (onSuccess: (user: any) => void) => {
   const microsoftDiscovery = {

@@ -13,14 +13,16 @@ if(!GOOGLE_CLIENT_ID) {
 }
 
 // 리다이렉트 URI 생성
-const REDIRECT_URI = AuthSession.makeRedirectUri({});
+const REDIRECT_URI = AuthSession.makeRedirectUri({
+  useProxy: true,
+});
 
 export const useGoogleAuth = (onSuccess: (user: any) => void) => {
   const googleDiscovery = {
     authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenEndpoint: 'https://oauth2.googleapis.com/token'
   };
-
+  
   const [googleRequest, googleResponse, googlePromptAsync] = AuthSession.useAuthRequest({
     clientId: GOOGLE_CLIENT_ID,
     redirectUri: REDIRECT_URI,
@@ -28,7 +30,7 @@ export const useGoogleAuth = (onSuccess: (user: any) => void) => {
     responseType: 'code',
     usePKCE: true,      // Google은 PKCE 권장
   }, googleDiscovery);
-
+  
   useEffect(() => {
     console.log('Google Auth Response:', googleResponse);
     if(googleResponse?.type === 'success') {
