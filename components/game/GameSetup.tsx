@@ -14,7 +14,7 @@ import { Character } from "@/services/api";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 import { useAuth } from "@/hooks/useAuth";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://team6-backend.koreacentral.cloudapp.azure.com";
 
 // --- 타입 정의 ---
 interface Participant {

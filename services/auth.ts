@@ -1,7 +1,7 @@
 import { storage } from './storage';
 
 // API 기본 URL
-const BASE_API_URL = 'http://127.0.0.1:8000';
+const BASE_API_URL = 'https://team6-backend.koreacentral.cloudapp.azure.com';
 
 interface User {
   id: string;

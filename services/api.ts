@@ -3,7 +3,7 @@ import { storage } from "../services/storage";  // ✅ AsyncStorage 유틸 가�
 import { PerRoleResult, SceneTemplate } from "@/util/ttrpg";
 
 const api = axios.create({
-  baseURL: "http://127.0.0.1:8000/",
+  baseURL: "https://team6-backend.koreacentral.cloudapp.azure.com/",
 });
 
 // 요청 인터셉터 (토큰 붙이기)
