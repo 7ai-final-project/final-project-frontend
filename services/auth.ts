@@ -1,7 +1,7 @@
 import { storage } from './storage';
 
 // API 기본 URL
-const BASE_API_URL = 'http://20.196.72.38';
+const BASE_API_URL = 'http://127.0.0.1:8000';
 
 interface User {
   id: string;

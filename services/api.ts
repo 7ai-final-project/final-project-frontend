@@ -3,7 +3,7 @@ import { storage } from "../services/storage";  // ✅ AsyncStorage 유틸 가�
 import { PerRoleResult, SceneTemplate } from "@/util/ttrpg";
 
 const api = axios.create({
-  baseURL: "http://20.196.72.38/",
+  baseURL: "http://127.0.0.1:8000/",
 });
 
 // 요청 인터셉터 (토큰 붙이기)
@@ -47,6 +47,10 @@ export interface PaginatedCharacterResponse {
 
 export const fetchUserStoryProgress = () => {
   return api.get('/storymode/story/progress/user/');
+};
+export const updateUserNickname = (nickname: string) => {
+  // 백엔드 views.py의 UserInfoUpdateView에 정의된 대로 PUT 메소드를 사용합니다.
+  return api.put('/auth/user/update', { nickname });
 };
 
 // ---- Rooms API helpers ----

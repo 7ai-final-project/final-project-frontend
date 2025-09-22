@@ -38,6 +38,7 @@ interface Participant {
   id: string;
   username: string;
   is_ready: boolean;
+  is_away: boolean;
 }
 
 interface RoomType {
@@ -131,7 +132,7 @@ export default function RoomScreen() {
       const nonceResponse = await getWebSocketNonce();
       const nonce = nonceResponse.data.nonce;
       const scheme = "ws";
-      const backendHost = "20.196.72.38";
+      const backendHost = "127.0.0.1:8000";
       const url = `${scheme}://${backendHost}/ws/game/${roomId}/?nonce=${nonce}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
@@ -380,6 +381,10 @@ export default function RoomScreen() {
     }
   };
 
+  const handleGoHome = () => {
+    router.replace('/'); 
+  };
+
   const handleOptionSelect = () => { // 'async' 키워드 제거
     if (!isOwner) return;
     if (!selectedScenarioId || !selectedDifficultyId || !selectedModeId || !selectedGenreId) {
@@ -620,6 +625,9 @@ export default function RoomScreen() {
               <View style={styles.participantsHeader}>
                 <Text style={styles.subTitle}>참가자 ({room.selected_by_room?.length || 0}/{room.max_players})</Text>
                 <View style={styles.headerButtonContainer}>
+                  <TouchableOpacity style={styles.headerIconBtn} onPress={handleGoHome}>
+                    <Ionicons name="home-outline" size={20} color="#E0E0E0" />
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.headerIconBtn} onPress={() => setIsLeaveModalVisible(true)}>
                     <Ionicons name="exit-outline" size={24} color="#E0E0E0" />
                   </TouchableOpacity>
@@ -639,10 +647,17 @@ export default function RoomScreen() {
                       {room.owner === p.id && <Ionicons name="key" size={16} color="#E2C044" style={{ marginRight: 8 }} />}
                       <Text style={styles.participantName}>{p.username}</Text>
                     </View>
-                    <View style={p.is_ready ? styles.ready : styles.notReady}>
-                      <Ionicons name={p.is_ready ? "checkmark-circle" : "hourglass-outline"} size={16} color={p.is_ready ? "#4CAF50" : "#aaa"} />
-                      <Text style={p.is_ready ? styles.readyText : styles.notReadyText}>{p.is_ready ? "READY" : "WAITING"}</Text>
-                    </View>
+                    {p.is_away ? (
+                      <View style={styles.awayStatus}>
+                        <Ionicons name="time-outline" size={16} color="#FFC107" />
+                        <Text style={styles.awayText}>자리 비움</Text>
+                      </View>
+                    ) : (
+                      <View style={p.is_ready ? styles.ready : styles.notReady}>
+                        <Ionicons name={p.is_ready ? "checkmark-circle" : "hourglass-outline"} size={16} color={p.is_ready ? "#4CAF50" : "#aaa"} />
+                        <Text style={p.is_ready ? styles.readyText : styles.notReadyText}>{p.is_ready ? "READY" : "WAITING"}</Text>
+                      </View>
+                    )}
                   </View>
                 ))}
               </ImageBackground>
@@ -1001,5 +1016,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     backgroundColor: '#7C3AED',
+  },
+  awayStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  awayText: {
+    fontWeight: "bold",
+    color: "#FFC107", // 주황색 계열로 강조
+    fontSize: 14,
+    fontStyle: 'italic',
   },
 });
