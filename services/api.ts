@@ -45,6 +45,14 @@ export interface PaginatedCharacterResponse {
   results: Character[];
 }
 
+export const fetchUserStoryProgress = () => {
+  return api.get('/storymode/story/progress/user/');
+};
+export const updateUserNickname = (nickname: string) => {
+  // 백엔드 views.py의 UserInfoUpdateView에 정의된 대로 PUT 메소드를 사용합니다.
+  return api.put('/auth/user/update', { nickname });
+};
+
 // ---- Rooms API helpers ----
 export const fetchRooms = () => api.get("game/");
 export const fetchRoomDetail = (id: string) => api.get(`game/${id}/`);

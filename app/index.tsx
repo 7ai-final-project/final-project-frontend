@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, ReactNode } from 'react';
-import { useWindowDimensions, View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Pressable, ImageBackground } from 'react-native';
+import { useWindowDimensions, View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Pressable, ImageBackground, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
@@ -10,6 +10,7 @@ import { useFonts } from 'expo-font';
 import ProfileModal from '../components/ProfileModal';
 import OptionsModal from '../components/OptionsModal';
 import NicknameInputModal from '../components/main/NicknameInputModal';
+import { updateUserNickname } from '../services/api';
 
 interface MedievalButtonProps {
   children: ReactNode;
@@ -167,6 +168,22 @@ export default function HomeScreen() {
   
   const { user, setUser, loading, handleLogout } = useAuth();
   const [tempLoginUser, setTempLoginUser] = useState<any>(null);
+
+  const handleNicknameUpdate = async (newNickname: string) => {
+    if (!user) return;
+
+    try {
+      // 기존의 api.put(...)을 새로 만든 함수로 대체합니다.
+      await updateUserNickname(newNickname);
+
+      // API 호출이 성공하면 화면의 상태를 업데이트합니다.
+      setUser({ ...user, nickname: newNickname });
+
+    } catch (error) {
+      console.error("닉네임 변경 실패:", error);
+      Alert.alert("오류", "닉네임 변경 중 오류가 발생했습니다.");
+    }
+  };
   
   const backgroundImages = [
     require('../assets/images/main/background_image1.jpg'), 
@@ -361,6 +378,7 @@ return (
           visible={profileModalVisible}
           onClose={() => setProfileModalVisible(false)}
           user={user}
+          onUpdateNickname={handleNicknameUpdate}
         />
 
       <OptionsModal

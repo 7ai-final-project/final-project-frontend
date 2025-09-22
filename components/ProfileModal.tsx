@@ -1,573 +1,255 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, Alert, useWindowDimensions, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, 
+  useWindowDimensions, ScrollView, ActivityIndicator, 
+  UIManager, Platform, LayoutAnimation, Animated 
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import api from '../services/api';
+import { fetchUserStoryProgress, updateUserNickname } from '../services/api'; // 👈 updateUserNickname 추가
 import { useFonts } from 'expo-font';
 
-interface ProfileModalProps {
-  visible: boolean;
-  onClose: () => void;
-  user: {
-    name: string;
-    nickname: string;
-    email?: string;
-  } | null;
-  onUpdateNickname?: (newNickname: string) => void;
+// Android LayoutAnimation 설정
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// 업적 데이터 타입
-interface Achievement {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  isUnlocked: boolean;
-}
+// --- 타입 정의 ---
+interface Achievement { id: string; name: string; description: string; icon: string; isUnlocked: boolean; }
+interface StoryProgress { story_id: string; story_title: string; total_endings: number; unlocked_endings: number; }
+interface ProfileModalProps { visible: boolean; onClose: () => void; user: { name: string; nickname: string; email?: string; } | null; onUpdateNickname?: (newNickname: string) => void; }
 
-// 더미 업적 데이터
+// --- 더미 데이터 ---
 const dummyAchievements: Achievement[] = [
   { id: '1', name: '첫 번째 도전', description: '게임에 처음 접속했습니다.', icon: 'star', isUnlocked: true },
   { id: '2', name: '초보 사냥꾼', description: '몬스터 10마리를 처치했습니다.', icon: 'sword', isUnlocked: true },
   { id: '3', name: '탐험가', description: '숨겨진 지역을 발견했습니다.', icon: 'map', isUnlocked: false },
-  { id: '4', name: '골드 수집가', description: '총 1000골드를 모았습니다.', icon: 'cash', isUnlocked: true },
-  { id: '5', name: '대장장이', description: '아이템을 5개 제작했습니다.', icon: 'hammer', isUnlocked: false },
-  { id: '6', name: '전설의 시작', description: '첫 번째 보스를 물리쳤습니다.', icon: 'trophy', isUnlocked: true },
-  { id: '7', name: '미지의 영웅', description: '모든 업적을 달성했습니다.', icon: 'ribbon', isUnlocked: false },
-  { id: '8', name: '끈기의 증명', description: '100시간 이상 플레이했습니다.', icon: 'time', isUnlocked: false },
 ];
 
-// 게임 업적 섹션 컴포넌트
-const AchievementSection = ({ achievements, isMobile }: { achievements: Achievement[], isMobile: boolean }) => {
-  return (
-    <View style={isMobile ? achievementStyles.achievementContainerMobile : achievementStyles.achievementContainer}>
-      <Text style={isMobile ? achievementStyles.achievementTitleMobile : achievementStyles.achievementTitle}>
-        <Ionicons name="trophy" size={isMobile ? 18 : 22} color="#FFD700" /> 게임 업적
-      </Text>
-      <ScrollView style={achievementStyles.achievementList}>
-        {achievements.map((achievement) => (
-          <View key={achievement.id} style={isMobile ? achievementStyles.achievementItemMobile : achievementStyles.achievementItem}>
-            <Ionicons
-              name={achievement.icon as any}
-              size={isMobile ? 24 : 28}
-              color={achievement.isUnlocked ? '#FFD700' : '#888'}
-              style={achievementStyles.achievementIcon}
-            />
-            <View style={achievementStyles.achievementTextContent}>
-              <Text style={isMobile ? achievementStyles.achievementNameMobile : achievementStyles.achievementName}>
-                {achievement.name}
-              </Text>
-              <Text style={isMobile ? achievementStyles.achievementDescriptionMobile : achievementStyles.achievementDescription}>
-                {achievement.description}
-              </Text>
-            </View>
-            {achievement.isUnlocked && (
-              <Ionicons name="checkmark-circle" size={isMobile ? 20 : 24} color="#4CAF50" />
-            )}
-          </View>
-        ))}
-      </ScrollView>
+// --- 🟢 탭별 콘텐츠를 위한 컴포넌트 분리 ---
+
+// 1. 개인정보 탭 컴포넌트 (에러 메시지, 저장 상태 표시 기능 추가)
+const ProfileSection: React.FC<{
+  user: ProfileModalProps['user'];
+  isEditing: boolean;
+  setIsEditing: (isEditing: boolean) => void;
+  newNickname: string;
+  setNewNickname: (nickname: string) => void;
+  handleUpdateNickname: () => void;
+  isMobile: boolean;
+  isSaving: boolean;
+  errorMessage: string;
+}> = ({ user, isEditing, setIsEditing, newNickname, setNewNickname, handleUpdateNickname, isMobile, isSaving, errorMessage }) => (
+  <View style={styles.contentContainer}>
+    <Ionicons name="person-circle" size={isMobile ? 80 : 100} color="#F4E4BC" />
+    <View style={styles.infoContainer}>
+      <Text style={isMobile ? styles.nameTextMobile : styles.nameText}>{user?.name}</Text>
+      {isEditing ? (
+        <View style={styles.editContainer}>
+          <TextInput
+            style={[styles.nicknameInput, errorMessage ? styles.inputError : null]}
+            value={newNickname}
+            onChangeText={setNewNickname}
+            placeholder="2~10자 한글, 영문, 숫자"
+            placeholderTextColor="#A9A9A9"
+            maxLength={10}
+            editable={!isSaving}
+          />
+          <TouchableOpacity onPress={handleUpdateNickname} disabled={isSaving} style={isSaving ? styles.disabledButton : {}}>
+            <Ionicons name="checkmark-circle" size={isMobile ? 24 : 30} color="#3CB371" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setIsEditing(false)} disabled={isSaving} style={isSaving ? styles.disabledButton : {}}>
+            <Ionicons name="close-circle" size={isMobile ? 24 : 30} color="#A9A9A9" />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.nicknameContainer}>
+          <Text style={isMobile ? styles.nicknameTextMobile : styles.nicknameText}>{user?.nickname}</Text>
+          <TouchableOpacity onPress={() => setIsEditing(true)}>
+            <Ionicons name="create-outline" size={isMobile ? 18 : 24} color="#A9A9A9" />
+          </TouchableOpacity>
+        </View>
+      )}
+      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
     </View>
-  );
+  </View>
+);
+
+// (AchievementSection, ProgressBar, StoryProgressSection 컴포넌트는 이전과 동일)
+const AchievementSection: React.FC<{ achievements: Achievement[]; isMobile: boolean }> = ({ achievements, isMobile }) => (
+    <View style={styles.contentContainer}><Text style={isMobile ? styles.contentTitleMobile : styles.contentTitle}><Ionicons name="trophy" size={isMobile ? 18 : 22} color="#FFD700" /> 업적</Text><ScrollView style={styles.listScrollView} showsVerticalScrollIndicator={false}>{achievements.map((item) => (<View key={item.id} style={isMobile ? styles.achievementItemMobile : styles.achievementItem}><Ionicons name={item.isUnlocked ? "lock-open" : "lock-closed"} size={isMobile ? 18 : 24} color={item.isUnlocked ? "#3CB371" : "#A9A9A9"} style={styles.achievementIcon} /><View style={styles.achievementTextContainer}><Text style={isMobile ? styles.achievementNameMobile : styles.achievementName}>{item.name}</Text><Text style={isMobile ? styles.achievementDescMobile : styles.achievementDesc}>{item.description}</Text></View></View>))}</ScrollView></View>
+);
+const ProgressBar: React.FC<{ progress: number; isMobile: boolean }> = ({ progress, isMobile }) => (
+    <View style={isMobile ? styles.progressBarContainerMobile : styles.progressBarContainer}><View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} /></View>
+);
+const StoryProgressSection: React.FC<{ storyProgressList: StoryProgress[] | null; loading: boolean; isMobile: boolean; }> = ({ storyProgressList, loading, isMobile }) => (
+    <View style={styles.contentContainer}><Text style={isMobile ? styles.contentTitleMobile : styles.contentTitle}><Ionicons name="book" size={isMobile ? 18 : 22} color="#F4E4BC" /> 플레이 기록</Text>{loading ? (<ActivityIndicator size="large" color="#F4E4BC" style={styles.loadingIndicator} />) : (<ScrollView style={styles.listScrollView} showsVerticalScrollIndicator={false}>{storyProgressList && storyProgressList.length > 0 ? (storyProgressList.map(item => { const progress = item.total_endings > 0 ? item.unlocked_endings / item.total_endings : 0; return (<View key={item.story_id} style={styles.storyProgressItem}><Text style={isMobile ? styles.progressTextMobile : styles.progressText}>{item.story_title}: {item.unlocked_endings} / {item.total_endings}</Text><ProgressBar progress={progress} isMobile={isMobile} /></View>); })) : (<Text style={styles.noDataText}>플레이한 스토리가 없습니다.</Text>)}</ScrollView>)}</View>
+);
+const Toast: React.FC<{ message: string; visible: boolean; onHide: () => void; isMobile: boolean }> = ({ message, visible, onHide, isMobile }) => {
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    useEffect(() => { if (visible) { Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start(); const timer = setTimeout(() => { Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(onHide); }, 2000); return () => clearTimeout(timer); } }, [visible]);
+    if (!visible) return null;
+    return (<Animated.View style={[isMobile ? styles.toastContainerMobile : styles.toastContainer, { opacity: fadeAnim }]}><Text style={styles.toastText}>{message}</Text></Animated.View>);
 };
 
-export default function ProfileModal({ visible, onClose, user, onUpdateNickname }: ProfileModalProps) {
+// --- 🟣 메인 ProfileModal 컴포넌트 ---
+const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user, onUpdateNickname }) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
-  const [fontsLoaded, fontError] = useFonts({ 'neodgm': require('../assets/fonts/neodgm.ttf'), });
-
-  const [isEditingNickname, setIsEditingNickname] = useState(false);
-  const [tempNickname, setTempNickname] = useState('');
+  // --- State 관리 (이전 버전 로직 복원) ---
+  const [activeTab, setActiveTab] = useState<'profile' | 'achievements' | 'progress'>('profile');
+  const [isEditing, setIsEditing] = useState(false);
+  const [newNickname, setNewNickname] = useState(user?.nickname || '');
+  const [storyProgressList, setStoryProgressList] = useState<StoryProgress[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [fontsLoaded] = useFonts({ 'neodgm': require('../assets/fonts/neodgm.ttf') });
+  const [toast, setToast] = useState({ visible: false, message: '' });
+  
+  // 👇 자체적인 API 호출을 위한 상태 추가
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // 닉네임 수정 시작 시, 현재 닉네임으로 상태 초기화
   useEffect(() => {
-    if (user) {
-      setTempNickname(user.nickname);
+    if (isEditing && user) {
+        setNewNickname(user.nickname);
+        setErrorMessage('');
     }
-  }, [user]);
+  }, [isEditing, user]);
 
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
+  // 데이터 로딩 Effect
+  useEffect(() => {
+    const fetchProgressData = async () => { if (user) { setLoading(true); try { const response = await fetchUserStoryProgress(); setStoryProgressList(response.data.progress_list); } catch (error) { console.error("스토리 진행률 로딩 실패:", error); setStoryProgressList(null); } finally { setLoading(false); } } };
+    if (visible) { fetchProgressData(); setActiveTab('profile'); } else { setStoryProgressList(null); setIsEditing(false); }
+  }, [visible, user]);
 
-  if (!user) {
-    return null;
-  }
-
-  const handleStartEditNickname = () => {
-    setTempNickname(user.nickname);
-    setIsEditingNickname(true);
-  };
-
-  const handleCancelEditNickname = () => {
-    setTempNickname(user.nickname);
-    setIsEditingNickname(false);
-    setErrorMessage('');
-  };
-
-  const handleSaveNickname = async () => {
+  // --- 👇 닉네임 업데이트 핸들러 (자체 API 호출 로직으로 수정) ---
+  const handleUpdateNickname = async () => {
     if (isSaving) return;
 
-    if (!tempNickname.trim()) {
+    // 유효성 검사
+    const trimmedNickname = newNickname.trim();
+    if (!trimmedNickname) {
       setErrorMessage('닉네임을 입력해주세요.');
       return;
     }
-
-    if (tempNickname.trim().length < 2 || tempNickname.trim().length > 10) {
+    if (trimmedNickname.length < 2 || trimmedNickname.length > 10) {
       setErrorMessage('닉네임은 2자 이상 10자 이하로 입력해주세요.');
       return;
     }
-
-    const nicknameRegex = /^[a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ]*$/;
-    if (!nicknameRegex.test(tempNickname.trim())) {
+    if (!/^[a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ]*$/.test(trimmedNickname)) {
       setErrorMessage('닉네임은 한글, 영문, 숫자만 사용할 수 있습니다.');
       return;
     }
-
-    const isConfirmed = confirm('닉네임을 정말 수정하시겠습니까?');    
-    if (isConfirmed) {
-      console.log('사용자가 확인을 선택함');
-      await performNicknameUpdate();
-    } else {
-      console.log('사용자가 취소를 선택함');
-    }
-  };
-
-  const performNicknameUpdate = async () => {
+    
     setIsSaving(true);
     setErrorMessage('');
 
     try {
-      const response = await api.put('/auth/user/update', { nickname: tempNickname.trim() });
+      // 직접 API 호출
+      await updateUserNickname(trimmedNickname);
 
-      if (response.status === 409) {
-        setErrorMessage('이미 사용 중인 닉네임입니다. 다른 닉네임을 사용해주세요.');
-        setIsSaving(false);
-        return;
-      }
-
-      if (user) {
-        user.nickname = tempNickname.trim();
-      }
-
+      // 부모 컴포넌트(index.tsx)의 상태 업데이트 알림 (중요!)
       if (onUpdateNickname) {
-        onUpdateNickname(tempNickname.trim());
+        onUpdateNickname(trimmedNickname);
       }
-
-      Alert.alert('성공', '닉네임이 성공적으로 변경되었습니다!');
-
-      setIsEditingNickname(false);
-      setErrorMessage('');
+      
+      setIsEditing(false);
+      setToast({ visible: true, message: '닉네임이 성공적으로 변경되었습니다.' });
 
     } catch (error: any) {
       console.error('닉네임 업데이트 실패:', error);
-
       if (error.response && error.response.data && error.response.data.message) {
         setErrorMessage(error.response.data.message);
-      } else if (error.response?.status === 409) {
-        setErrorMessage('이미 사용 중인 닉네임입니다. 다른 닉네임을 사용해주세요.');
       } else {
-        setErrorMessage('닉네임 저장 중 오류가 발생했습니다. 다시 시도해주세요.');
+        setErrorMessage('닉네임 저장 중 오류가 발생했습니다.');
       }
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleModalClose = () => {
-    setIsEditingNickname(false);
-    setTempNickname(user.nickname);
-    setErrorMessage('');
-    onClose();
-  };
+  // 탭 전환 핸들러
+  const handleTabPress = (tabName: 'profile' | 'achievements' | 'progress') => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActiveTab(tabName);
+  }
 
+  if (!fontsLoaded) return null;
+
+  // --- 렌더링 ---
   return (
-    <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={handleModalClose}>
-      <View style={styles.modalOverlay}>
-        <View style={isMobile ? styles.profileModalBoxMobile : styles.profileModalBox}>
-          <TouchableOpacity style={styles.closeIcon} onPress={handleModalClose}>
-            <Ionicons name="close" size={isMobile ? 22 : 24} color="#aaa" />
+    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
+      <TouchableOpacity style={styles.centeredView} activeOpacity={1} onPressOut={onClose}>
+        <TouchableOpacity activeOpacity={1} style={[styles.modalView, isMobile ? styles.modalViewMobile : {}]} onPress={(e) => e.stopPropagation()}>
+          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <Ionicons name="close" size={isMobile ? 24 : 30} color="#F4E4BC" />
           </TouchableOpacity>
-          <Text style={isMobile ? styles.modalTitleMobile : styles.modalTitle}>프로필</Text>
-
-          <View style={isMobile ? styles.profileContentMobile : styles.profileContent}>
-            <View style={isMobile ? styles.profileIconContainerMobile : styles.profileIconContainer}>
-              <Ionicons name="person-circle" size={isMobile ? 70 : 80} color="#eee" />
+          <View style={styles.modalContentLayout}>
+            <View style={styles.tabBar}>
+                <TouchableOpacity style={[styles.tabButton, activeTab === 'profile' && styles.activeTabButton]} onPress={() => handleTabPress('profile')}><Ionicons name="person-outline" size={isMobile ? 20 : 24} color="#F4E4BC" />{!isMobile && <Text style={styles.tabButtonText}>개인정보</Text>}</TouchableOpacity>
+                <TouchableOpacity style={[styles.tabButton, activeTab === 'achievements' && styles.activeTabButton]} onPress={() => handleTabPress('achievements')}><Ionicons name="trophy-outline" size={isMobile ? 20 : 24} color="#FFD700" />{!isMobile && <Text style={styles.tabButtonText}>업적</Text>}</TouchableOpacity>
+                <TouchableOpacity style={[styles.tabButton, activeTab === 'progress' && styles.activeTabButton]} onPress={() => handleTabPress('progress')}><Ionicons name="book-outline" size={isMobile ? 20 : 24} color="#87CEEB" />{!isMobile && <Text style={styles.tabButtonText}>플레이 기록</Text>}</TouchableOpacity>
             </View>
-
-            <View style={styles.profileTextContainer}>
-              <View style={isMobile ? styles.userInfoSectionMobile : styles.userInfoSection}>
-                <Text style={isMobile ? styles.userInfoLabelMobile : styles.userInfoLabel}>닉네임</Text>
-                {isEditingNickname ? (
-                  <View style={styles.nicknameEditContainer}>
-                    <View style={styles.inputContainer}>
-                      <TextInput
-                        style={[styles.nicknameInput, errorMessage ? styles.inputError : null, isMobile ? styles.nicknameInputMobile : {}]}
-                        value={tempNickname}
-                        onChangeText={setTempNickname}
-                        placeholder="닉네임을 입력하세요"
-                        placeholderTextColor="#aaa"
-                        autoFocus={true}
-                        selectTextOnFocus={true}
-                        maxLength={10}
-                        editable={!isSaving}
-                        autoCapitalize="none"
-                        keyboardAppearance="dark"
-                      />
-                      <View style={styles.editButtonsContainer}>
-                        <TouchableOpacity
-                          style={[styles.saveButton, isSaving && styles.disabledButton]}
-                          onPress={handleSaveNickname}
-                          disabled={isSaving}
-                        >
-                          <Ionicons
-                            name={isSaving ? "hourglass" : "checkmark"}
-                            size={isMobile ? 18 : 20}
-                            color={isSaving ? "#aaa" : "#4CAF50"}
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.cancelButton, isSaving && styles.disabledButton]}
-                          onPress={handleCancelEditNickname}
-                          disabled={isSaving}
-                        >
-                          <Ionicons name="close" size={isMobile ? 18 : 20} color="#f44336" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                    {errorMessage ? (
-                      <Text style={styles.errorText}>{errorMessage}</Text>
-                    ) : null}
-                  </View>
-                ) : (
-                  <View style={styles.nicknameDisplayContainer}>
-                    <Text style={isMobile ? styles.profileNicknameMobile : styles.profileNickname}>{user.nickname} ({user.name})</Text>
-                    <TouchableOpacity style={styles.editNicknameButton} onPress={handleStartEditNickname}>
-                      <Ionicons name="pencil" size={isMobile ? 16 : 18} color="#aaa" />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-
-              {/* 이메일 */}
-              <View style={isMobile ? styles.userInfoSectionMobile : styles.userInfoSection}>
-                <Text style={isMobile ? styles.userInfoLabelMobile : styles.userInfoLabel}>이메일</Text>
-                <Text style={isMobile ? styles.profileEmailMobile : styles.profileEmail}>{user.email || '이메일 정보 없음'}</Text>
-              </View>
+            <View style={styles.contentArea}>
+                {activeTab === 'profile' && ( <ProfileSection user={user} isEditing={isEditing} setIsEditing={setIsEditing} newNickname={newNickname} setNewNickname={setNewNickname} handleUpdateNickname={handleUpdateNickname} isMobile={isMobile} isSaving={isSaving} errorMessage={errorMessage} /> )}
+                {activeTab === 'achievements' && ( <AchievementSection achievements={dummyAchievements} isMobile={isMobile} /> )}
+                {activeTab === 'progress' && ( <StoryProgressSection storyProgressList={storyProgressList} loading={loading} isMobile={isMobile}/> )}
             </View>
           </View>
-
-          {/* 게임 업적 섹션 */}
-          <AchievementSection achievements={dummyAchievements} isMobile={isMobile} />
-        </View>
-      </View>
+          <Toast message={toast.message} visible={toast.visible} onHide={() => setToast({ ...toast, visible: false })} isMobile={isMobile} />
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
-}
+};
 
+// --- 스타일 정의 ---
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  profileModalBox: {
-    width: '85%',
-    maxWidth: 400,
-    backgroundColor: '#2a2d47',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    position: 'relative'
-  },
-  profileModalBoxMobile: {
-    width: '90%',
-    maxHeight: '80%',
-    backgroundColor: '#2a2d47',
-    borderRadius: 12,
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-    alignItems: 'center',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    position: 'relative',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontFamily: 'neodgm',
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 20
-  },
-  modalTitleMobile: {
-    fontSize: 18,
-    fontFamily: 'neodgm',
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 15
-  },
-  closeIcon: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    padding: 6
-  },
-  profileContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    width: '100%',
-    marginBottom: 20,
-  },
-  profileContentMobile: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: 15,
-  },
-  profileIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    overflow: 'hidden',
-    marginRight: 20,
-    borderWidth: 2,
-    borderColor: '#eee',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#3b3e5c',
-  },
-  profileIconContainerMobile: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    overflow: 'hidden',
-    marginBottom: 15,
-    borderWidth: 2,
-    borderColor: '#eee',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#3b3e5c',
-  },
-  profileTextContainer: {
-    flex: 1,
-  },
-  userInfoSection: {
-    width: '100%',
-    marginBottom: 15,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    paddingTop: 15,
-  },
-  userInfoSectionMobile: {
-    width: '100%',
-    marginBottom: 10,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    paddingTop: 10,
-    alignItems: 'center',
-  },
-  userInfoLabel: {
-    color: '#D1C4E9',
-    fontSize: 16,
-    marginBottom: 8,
-    fontWeight: '600',
-    fontFamily: 'neodgm',
-  },
-  userInfoLabelMobile: {
-    color: '#D1C4E9',
-    fontSize: 13,
-    marginBottom: 5,
-    fontWeight: '600',
-    fontFamily: 'neodgm',
-  },
-  nicknameDisplayContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  profileNickname: {
-    fontSize: 18,
-    color: '#fff',
-    fontFamily: 'neodgm',
-    marginRight: 8,
-  },
-  profileNicknameMobile: {
-    fontSize: 15,
-    color: '#fff',
-    fontFamily: 'neodgm',
-    marginRight: 6,
-  },
-  editNicknameButton: {
-    padding: 4,
-  },
-  nicknameEditContainer: {
-    flexDirection: 'column',
-    flex: 1,
-    minWidth: 0,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: 5,
-  },
-  nicknameInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#fff',
-    fontFamily: 'neodgm',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    marginRight: 6,
-    minWidth: 0,
-  },
-  nicknameInputMobile: {
-    fontSize: 13,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  inputError: {
-    borderColor: '#f44336',
-  },
-  editButtonsContainer: {
-    flexDirection: 'row',
-  },
-  saveButton: {
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    marginRight: 4,
-  },
-  cancelButton: {
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#f44336',
-    fontFamily: 'neodgm',
-    marginTop: 4,
-  },
-  profileEmail: {
-    fontSize: 18,
-    color: '#fff',
-    fontFamily: 'neodgm',
-  },
-  profileEmailMobile: {
-    fontSize: 15,
-    color: '#fff',
-    fontFamily: 'neodgm',
-  },
+  centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.7)', },
+  modalView: { width: '60%', height: '70%', maxWidth: 900, maxHeight: 600, backgroundColor: '#2C2B29', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5, borderWidth: 2, borderColor: '#F4E4BC', },
+  modalViewMobile: { width: '95%', height: '85%', padding: 10, },
+  closeButton: { position: 'absolute', top: 15, right: 15, zIndex: 10, },
+  modalContentLayout: { flex: 1, flexDirection: 'row', },
+  tabBar: { flex: 1, borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.1)', paddingRight: 10, marginRight: 10, },
+  tabButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 10, borderRadius: 8, marginBottom: 10, },
+  activeTabButton: { backgroundColor: 'rgba(244, 228, 188, 0.1)', },
+  tabButtonText: { color: '#F4E4BC', fontSize: 16, fontFamily: 'neodgm', marginLeft: 10, },
+  contentArea: { flex: 3, justifyContent: 'center', alignItems: 'center', },
+  contentContainer: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'flex-start', padding: 10, },
+  contentTitle: { color: '#F4E4BC', fontSize: 22, fontFamily: 'neodgm', fontWeight: 'bold', marginBottom: 20, textAlign: 'center', },
+  contentTitleMobile: { fontSize: 18, color: '#F4E4BC', fontFamily: 'neodgm', fontWeight: 'bold', marginBottom: 15, textAlign: 'center', },
+  listScrollView: { width: '100%', },
+  infoContainer: { alignItems: 'center', marginTop: 10, width: '100%' },
+  nameText: { color: '#fff', fontSize: 24, fontFamily: 'neodgm' },
+  nameTextMobile: { fontSize: 20, color: '#fff', fontFamily: 'neodgm' },
+  nicknameContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
+  nicknameText: { color: '#A9A9A9', fontSize: 18, marginRight: 10, fontFamily: 'neodgm' },
+  nicknameTextMobile: { fontSize: 16, color: '#A9A9A9', marginRight: 8, fontFamily: 'neodgm' },
+  editContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 5, width: '90%' },
+  nicknameInput: { flex: 1, borderBottomWidth: 1, borderBottomColor: '#F4E4BC', color: '#F4E4BC', fontSize: 16, marginRight: 10, fontFamily: 'neodgm', paddingBottom: 5 },
+  inputError: { borderColor: '#f44336' },
+  disabledButton: { opacity: 0.5 },
+  errorText: { fontSize: 12, color: '#f44336', fontFamily: 'neodgm', marginTop: 8, },
+  achievementItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  achievementItemMobile: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  achievementIcon: { marginRight: 15 },
+  achievementTextContainer: { flex: 1 },
+  achievementName: { color: '#fff', fontSize: 16, fontFamily: 'neodgm' },
+  achievementNameMobile: { fontSize: 14, color: '#fff', fontFamily: 'neodgm' },
+  achievementDesc: { color: '#A9A9A9', fontSize: 12, marginTop: 4, fontFamily: 'neodgm' },
+  achievementDescMobile: { fontSize: 10, color: '#A9A9A9', marginTop: 2, fontFamily: 'neodgm' },
+  storyProgressItem: { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', },
+  progressText: { fontSize: 16, color: '#fff', fontFamily: 'neodgm', textAlign: 'center', },
+  progressTextMobile: { fontSize: 14, color: '#fff', fontFamily: 'neodgm', textAlign: 'center', },
+  noDataText: { color: '#A9A9A9', textAlign: 'center', fontFamily: 'neodgm', marginTop: 20 },
+  loadingIndicator: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  progressBarContainer: { height: 8, width: '100%', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 4, marginTop: 8, overflow: 'hidden', },
+  progressBarContainerMobile: { height: 6, width: '100%', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 3, marginTop: 6, },
+  progressBarFill: { height: '100%', backgroundColor: '#3CB371', borderRadius: 4, },
+  toastContainer: { position: 'absolute', bottom: 30, alignSelf: 'center', backgroundColor: 'rgba(0, 0, 0, 0.85)', borderRadius: 20, paddingVertical: 12, paddingHorizontal: 25, elevation: 10, },
+  toastContainerMobile: { position: 'absolute', bottom: 20, alignSelf: 'center', width: '80%', backgroundColor: 'rgba(0, 0, 0, 0.85)', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 15, alignItems: 'center', },
+  toastText: { color: '#fff', fontSize: 14, fontFamily: 'neodgm', },
 });
 
-// 업적 섹션 스타일 시트
-const achievementStyles = StyleSheet.create({
-  achievementContainer: {
-    width: '100%',
-    marginTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    paddingTop: 15,
-  },
-  achievementContainerMobile: {
-    width: '100%',
-    marginTop: 15,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    paddingTop: 10,
-    alignItems: 'center',
-  },
-  achievementTitle: {
-    color: '#FFD700',
-    fontSize: 18,
-    fontFamily: 'neodgm',
-    fontWeight: 'bold',
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  achievementTitleMobile: {
-    color: '#FFD700',
-    fontSize: 16,
-    fontFamily: 'neodgm',
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  achievementList: {
-    maxHeight: 200,
-    width: '100%',
-    paddingHorizontal: 5,
-  },
-  achievementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  achievementItemMobile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  achievementIcon: {
-    marginRight: 10,
-  },
-  achievementTextContent: {
-    flex: 1,
-  },
-  achievementName: {
-    fontSize: 16,
-    color: '#fff',
-    fontFamily: 'neodgm',
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  achievementNameMobile: {
-    fontSize: 14,
-    color: '#fff',
-    fontFamily: 'neodgm',
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  achievementDescription: {
-    fontSize: 13,
-    color: '#bbb',
-    fontFamily: 'neodgm',
-  },
-  achievementDescriptionMobile: {
-    fontSize: 11,
-    color: '#bbb',
-    fontFamily: 'neodgm',
-  },
-});
+export default ProfileModal;
