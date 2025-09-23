@@ -12,6 +12,7 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
+import { useFonts } from 'expo-font';
 import { Character } from "@/services/api";
 
 // --- 타입 정의 ---
@@ -58,6 +59,9 @@ export default function GameSetup({
   characters: initialCharacters,
   onStart,
 }: GameSetupProps) {
+  const [fontsLoaded, fontError] = useFonts({
+    'neodgm': require("@/assets/fonts/neodgm.ttf"),
+  });
 
   const allCharacters: Character[] = useMemo(() => {
     try {
@@ -116,6 +120,10 @@ export default function GameSetup({
       });
   };
 
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   // ✅ [수정] 모달이 아닌 View 컴포넌트로 변경
   return (
     <View style={styles.modalOverlay}>
@@ -173,13 +181,13 @@ export default function GameSetup({
 const styles = StyleSheet.create({
   loadingBackground: { flex: 1, width: "100%", justifyContent: "center", alignItems: "center" },
   loadingBox: { alignItems: "center", justifyContent: "center", padding: 20 },
-  loadingText: { marginTop: 16, color: "#fff", fontSize: 18, fontWeight: "600", textAlign: 'center' },
+  loadingText: { marginTop: 16, color: "#fff", fontSize: 18, fontWeight: "600", textAlign: 'center', fontFamily: 'neodgm' },
   finalStartBtn: { marginTop: 30, backgroundColor: "#4CAF50", paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30 },
-  finalStartBtnText: { color: "#fff", fontSize: 20, fontWeight: "bold" },
+  finalStartBtnText: { color: "#fff", fontSize: 20, fontWeight: "bold", fontFamily: 'neodgm' },
   modalOverlay: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.8)" },
   modalBox: { width: "85%", maxHeight: "85%", backgroundColor: "#1E293B", borderRadius: 16, padding: 20, alignItems: "center", borderWidth: 1, borderColor: '#334155' },
-  modalTitle: { fontSize: 24, color: "#E2C044", marginBottom: 8, fontWeight: "bold" },
-  timerText: { fontSize: 16, color: "#A0A0A0", marginBottom: 16, fontStyle: 'italic' },
+  modalTitle: { fontSize: 24, color: "#E2C044", marginBottom: 8, fontWeight: "bold", fontFamily: 'neodgm' },
+  timerText: { fontSize: 16, color: "#A0A0A0", marginBottom: 16, fontStyle: 'italic', fontFamily: 'neodgm' },
   characterGridContainer: { paddingBottom: 16 },
   characterGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around",},
   characterCard: { 
@@ -202,13 +210,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     borderRadius: 8 
   },
-  takenText: { color: "#E2C044", fontWeight: "bold", fontSize: 20 },
+  takenText: { color: "#E2C044", fontWeight: "bold", fontSize: 20, fontFamily: 'neodgm' },
   characterImage: { width: 120, height: 120, marginBottom: 8, borderRadius: 8 },
-  characterName: { fontSize: 18, fontWeight: "bold", color: "#fff", textAlign: "center", marginBottom: 6 },
-  characterDescription: { fontSize: 13, color: '#A0A0A0', textAlign: 'center', marginBottom: 8 },
+  characterName: { fontSize: 18, fontWeight: "bold", color: "#fff", textAlign: "center", marginBottom: 6, fontFamily: 'neodgm' },
+  characterDescription: { fontSize: 13, color: '#A0A0A0', textAlign: 'center', marginBottom: 8, fontFamily: 'neodgm' },
   statsContainer: { width: '100%', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#4A5568', alignItems: 'center' },
-  statText: { color: '#CBD5E1', fontSize: 12, textAlign: 'center', lineHeight: 16 },
+  statText: { color: '#CBD5E1', fontSize: 12, textAlign: 'center', lineHeight: 16, fontFamily: 'neodgm' },
   listContainer: { width: '100%', marginTop: 10, alignItems: 'center' },
-  listTitle: { fontSize: 13, fontWeight: 'bold', color: '#E2C044', marginBottom: 4 },
-  listItemText: { color: "#CBD5E1", fontSize: 12, lineHeight: 16 },
+  listTitle: { fontSize: 13, fontWeight: 'bold', color: '#E2C044', marginBottom: 4, fontFamily: 'neodgm' },
+  listItemText: { color: "#CBD5E1", fontSize: 12, lineHeight: 16, fontFamily: 'neodgm' },
 });

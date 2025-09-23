@@ -28,6 +28,7 @@ import {
   Character,
   fetchCharactersByTopic,
 } from "../../../../services/api";
+import { useFonts } from 'expo-font';
 import ChatBox from "../../../../components/chat/ChatBox";
 import { useWebSocket } from "@//components/context/WebSocketContext";
 import { useAuth } from '../../../../hooks/useAuth';
@@ -75,6 +76,9 @@ export default function RoomScreen() {
     require('../../../../assets/images/game/multi_mode/background/gameroom_image_1.png'),
     require('../../../../assets/images/game/multi_mode/background/gameroom_image_2.png'),
   ];
+   const [fontsLoaded, fontError] = useFonts({
+    'neodgm': require('../../../../assets/fonts/neodgm.ttf'),
+  });
 
   const [selectedBackgroundImage, setSelectedBackgroundImage] = useState(
     backgroundImages[Math.floor(Math.random() * backgroundImages.length)]
@@ -131,8 +135,8 @@ export default function RoomScreen() {
     try {
       const nonceResponse = await getWebSocketNonce();
       const nonce = nonceResponse.data.nonce;
-      const scheme = "wss";
-      const backendHost = "team6-backend.koreacentral.cloudapp.azure.com";
+      const scheme = "ws";
+      const backendHost = "127.0.0.1:8000";
       const url = `${scheme}://${backendHost}/ws/game/${roomId}/?nonce=${nonce}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
@@ -519,6 +523,10 @@ export default function RoomScreen() {
     if (!wsRef.current) return;
     wsRef.current.send(JSON.stringify({ action: "toggle_ready" }));
   };
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
   
   if (authLoading || (!room && !isPasswordModalVisible)) {
     return (
@@ -740,6 +748,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2C344E",
     gap: 10,
+    fontFamily: 'neodgm',
   },
   optionsBoxTitle: {
     fontSize: 18,
@@ -750,10 +759,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#2C344E',
     paddingBottom: 8,
   },
-  title: { fontSize: 24, fontWeight: "bold", color: "#E0E0E0", marginBottom: 4 },
-  desc: { fontSize: 14, color: "#A0A0A0", marginBottom: 12, fontStyle: 'italic' },
+  title: { fontSize: 24, fontWeight: "bold", color: "#E0E0E0", marginBottom: 4, fontFamily: 'neodgm',},
+  desc: { fontSize: 14, color: "#A0A0A0", marginBottom: 12, fontStyle: 'italic', fontFamily: 'neodgm', },
   divider: { height: 1, backgroundColor: '#2C344E', marginVertical: 8 },
-  status: { fontSize: 15, color: "#ccc", alignItems: 'center', gap: 8 }, // 개선 사항: 폰트 크기 및 gap 조정
+  status: { fontSize: 15, color: "#ccc", alignItems: 'center', gap: 8, fontFamily: 'neodgm', }, // 개선 사항: 폰트 크기 및 gap 조정
   gameOptionButton: {
     flex: 1, // 개선 사항: ownerButtonRow 내에서 버튼이 공간을 균등하게 차지하도록 flex: 1 추가
     flexDirection: 'row',
@@ -769,7 +778,8 @@ const styles = StyleSheet.create({
   gameOptionButtonText: {
     color: '#E2C044',
     fontWeight: 'bold',
-    fontSize: 16
+    fontSize: 16,
+    fontFamily: 'neodgm',
   },
   buttonContainer: { flex: 1, justifyContent: 'flex-end', gap: 12 },
   btn: {
@@ -786,7 +796,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  btnText: { color: "#fff", fontSize: 18, fontWeight: 'bold' },
+  btnText: { color: "#fff", fontSize: 18, fontWeight: 'bold', fontFamily: 'neodgm', },
   readyBtn: { backgroundColor: "#1D7A50" },
   unreadyBtn: { backgroundColor: "#A0A0A0" },
   startBtn: { backgroundColor: "#7C3AED" },
@@ -798,7 +808,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 8,
     textAlign: 'center',
-    fontWeight: '600'
+    fontWeight: '600',
+    fontFamily: 'neodgm',
   },
   participantsHeader: {
     flexDirection: 'row',
@@ -806,7 +817,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10
   },
-  subTitle: { fontSize: 20, fontWeight: "bold", color: "#E2C044" },
+  subTitle: { fontSize: 20, fontWeight: "bold", color: "#E2C044", fontFamily: 'neodgm', },
   chatBtn: {
     padding: 8,
     backgroundColor: '#161B2E',
@@ -838,7 +849,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
   },
-  participantName: { color: "#E0E0E0", fontSize: 16 },
+  participantName: { color: "#E0E0E0", fontSize: 16, fontFamily: 'neodgm', },
   ready: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -849,9 +860,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6
   },
-  readyText: { fontWeight: "bold", color: "#4CAF50", fontSize: 14 },
-  notReadyText: { color: "#aaa", fontSize: 14 },
-  wsMsg: { fontSize: 12, color: "#aaa", textAlign: "center", marginTop: 10 },
+  readyText: { fontWeight: "bold", color: "#4CAF50", fontSize: 14, fontFamily: 'neodgm', },
+  notReadyText: { color: "#aaa", fontSize: 14, fontFamily: 'neodgm', },
+  wsMsg: { fontSize: 12, color: "#aaa", textAlign: "center", marginTop: 10, fontFamily: 'neodgm', },
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -877,8 +888,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: "center",
+    fontFamily: 'neodgm',
   },
-  modalSubTitle: { color: '#A0A0A0', marginBottom: 10, fontSize: 16, marginTop: 10 }, // 개선 사항: 상단 마진 추가
+  modalSubTitle: { color: '#A0A0A0', marginBottom: 10, fontSize: 16, marginTop: 10, fontFamily: 'neodgm', },
   topicOption: {
     padding: 12,
     borderRadius: 8,
@@ -886,7 +898,7 @@ const styles = StyleSheet.create({
     marginVertical: 6,
   },
   topicSelected: { backgroundColor: "#7C3AED", borderWidth: 0 },
-  topicText: { color: "#fff", textAlign: "center", fontWeight: 'bold' },
+  topicText: { color: "#fff", textAlign: "center", fontWeight: 'bold', fontFamily: 'neodgm', },
   modalCloseButton: {
     padding: 12,
     borderRadius: 8,
@@ -914,8 +926,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     lineHeight: 32,
+    fontFamily: 'neodgm',
   },
-  text: { color: '#fff' },
+  text: { color: '#fff', fontFamily: 'neodgm', },
   headerButtonContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -951,6 +964,7 @@ const styles = StyleSheet.create({
     color: "#E0E0E0",
     fontWeight: 'bold',
     marginBottom: 20,
+    fontFamily: 'neodgm',
   },
   passwordModalBox: {
     width: "30%",
@@ -971,7 +985,8 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontSize: 16,
     borderColor: "#131A33",
-    borderWidth: 1
+    borderWidth: 1,
+    fontFamily: 'neodgm',
   },
   modalButtonContainer: {
     flexDirection: 'row',
@@ -1010,6 +1025,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 25,
     lineHeight: 24,
+    fontFamily: 'neodgm',
   },
   modalConfirmButton: {
     width: '100%',
@@ -1027,5 +1043,6 @@ const styles = StyleSheet.create({
     color: "#FFC107", // 주황색 계열로 강조
     fontSize: 14,
     fontStyle: 'italic',
+    fontFamily: 'neodgm',
   },
 });

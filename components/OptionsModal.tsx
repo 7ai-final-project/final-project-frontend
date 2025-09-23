@@ -12,8 +12,6 @@ interface OptionsModalProps {
   setIsSfxOn: (value: boolean) => void;
   fontSizeMultiplier: number;
   setFontSizeMultiplier: (value: number) => void;
-  backgroundColor: string;
-  setBackgroundColor: (value: string) => void;
 }
 
 export default function OptionsModal({
@@ -25,8 +23,6 @@ export default function OptionsModal({
   setIsSfxOn,
   fontSizeMultiplier,
   setFontSizeMultiplier,
-  backgroundColor,
-  setBackgroundColor,
 }: OptionsModalProps) {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
@@ -45,20 +41,6 @@ export default function OptionsModal({
             <Ionicons name="close" size={isMobile ? 22 : 24} color="#aaa" />
           </TouchableOpacity>
           <Text style={isMobile ? styles.modalTitleMobile : styles.modalTitle}>설정</Text>
-
-          {/* 배경 색상 선택 섹션 */}
-          <View style={isMobile ? styles.optionSectionMobile : styles.optionSection}>
-            <Text style={isMobile ? styles.optionLabelMobile : styles.optionLabel}>바탕화면 색상</Text>
-            <View style={styles.colorOptionsContainer}>
-              {['#0B1021', '#4A148C', '#004D40', '#3E2723'].map(color => (
-                <TouchableOpacity 
-                  key={color}
-                  style={[styles.colorOption, isMobile ? styles.colorOptionMobile : {}, { backgroundColor: color, borderColor: backgroundColor === color ? '#E2C044' : 'rgba(255,255,255,0.3)' }]} 
-                  onPress={() => setBackgroundColor(color)} 
-                />
-              ))}
-            </View>
-          </View>
 
           {/* 사운드 설정 섹션 */}
           <View style={isMobile ? styles.optionSectionMobile : styles.optionSection}>

@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useFonts } from 'expo-font';
 import { Character, Skill, Item, getInitialScene, saveGame, resolveTurn, getNextScene } from "@/services/api";
 import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade, ShariBlock, World, PartyEntry } from "@/util/ttrpg";
 import { Audio } from "expo-av";
@@ -61,6 +62,9 @@ export default function GameEngineRealtime({
     initialPlayerState = null,
     turnSeconds = 20,
 }: Props) {
+    const [fontsLoaded, fontError] = useFonts({
+        'neodgm': require('../../assets/fonts/neodgm.ttf'),
+    });
     const { myCharacter, aiCharacters, allCharacters } = setupData;
 
     console.log("내 캐릭터 데이터:", JSON.stringify(myCharacter, null, 2));
@@ -920,12 +924,14 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: "bold",
         textAlign: "center",
+        fontFamily: 'neodgm',
     },
     subtitle: {
         color: "#D4D4D4",
         fontSize: 14,
         marginTop: 4,
         textAlign: "center",
+        fontFamily: 'neodgm',
     },
     characterPanel: {
         width: "30%",
@@ -948,6 +954,7 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         color: "#E0E0E0",
         marginBottom: 8,
+        fontFamily: 'neodgm',
     },
     characterDescription: {
         fontSize: 14,
@@ -955,6 +962,7 @@ const styles = StyleSheet.create({
         textAlign: "center",
         marginBottom: 10,
         lineHeight: 20,
+        fontFamily: 'neodgm',
     },
     roleText: {
         fontSize: 16,
@@ -980,6 +988,7 @@ const styles = StyleSheet.create({
         color: "#D4D4D4",
         fontSize: 14,
         lineHeight: 22,
+        fontFamily: 'neodgm',
     },
     skillsItemsBox: {
         width: "100%",
@@ -999,12 +1008,14 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         fontSize: 14,
         marginBottom: 4,
+        fontFamily: 'neodgm',
     },
     skillItemDesc: {
         color: "#A0A0A0",
         fontSize: 13,
         lineHeight: 18,
         paddingLeft: 8,
+        fontFamily: 'neodgm',
     },
     useButton: {
         backgroundColor: '#4CAF50',
@@ -1020,6 +1031,7 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontWeight: 'bold',
         fontSize: 12,
+        fontFamily: 'neodgm',
     },
     gamePanel: {
         flex: 1,
@@ -1041,6 +1053,7 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         marginBottom: 8,
         textAlign: "center",
+        fontFamily: 'neodgm',
     },
     timerContainer: {
         height: 8,
@@ -1058,6 +1071,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         textAlign: "center",
         marginTop: 4,
+        fontFamily: 'neodgm',
     },
     choiceBtn: {
         backgroundColor: "#2C344E",
@@ -1075,11 +1089,13 @@ const styles = StyleSheet.create({
         color: "#FFFFFF", 
         fontSize: 16,
         fontWeight: "bold",
+        fontFamily: 'neodgm',
     },
     hint: {
         color: "#A0A0E0",
         marginTop: 6,
         fontSize: 12,
+        fontFamily: 'neodgm',
     },
     secondary: {
         marginTop: 16,
@@ -1092,11 +1108,13 @@ const styles = StyleSheet.create({
     secondaryText: {
         color: "#ddd",
         fontWeight: "bold",
+        fontFamily: 'neodgm',
     },
     primary: {
         marginTop: 20,
         backgroundColor: "#7C3AED",
         paddingVertical: 14,
+        paddingHorizontal: 40,
         borderRadius: 10,
         alignItems: "center",
     },
@@ -1104,6 +1122,7 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "bold",
         fontSize: 16,
+        fontFamily: 'neodgm',
     },
     disabledButton: {
         backgroundColor: '#5A5A5A',
@@ -1133,6 +1152,7 @@ const styles = StyleSheet.create({
         color: "#E0E0E0",
         fontSize: 15,
         lineHeight: 22,
+        fontFamily: 'neodgm',
     },
     retryBtn: {
         marginTop: 16,
@@ -1144,6 +1164,7 @@ const styles = StyleSheet.create({
     retryText: {
         color: "#fff",
         fontWeight: "bold",
+        fontFamily: 'neodgm',
     },
     aiStatusBox: {
         marginTop: 12,
@@ -1170,6 +1191,7 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         textAlign: "center",
         marginBottom: 20,
+        fontFamily: 'neodgm',
     },
     returnButton: {
         position: 'absolute',
@@ -1211,6 +1233,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#E0E0E0',
         marginBottom: 15,
+        fontFamily: 'neodgm',
     },
     modalMessage: {
         fontSize: 16,
@@ -1218,6 +1241,7 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 25,
         lineHeight: 24,
+        fontFamily: 'neodgm',
     },
     modalButtonContainer: {
         flexDirection: 'row',
@@ -1241,6 +1265,7 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 16,
         fontWeight: 'bold',
+        fontFamily: 'neodgm',
     },
     resultsScrollView: {
         maxHeight: 300,
@@ -1258,16 +1283,19 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         marginBottom: 5,
+        fontFamily: 'neodgm',
     },
     resultDetails: {
         color: '#D4D4D4',
         fontSize: 14,
         lineHeight: 20,
+        fontFamily: 'neodgm',
     },
     resultGrade: {
         fontSize: 16,
         fontWeight: 'bold',
         marginTop: 8,
+        fontFamily: 'neodgm',
     },
     modalCloseButton: {
         marginTop: 20,
@@ -1288,6 +1316,7 @@ const styles = StyleSheet.create({
         color: '#D4D4D4',
         fontSize: 15,
         lineHeight: 22,
+        fontFamily: 'neodgm',
     },
     collapsibleContainer: {
         width: "100%",
@@ -1311,6 +1340,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: "bold",
         color: "#E0E0E0",
+        fontFamily: 'neodgm',
     },
     hudIconContainer: {
         position: 'absolute',
@@ -1341,5 +1371,6 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 10,
         fontWeight: 'bold',
+        fontFamily: 'neodgm',
     },
 });

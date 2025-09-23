@@ -23,6 +23,7 @@ import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, 
 import { Audio } from "expo-av";
 import { useAuth } from "@/hooks/useAuth";
 import ShariHud from "./ShariHud";
+import { useFonts } from 'expo-font';
 
 interface LoadedSessionData {
   choice_history: any;
@@ -63,6 +64,9 @@ export default function GameEngineRealtime({
     // [수정] setupData에서 필요한 정보를 구조 분해 할당합니다.
     const { user } = useAuth();
     const { myCharacter, aiCharacters, allCharacters } = setupData;
+    const [fontsLoaded, fontError] = useFonts({
+      'neodgm': require('@/assets/fonts/neodgm.ttf'),
+    });
 
     console.log("내 캐릭터 데이터:", JSON.stringify(myCharacter, null, 2));
 
@@ -160,8 +164,8 @@ export default function GameEngineRealtime({
             try {
                 const nonceResponse = await getWebSocketNonce();
                 const nonce = nonceResponse.data.nonce;
-                const scheme = "wss";
-                const backendHost = "team6-backend.koreacentral.cloudapp.azure.com";
+                const scheme = "ws";
+                const backendHost = "127.0.0.1:8000";
                 const url = `${scheme}://${backendHost}/ws/multi_game/${roomId}/?nonce=${nonce}`;
                 
                 ws = new WebSocket(url);
@@ -568,7 +572,7 @@ export default function GameEngineRealtime({
             default: return "알 수 없음";
         }
     };
-    if (isLoading && !currentScene) {
+    if ((isLoading && !currentScene) || !fontsLoaded && !fontError) {
         return (
             <View style={styles.center}>
                 <ActivityIndicator size="large" color="#E2C044" />
@@ -1042,12 +1046,14 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: "bold",
         textAlign: "center",
+        fontFamily: 'neodgm',
     },
     subtitle: {
         color: "#D4D4D4",
         fontSize: 14,
         marginTop: 4,
         textAlign: "center",
+        fontFamily: 'neodgm',
     },
     characterPanel: {
         width: "30%",
@@ -1070,6 +1076,7 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         color: "#E0E0E0",
         marginBottom: 8,
+        fontFamily: 'neodgm',
     },
     characterDescription: {
         fontSize: 14,
@@ -1077,6 +1084,7 @@ const styles = StyleSheet.create({
         textAlign: "center",
         marginBottom: 10,
         lineHeight: 20,
+        fontFamily: 'neodgm',
     },
     roleText: {
         fontSize: 16,
@@ -1097,11 +1105,13 @@ const styles = StyleSheet.create({
         color: "#E0E0E0",
         marginBottom: 8,
         textAlign: "center",
+        fontFamily: 'neodgm',
     },
     statText: {
         color: "#D4D4D4",
         fontSize: 14,
         lineHeight: 22,
+        fontFamily: 'neodgm',
     },
     skillsItemsBox: {
         width: "100%",
@@ -1121,12 +1131,14 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         fontSize: 14,
         marginBottom: 4,
+        fontFamily: 'neodgm',
     },
     skillItemDesc: {
         color: "#A0A0A0", // 회색으로 설명 표시
         fontSize: 13,
         lineHeight: 18,
         paddingLeft: 8, // 이름과 맞추기 위해 살짝 들여쓰기
+        fontFamily: 'neodgm',
     },
     useButton: {
         backgroundColor: '#4CAF50',
@@ -1142,6 +1154,7 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontWeight: 'bold',
         fontSize: 12,
+        fontFamily: 'neodgm',
     },
     gamePanel: {
         flex: 1,
@@ -1163,6 +1176,7 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         marginBottom: 8,
         textAlign: "center",
+        fontFamily: 'neodgm',
     },
     timerContainer: {
         height: 8,
@@ -1180,6 +1194,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         textAlign: "center",
         marginTop: 4,
+        fontFamily: 'neodgm',
     },
     choiceBtn: {
         backgroundColor: "#2C344E",
@@ -1197,11 +1212,13 @@ const styles = StyleSheet.create({
         color: "#FFFFFF", 
         fontSize: 16,
         fontWeight: "bold",
+        fontFamily: 'neodgm',
     },
     hint: {
         color: "#A0A0E0",
         marginTop: 6,
         fontSize: 12,
+        fontFamily: 'neodgm',
     },
     secondary: {
         marginTop: 16,
@@ -1214,6 +1231,7 @@ const styles = StyleSheet.create({
     secondaryText: {
         color: "#ddd",
         fontWeight: "bold",
+        fontFamily: 'neodgm',
     },
     primary: {
         marginTop: 20,
@@ -1226,6 +1244,7 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "bold",
         fontSize: 16,
+        fontFamily: 'neodgm',
     },
     disabledButton: {
         backgroundColor: '#5A5A5A',
@@ -1261,6 +1280,7 @@ const styles = StyleSheet.create({
         color: "#E0E0E0",
         fontSize: 15,
         lineHeight: 22,
+        fontFamily: 'neodgm',
     },
     retryBtn: {
         marginTop: 16,
@@ -1272,6 +1292,7 @@ const styles = StyleSheet.create({
     retryText: {
         color: "#fff",
         fontWeight: "bold",
+        fontFamily: 'neodgm',
     },
     aiStatusBox: {
         marginTop: 12,
@@ -1286,11 +1307,13 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: "bold",
         marginBottom: 4,
+        fontFamily: 'neodgm',
     },
     aiStatusText: {
         color: "#4CAF50",
         fontSize: 12,
         marginTop: 2,
+        fontFamily: 'neodgm',
     },
     resultText: {
         color: "#E0E0E0",
@@ -1298,6 +1321,7 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         textAlign: "center",
         marginBottom: 20,
+        fontFamily: 'neodgm',
     },
     returnButton: {
         position: 'absolute',
@@ -1339,6 +1363,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#E0E0E0',
         marginBottom: 15,
+        fontFamily: 'neodgm',
     },
     modalMessage: {
         fontSize: 16,
@@ -1346,6 +1371,7 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 25,
         lineHeight: 24,
+        fontFamily: 'neodgm',
     },
     modalButtonContainer: {
         flexDirection: 'row',
@@ -1369,6 +1395,7 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 16,
         fontWeight: 'bold',
+        fontFamily: 'neodgm',
     },
     resultsScrollView: {
         maxHeight: 300,
@@ -1386,16 +1413,19 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         marginBottom: 5,
+        fontFamily: 'neodgm',
     },
     resultDetails: {
         color: '#D4D4D4',
         fontSize: 14,
         lineHeight: 20,
+        fontFamily: 'neodgm',
     },
     resultGrade: {
         fontSize: 16,
         fontWeight: 'bold',
         marginTop: 8,
+        fontFamily: 'neodgm',
     },
     modalCloseButton: {
         marginTop: 20,
@@ -1416,6 +1446,7 @@ const styles = StyleSheet.create({
         color: '#D4D4D4',
         fontSize: 15,
         lineHeight: 22,
+        fontFamily: 'neodgm',
     },
     collapsibleContainer: {
         width: "100%",
@@ -1439,6 +1470,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: "bold",
         color: "#E0E0E0",
+        fontFamily: 'neodgm',
     },
     hudIconContainer: {
         position: 'absolute',
@@ -1469,28 +1501,28 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 10,
         fontWeight: 'bold',
+        fontFamily: 'neodgm',
     },
     sceneImageWrap: {
-    width: "40%",
-    alignSelf: 'center',
-    aspectRatio: 1,      // 1024x1024 기본 가정
-    borderRadius: 12,
-    overflow: "hidden",
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#444",
-    backgroundColor: "#0B1021",
+        width: "40%",
+        alignSelf: 'center',
+        aspectRatio: 1,      // 1024x1024 기본 가정
+        borderRadius: 12,
+        overflow: "hidden",
+        marginTop: 12,
+        borderWidth: 1,
+        borderColor: "#444",
+        backgroundColor: "#0B1021",
     },
     sceneImage: {
-    width: "100%",
-    height: "100%",
+        width: "100%",
+        height: "100%",
+        },
+        imgSpinner: {
+        position: "absolute",
+        top: "50%",
+        left: "50%",
+        marginLeft: -10,
+        marginTop: -10,
     },
-    imgSpinner: {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    marginLeft: -10,
-    marginTop: -10,
-    },
-
 });

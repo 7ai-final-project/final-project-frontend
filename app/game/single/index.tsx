@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
 import { router } from 'expo-router'; // This part is correct
 import {
   fetchScenarios,
@@ -82,6 +83,10 @@ const scenarioImages = [
 
 // --- 컴포넌트 시작 ---
 export default function GameStarterScreen() {
+  const [fontsLoaded, fontError] = useFonts({
+    'neodgm': require('../../../assets/fonts/neodgm.ttf'),
+  });
+
   const [isLoading, setIsLoading] = useState(true);
   const [isScenarioModalVisible, setScenarioModalVisible] = useState(false);
   const [isGameStartModalVisible, setGameStartModalVisible] = useState(false);
@@ -93,7 +98,6 @@ export default function GameStarterScreen() {
 
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [difficulties, setDifficulties] = useState<Difficulty[]>([]);
-  const [modes, setModes] = useState<Mode[]>([]);
   const [genres, setGenres] = useState<Genre[]>([]);
 
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
@@ -101,7 +105,6 @@ export default function GameStarterScreen() {
 
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
   const [selectedDifficultyId, setSelectedDifficultyId] = useState<string | null>(null);
-  const [selectedModeId, setSelectedModeId] = useState<string | null>(null);
   const [selectedGenreId, setSelectedGenreId] = useState<string | null>(null);
 
   const [selectedOptions, setSelectedOptions] = useState({
@@ -110,22 +113,25 @@ export default function GameStarterScreen() {
     genre: '',
   });
 
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   // --- useEffect Hooks ---
   useEffect(() => {
     const loadGameOptions = async () => {
       try {
         setIsLoading(true);
-        const [scenariosRes, difficultiesRes, modesRes, genresRes] = await Promise.all([
+        const [scenariosRes, difficultiesRes, genresRes] = await Promise.all([
           fetchScenarios(),
           fetchDifficulties(),
-          fetchModes(),
           fetchGenres(),
         ]);
 
         setScenarios(scenariosRes.data.results || scenariosRes.data);
         setDifficulties(difficultiesRes.data.results || difficultiesRes.data);
-        setModes(modesRes.data.results || modesRes.data);
         setGenres(genresRes.data.results || genresRes.data);
+        
       } catch (error) {
         console.error("게임 옵션 로딩 실패:", error);
         Alert.alert("오류", "게임 옵션 정보를 불러오는 데 실패했습니다.");
@@ -195,7 +201,6 @@ export default function GameStarterScreen() {
   const handleStartNewGame = () => {
     setContinueModalVisible(false); // '이어서 하기' 모달 닫기
     setSelectedDifficultyId(null);
-    setSelectedModeId(null);
     setSelectedGenreId(null);
     setScenarioModalVisible(true); // 옵션 설정 모달 열기
   };
@@ -218,7 +223,7 @@ export default function GameStarterScreen() {
   };
 
   const handleConfirmScenarioOptions = () => {
-    if (!selectedScenario || !selectedDifficultyId || !selectedModeId || !selectedGenreId) {
+    if (!selectedScenario || !selectedDifficultyId || !selectedGenreId) {
       Alert.alert("알림", "모든 옵션을 선택해야 합니다.");
       return;
     }
@@ -230,7 +235,6 @@ export default function GameStarterScreen() {
     }
 
     const difficultyName = difficulties.find(d => d.id === selectedDifficultyId)?.name || '';
-    const modeName = modes.find(m => m.id === selectedModeId)?.name || '';
     const genreName = genres.find(g => g.id === selectedGenreId)?.name || '';
 
     // 모든 준비가 완료되면 바로 라우터 이동
@@ -242,7 +246,6 @@ export default function GameStarterScreen() {
       params: {
         topic: selectedScenario?.title, 
         difficulty: difficultyName,
-        mode: modeName,
         genre: genreName,
         isLoaded: 'false',
         characters: JSON.stringify(characters),
@@ -254,7 +257,6 @@ export default function GameStarterScreen() {
     setGameStartModalVisible(false);
     setSelectedScenario(null);
     setSelectedDifficultyId(null);
-    setSelectedModeId(null);
     setSelectedGenreId(null);
   };
 
@@ -278,7 +280,6 @@ export default function GameStarterScreen() {
     setGameStartModalVisible(false);
     setSelectedScenario(null);
     setSelectedDifficultyId(null);
-    setSelectedModeId(null);
     setSelectedGenreId(null);
     setCurrentScenarioIndex(0);
     
@@ -415,17 +416,6 @@ export default function GameStarterScreen() {
                   <Text style={styles.topicText}>{dif.name}</Text>
                 </TouchableOpacity>
               ))}
-
-              <Text style={styles.modalSubTitle}>게임 방식 선택</Text>
-              {modes.map((mode) => (
-                <TouchableOpacity
-                  key={mode.id}
-                  style={[styles.topicOption, selectedModeId === mode.id && styles.topicSelected]}
-                  onPress={() => setSelectedModeId(mode.id)}
-                >
-                  <Text style={styles.topicText}>{mode.name}</Text>
-                </TouchableOpacity>
-              ))}
             </ScrollView>
             
             <View style={styles.modalButtonContainer}>
@@ -446,41 +436,6 @@ export default function GameStarterScreen() {
           </View>
         </View>
       </Modal>
-
-      {/* 게임 시작 확인 모달 (타이머)
-      <Modal
-        transparent={true}
-        visible={isGameStartModalVisible}
-        animationType="fade"
-        onRequestClose={handleCancelGameStart}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.countdownModalBox}>
-            <Text style={styles.countdownTitle}>게임 시작</Text>
-            <View style={styles.selectedOptionContainer}>
-              <Text style={styles.optionLabel}>선택 시나리오:</Text>
-              <Text style={styles.optionValue}>{selectedScenario?.title}</Text>
-            </View>
-            <View style={styles.selectedOptionContainer}>
-              <Text style={styles.optionLabel}>장르:</Text>
-              <Text style={styles.optionValue}>{selectedOptions.genre}</Text>
-            </View>
-            <View style={styles.selectedOptionContainer}>
-              <Text style={styles.optionLabel}>난이도:</Text>
-              <Text style={styles.optionValue}>{selectedOptions.difficulty}</Text>
-            </View>
-            <View style={styles.selectedOptionContainer}>
-              <Text style={styles.optionLabel}>게임 방식:</Text>
-              <Text style={styles.optionValue}>{selectedOptions.mode}</Text>
-            </View>
-            
-            <Text style={styles.countdownText}>{countdown}초 뒤 게임이 시작됩니다.</Text>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelGameStart}>
-              <Text style={styles.cancelButtonText}>취소</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal> */}
     </SafeAreaView>
   );
 }
@@ -532,11 +487,13 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: COLORS.primary,
     marginBottom: 5,
+    fontFamily: 'neodgm',
   },
   subText: {
     fontSize: FONT_SIZES.subTitle,
     color: COLORS.subText,
     marginBottom: 20,
+    fontFamily: 'neodgm',
   },
   scenarioCarousel: {
     flexDirection: 'row',
@@ -562,13 +519,15 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: COLORS.text,
     marginBottom: 5,
+    fontFamily: 'neodgm',
   },
   scenarioDescription: {
     fontSize: FONT_SIZES.cardDescription,
     color: COLORS.subText,
     textAlign: 'center',
+    fontFamily: 'neodgm',
   },
-  loadingText: { color: COLORS.text, marginTop: 10 },
+  loadingText: { color: COLORS.text, marginTop: 10, fontFamily: 'neodgm', },
 
   // 모달 공통 스타일
   modalOverlay: {
@@ -596,8 +555,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: "center",
+    fontFamily: 'neodgm',
   },
-  modalSubTitle: { color: COLORS.subText, marginBottom: 10, fontSize: 16 },
+  modalSubTitle: { color: COLORS.subText, marginBottom: 10, fontSize: 16, fontFamily: 'neodgm', },
   topicOption: {
     padding: 12,
     borderRadius: 8,
@@ -608,7 +568,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.selected,
     borderWidth: 0,
   },
-  topicText: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
+  topicText: { color: '#fff', textAlign: 'center', fontWeight: 'bold', fontFamily: 'neodgm', },
   modalButtonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -632,6 +592,7 @@ const styles = StyleSheet.create({
     color: COLORS.background,
     fontWeight: 'bold',
     fontSize: 16,
+    fontFamily: 'neodgm',
   },
 
   // 카운트다운 모달
@@ -649,6 +610,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
+    fontFamily: 'neodgm',
   },
   selectedOptionContainer: {
     flexDirection: 'row',
@@ -659,11 +621,13 @@ const styles = StyleSheet.create({
     color: COLORS.subText,
     fontSize: 16,
     marginRight: 10,
+    fontFamily: 'neodgm',
   },
   optionValue: {
     color: COLORS.text,
     fontSize: 16,
     fontWeight: 'bold',
+    fontFamily: 'neodgm',
   },
   countdownText: {
     color: COLORS.primary,
@@ -672,6 +636,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     marginBottom: 25,
+    fontFamily: 'neodgm',
   },
   cancelButton: {
     padding: 12,
@@ -684,6 +649,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+    fontFamily: 'neodgm',
   },
   summaryBox: {
     width: '100%',
@@ -697,5 +663,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#D4D4D4',
     lineHeight: 22,
+    fontFamily: 'neodgm',
   },
 });

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo, ReactNode } from 'react';
+import React, { useState, useEffect, useRef, useMemo, ReactNode, useCallback } from 'react';
 import { useWindowDimensions, View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Pressable, ImageBackground, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 import { useKakaoAuth } from '../hooks/useKakaoAuth';
@@ -10,7 +10,9 @@ import { useFonts } from 'expo-font';
 import ProfileModal from '../components/ProfileModal';
 import OptionsModal from '../components/OptionsModal';
 import NicknameInputModal from '../components/main/NicknameInputModal';
+import { useSettings } from '../components/context/SettingsContext';
 import { updateUserNickname } from '../services/api';
+import { Audio } from 'expo-av'
 
 interface MedievalButtonProps {
   children: ReactNode;
@@ -155,16 +157,23 @@ export default function HomeScreen() {
   const isMobile = width < 768;
 
   const [fontsLoaded, fontError] = useFonts({'neodgm': require('../assets/fonts/neodgm.ttf'),});
+  const soundRef = useRef<Audio.Sound | null>(null);
   
   const [loginModalVisible, setLoginModalVisible] = useState(false);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false); 
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [nicknameInputModalVisible, setNicknameInputModalVisible] = useState(false);
-  const [backgroundColor, setBackgroundColor] = useState('#0B1021'); 
+
   
-  const [isBgmOn, setIsBgmOn] = useState(true);
-  const [isSfxOn, setIsSfxOn] = useState(true);
-  const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1); 
+  const { 
+    isBgmOn, 
+    setIsBgmOn, 
+    isSfxOn, 
+    setIsSfxOn, 
+    isLoading: isSettingsLoading, 
+    fontSizeMultiplier, 
+    setFontSizeMultiplier 
+  } = useSettings();
   
   const { user, setUser, loading, handleLogout } = useAuth();
   const [tempLoginUser, setTempLoginUser] = useState<any>(null);
@@ -195,6 +204,49 @@ export default function HomeScreen() {
     require('../assets/images/main/background_image7.jpg'), 
     require('../assets/images/main/background_image8.jpg'), 
   ];
+
+  useFocusEffect(
+    useCallback(() => {
+      const manageMusic = async () => {
+        // 🛑 BGM 설정이 꺼져있으면 음악을 멈춥니다.
+        if (loading || !isBgmOn) {
+          if (soundRef.current) {
+            await soundRef.current.stopAsync();
+          }
+          return;
+        }
+  
+        // ✅ BGM 설정이 켜져있으면 음악을 재생합니다.
+        try {
+          if (soundRef.current === null) {
+            await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+            const { sound } = await Audio.Sound.createAsync(
+              require('../assets/sounds/home_music.mp3'),
+              { isLooping: true }
+            );
+            soundRef.current = sound;
+          }
+          await soundRef.current.playAsync();
+        } catch (error) {
+          console.error("음악 관리 중 오류:", error);
+        }
+      };
+  
+      manageMusic();
+  
+      return () => {
+        if (soundRef.current) {
+          soundRef.current.stopAsync();
+        }
+      };
+    }, [loading, isBgmOn]) // ❗ 여기가 핵심입니다!
+  );
+  
+  useEffect(() => {
+    return () => {
+      soundRef.current?.unloadAsync();
+    };
+  }, []);
   
   useEffect(() => {
     if (fontError) throw fontError;
@@ -246,7 +298,7 @@ export default function HomeScreen() {
   const { googlePromptAsync } = useGoogleAuth(handleSocialLoginSuccess);
   const { kakaoPromptAsync } = useKakaoAuth(handleSocialLoginSuccess);
 
-  if(loading) {
+  if(loading || isSettingsLoading) {
    return (
     <ImageBackground 
       source={selectedBackgroundImage}
@@ -382,17 +434,15 @@ return (
         />
 
       <OptionsModal
-          visible={optionsModalVisible}
-          onClose={() => setOptionsModalVisible(false)}
-          isBgmOn={isBgmOn}
-          setIsBgmOn={setIsBgmOn}
-          isSfxOn={isSfxOn}
-          setIsSfxOn={setIsSfxOn}
-          fontSizeMultiplier={fontSizeMultiplier}
-          setFontSizeMultiplier={setFontSizeMultiplier}
-          backgroundColor={backgroundColor}
-          setBackgroundColor={setBackgroundColor}
-        />
+        visible={optionsModalVisible}
+        onClose={() => setOptionsModalVisible(false)}
+        isBgmOn={isBgmOn}
+        setIsBgmOn={setIsBgmOn}
+        isSfxOn={isSfxOn}
+        setIsSfxOn={setIsSfxOn}
+        fontSizeMultiplier={fontSizeMultiplier}
+        setFontSizeMultiplier={setFontSizeMultiplier}
+      />
 
       <NicknameInputModal
         visible={nicknameInputModalVisible}

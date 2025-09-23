@@ -3,6 +3,7 @@ import React, { useMemo } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
 import type { ShariBlock, ShariUpdate, World, PartyEntry } from "@/util/ttrpg";
 import type { Character } from "@/services/api";
+import { useFonts } from 'expo-font';
 
 type Props = {
   world?: World;
@@ -129,6 +130,9 @@ function hpLabelForPartyMember(
 }
 
 export default function ShariHud({ world, party, shari, allCharacters, onClose }: Props) {
+  const [fontsLoaded, fontError] = useFonts({
+    'neodgm': require('@/assets/fonts/neodgm.ttf'),
+  });
   const characterIdToNameMap = useMemo(
     () => new Map(allCharacters.map((char) => [char.id, char.name])),
     [allCharacters]
@@ -235,6 +239,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#E0E0E0",
     marginBottom: 20,
+    fontFamily: 'neodgm',
   },
   hudModalScrollView: {
     width: "100%",
@@ -254,15 +259,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#444",
     paddingBottom: 5,
+    fontFamily: 'neodgm',
   },
   hudText: {
     color: "#D4D4D4",
     fontSize: 14,
     lineHeight: 22,
+    fontFamily: 'neodgm',
   },
   hudLabel: {
     fontWeight: "bold",
     color: "#A0A0A0",
+    fontFamily: 'neodgm',
   },
   partyBadgeContainer: {
     flexDirection: "row",
@@ -283,6 +291,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
     fontSize: 15,
+    fontFamily: 'neodgm',
   },
   divider: {
     height: 1,
@@ -295,12 +304,14 @@ const styles = StyleSheet.create({
   partyBadgeText: {
     color: "#A0A0A0",
     fontSize: 13,
+    fontFamily: 'neodgm',
   },
   hudChangeText: {
     color: "#fff",
     fontSize: 13,
     marginBottom: 4,
     lineHeight: 18,
+    fontFamily: 'neodgm',
   },
   hudModalCloseButton: {
     marginTop: 20,
@@ -313,5 +324,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
+    fontFamily: 'neodgm',
   },
 });
