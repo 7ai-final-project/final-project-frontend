@@ -21,6 +21,7 @@ import { Character, Skill, Item, getInitialScene, saveGame, resolveTurn, getNext
 import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade, ShariBlock, World, PartyEntry } from "@/util/ttrpg";
 import { Audio } from "expo-av";
 import ShariHud from "./ShariHud";
+import ConfettiCannon from 'react-native-confetti-cannon'; 
 
 interface LoadedSessionData {
     choice_history: any;
@@ -73,6 +74,8 @@ export default function GameEngineRealtime({
     const [clickSound, setClickSound] = useState<Audio.Sound | null>(null);
     const [pageTurnSound, setPageTurnSound] = useState<Audio.Sound | null>(null);
     const [diceRollSound, setDiceRollSound] = useState<Audio.Sound | null>(null);
+    const [fireworksSound, setFireworksSound] = useState<Audio.Sound | null>(null); // ◀◀◀ 효과음 state 추가
+    const [showConfetti, setShowConfetti] = useState(false);
     
     const [currentScene, setCurrentScene] = useState<SceneTemplate | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -93,6 +96,10 @@ export default function GameEngineRealtime({
 
     const [isSaveModalVisible, setIsSaveModalVisible] = useState(false);
     const [saveModalMessage, setSaveModalMessage] = useState("");
+
+    const [isAlertModalVisible, setIsAlertModalVisible] = useState(false);
+    const [alertModalTitle, setAlertModalTitle] = useState("");
+    const [alertModalMessage, setAlertModalMessage] = useState("");
 
     const [isGeneratingNextScene, setIsGeneratingNextScene] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -208,6 +215,9 @@ export default function GameEngineRealtime({
                 setPageTurnSound(loadedPageTurnSound);
                 const { sound: loadedDiceRollSound } = await Audio.Sound.createAsync(require('../../assets/sounds/dice_roll.mp3'));
                 setDiceRollSound(loadedDiceRollSound);
+                const { sound: loadedFireworksSound } = await Audio.Sound.createAsync(require('@/assets/sounds/fireworks.mp3'));
+                setFireworksSound(loadedFireworksSound);
+
             } catch (error) { console.error("사운드 로딩 실패:", error); }
         };
         loadSounds();
@@ -215,8 +225,16 @@ export default function GameEngineRealtime({
             clickSound?.unloadAsync();
             pageTurnSound?.unloadAsync();
             diceRollSound?.unloadAsync();
+            fireworksSound?.unloadAsync();
         };
     }, []);
+
+    useEffect(() => {
+        if (phase === 'end') {
+            setShowConfetti(true);
+            fireworksSound?.replayAsync();
+        }
+    }, [phase, fireworksSound]);
 
     useEffect(() => {
         if (phase === "choice" && !myChoiceId) {
@@ -335,19 +353,27 @@ export default function GameEngineRealtime({
                     allCharacters: allCharacters,
                 });
 
-                const { narration, roundResult, nextGameState, shari, party_state } = response.data;
-
-                setCinematicText(narration);
-                setRoundResult(roundResult);
-                setGameState(nextGameState);
-                if (shari) { // ✅ shari 데이터가 있으면 상태를 업데이트합니다.
-                    setShariBlockData(shari);
-                    setWorldState(prev => ({ ...prev, ...shari.update }));
+                const { narration, roundResult, nextGameState, shari, party_state, is_final_turn } = response.data;
+                
+                if (is_final_turn) {
+                    // 마지막 턴일 경우, 엔딩 처리
+                    setCinematicText(narration);
+                    setRoundResult(roundResult); // 최종 결과도 표시할 수 있도록 설정
+                    setPhase("end");
+                } else {
+                    // 마지막 턴이 아닐 경우, 기존처럼 cinematic 단계로 진행
+                    setCinematicText(narration);
+                    setRoundResult(roundResult);
+                    setGameState(nextGameState);
+                    if (shari) {
+                        setShariBlockData(shari);
+                        setWorldState(prev => ({ ...prev, ...shari.update }));
+                    }
+                    if (party_state) {
+                        setPartyState(party_state);
+                    }
+                    setPhase("cinematic");
                 }
-                if (party_state) { // ✅ party_state가 있으면 상태 업데이트
-                    setPartyState(party_state);
-                }
-                setPhase("cinematic");
 
             } catch (err) {
                 console.error("턴 결과 처리 오류:", err);
@@ -421,13 +447,17 @@ export default function GameEngineRealtime({
         const cooldownEndSceneIndex = currentScene.index + SKILL_COOLDOWN_SCENES;
         setSkillCooldowns(prev => ({ ...prev, [skill.name]: cooldownEndSceneIndex }));
         setPendingUsage({ type: 'skill', data: skill });
-        Alert.alert("스킬 준비 완료", `'${skill.name}' 스킬을 다음 행동에 사용합니다.`);
+        setAlertModalTitle("스킬 준비 완료");
+        setAlertModalMessage(`'${skill.name}' 스킬을 다음 행동에 사용합니다.`);
+        setIsAlertModalVisible(true);
     };
 
     const handleUseItem = (item: Item) => {
         setUsedItems(prev => new Set(prev).add(item.name));
         setPendingUsage({ type: 'item', data: item });
-        Alert.alert("아이템 사용", `'${item.name}' 아이템을 사용했습니다. (1회성)`);
+        setAlertModalTitle("아이템 사용");
+        setAlertModalMessage(`'${item.name}' 아이템을 사용했습니다. (1회성)`);
+        setIsAlertModalVisible(true);
     };
 
     const handleSaveGame = async () => {
@@ -648,7 +678,7 @@ export default function GameEngineRealtime({
                     {phase === "choice" && (
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
                             <Text style={styles.title}>{title}</Text>
-                            <ScrollView style={styles.descriptionBox}>
+                            <ScrollView style={styles.descriptionBox} showsVerticalScrollIndicator={false}>
                                 <Text style={styles.descriptionText}>
                                     {roundSpec.description}
                                 </Text>
@@ -672,7 +702,7 @@ export default function GameEngineRealtime({
                             </View>
                             <Text style={styles.timerText}>남은 시간: {remaining}s</Text>
 
-                            <ScrollView style={{ flex: 1, width: '100%' }}>
+                            <ScrollView style={{ flex: 1, width: '100%' }} showsVerticalScrollIndicator={false}>
                                 {myChoices.map((c) => (
                                     <TouchableOpacity
                                         key={c.id}
@@ -724,7 +754,7 @@ export default function GameEngineRealtime({
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
                             <Text style={styles.title}>{title}</Text>
                             {diceResult && <Text style={styles.resultText}>{diceResult}</Text>}
-                            <ScrollView style={styles.cinematicBox}>
+                            <ScrollView style={styles.cinematicBox} showsVerticalScrollIndicator={false}>
                                 <Text style={styles.cinematicText}>{cinematicText}</Text>
                             </ScrollView>
 
@@ -756,7 +786,10 @@ export default function GameEngineRealtime({
 
                     {phase === "end" && (
                         <Animated.View style={[styles.center, { opacity: phaseAnim }]}>
-                            <Text style={styles.title}>엔딩</Text>
+                            <Text style={styles.title}>이야기의 끝</Text>
+                            <ScrollView style={[styles.cinematicBox, { maxHeight: 300, flex: 0, marginBottom: 20}]} showsVerticalScrollIndicator={false}>
+                                <Text style={styles.cinematicText}>{cinematicText}</Text>
+                            </ScrollView>
                             <Text style={styles.subtitle}>수고하셨습니다!</Text>
                             <TouchableOpacity style={styles.primary} onPress={exitGame}>
                                 <Text style={styles.primaryText}>대기실로 돌아가기</Text>
@@ -877,6 +910,27 @@ export default function GameEngineRealtime({
                         <TouchableOpacity
                             style={styles.modalCloseButton}
                             onPress={() => setIsSaveModalVisible(false)}
+                        >
+                            <Text style={styles.modalButtonText}>확인</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+            <Modal
+                visible={isAlertModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsAlertModalVisible(false)}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>{alertModalTitle}</Text>
+                        <Text style={styles.modalMessage}>
+                            {alertModalMessage}
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.modalCloseButton}
+                            onPress={() => setIsAlertModalVisible(false)}
                         >
                             <Text style={styles.modalButtonText}>확인</Text>
                         </TouchableOpacity>
@@ -1114,6 +1168,7 @@ const styles = StyleSheet.create({
         marginTop: 20,
         backgroundColor: "#7C3AED",
         paddingVertical: 14,
+        paddingHorizontal: 40,
         borderRadius: 10,
         alignItems: "center",
     },

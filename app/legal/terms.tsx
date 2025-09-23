@@ -91,8 +91,8 @@ const termsContent = `
 
 12. 연락처
 서비스 관련 문의:
-이메일: support@[서비스명].com
-고객지원: [웹사이트 주소]/support
+이메일: support@storytrpg.com
+고객지원: storytrpg.com/support
 `;
 
 export default function TermsScreen() {

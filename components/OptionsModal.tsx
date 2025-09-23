@@ -2,34 +2,29 @@ import React from 'react';
 import { View, Text, Modal, TouchableOpacity, Switch, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
+import { useSettings } from './context/SettingsContext'; 
 
 interface OptionsModalProps {
   visible: boolean;
   onClose: () => void;
-  isBgmOn: boolean;
-  setIsBgmOn: (value: boolean) => void;
-  isSfxOn: boolean;
-  setIsSfxOn: (value: boolean) => void;
-  fontSizeMultiplier: number;
-  setFontSizeMultiplier: (value: number) => void;
-  backgroundColor: string;
-  setBackgroundColor: (value: string) => void;
 }
 
-export default function OptionsModal({
-  visible,
-  onClose,
-  isBgmOn,
-  setIsBgmOn,
-  isSfxOn,
-  setIsSfxOn,
-  fontSizeMultiplier,
-  setFontSizeMultiplier,
-  backgroundColor,
-  setBackgroundColor,
-}: OptionsModalProps) {
+// props에서 설정 관련 항목들 제거
+export default function OptionsModal({ visible, onClose }: OptionsModalProps) {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
+
+  // useSettings 훅을 통해 전역 설정 값과 함수를 가져옴
+  const {
+    isBgmOn,
+    setIsBgmOn,
+    isSfxOn,
+    setIsSfxOn,
+    fontSizeMultiplier,
+    setFontSizeMultiplier,
+    language,
+    setLanguage,
+  } = useSettings();
 
   const [fontsLoaded, fontError] = useFonts({'neodgm': require('../assets/fonts/neodgm.ttf'),});
 
@@ -45,20 +40,6 @@ export default function OptionsModal({
             <Ionicons name="close" size={isMobile ? 22 : 24} color="#aaa" />
           </TouchableOpacity>
           <Text style={isMobile ? styles.modalTitleMobile : styles.modalTitle}>설정</Text>
-
-          {/* 배경 색상 선택 섹션 */}
-          <View style={isMobile ? styles.optionSectionMobile : styles.optionSection}>
-            <Text style={isMobile ? styles.optionLabelMobile : styles.optionLabel}>바탕화면 색상</Text>
-            <View style={styles.colorOptionsContainer}>
-              {['#0B1021', '#4A148C', '#004D40', '#3E2723'].map(color => (
-                <TouchableOpacity 
-                  key={color}
-                  style={[styles.colorOption, isMobile ? styles.colorOptionMobile : {}, { backgroundColor: color, borderColor: backgroundColor === color ? '#E2C044' : 'rgba(255,255,255,0.3)' }]} 
-                  onPress={() => setBackgroundColor(color)} 
-                />
-              ))}
-            </View>
-          </View>
 
           {/* 사운드 설정 섹션 */}
           <View style={isMobile ? styles.optionSectionMobile : styles.optionSection}>
@@ -88,32 +69,38 @@ export default function OptionsModal({
           {/* 글자 크기 섹션 */}
           <View style={isMobile ? styles.optionSectionMobile : styles.optionSection}>
             <Text style={isMobile ? styles.optionLabelMobile : styles.optionLabel}>글자 크기</Text>
-            <View style={isMobile ? styles.fontSizeSelectorMobile : styles.fontSizeSelector}>
-              <TouchableOpacity 
-                onPress={() => setFontSizeMultiplier(0.9)} 
-                style={[isMobile ? styles.fontSizeButtonMobile : styles.fontSizeButton, fontSizeMultiplier === 0.9 && styles.fontSizeButtonActive]}
-              >
-                <Text style={isMobile ? styles.fontSizeButtonTextMobile : styles.fontSizeButtonText}>작게</Text>
+            <View style={isMobile ? styles.selectorContainerMobile : styles.selectorContainer}>
+              <TouchableOpacity onPress={() => setFontSizeMultiplier(0.9)} style={[isMobile ? styles.selectorButtonMobile : styles.selectorButton, fontSizeMultiplier === 0.9 && styles.selectorButtonActive]}>
+                <Text style={isMobile ? styles.selectorButtonTextMobile : styles.selectorButtonText}>작게</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={() => setFontSizeMultiplier(1)} 
-                style={[isMobile ? styles.fontSizeButtonMobile : styles.fontSizeButton, fontSizeMultiplier === 1 && styles.fontSizeButtonActive]}
-              >
-                <Text style={isMobile ? styles.fontSizeButtonTextMobile : styles.fontSizeButtonText}>보통</Text>
+              <TouchableOpacity onPress={() => setFontSizeMultiplier(1)} style={[isMobile ? styles.selectorButtonMobile : styles.selectorButton, fontSizeMultiplier === 1 && styles.selectorButtonActive]}>
+                <Text style={isMobile ? styles.selectorButtonTextMobile : styles.selectorButtonText}>보통</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={() => setFontSizeMultiplier(1.1)} 
-                style={[isMobile ? styles.fontSizeButtonMobile : styles.fontSizeButton, fontSizeMultiplier === 1.1 && styles.fontSizeButtonActive]}
-              >
-                <Text style={isMobile ? styles.fontSizeButtonTextMobile : styles.fontSizeButtonText}>크게</Text>
+              <TouchableOpacity onPress={() => setFontSizeMultiplier(1.1)} style={[isMobile ? styles.selectorButtonMobile : styles.selectorButton, fontSizeMultiplier === 1.1 && styles.selectorButtonActive]}>
+                <Text style={isMobile ? styles.selectorButtonTextMobile : styles.selectorButtonText}>크게</Text>
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* --- 언어 선택 섹션 추가 --- */}
+          <View style={isMobile ? styles.optionSectionMobile : styles.optionSection}>
+            <Text style={isMobile ? styles.optionLabelMobile : styles.optionLabel}>언어</Text>
+            <View style={isMobile ? styles.selectorContainerMobile : styles.selectorContainer}>
+              <TouchableOpacity onPress={() => setLanguage('ko')} style={[isMobile ? styles.selectorButtonMobile : styles.selectorButton, language === 'ko' && styles.selectorButtonActive]}>
+                <Text style={isMobile ? styles.selectorButtonTextMobile : styles.selectorButtonText}>한국어</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setLanguage('en')} style={[isMobile ? styles.selectorButtonMobile : styles.selectorButton, language === 'en' && styles.selectorButtonActive]}>
+                <Text style={isMobile ? styles.selectorButtonTextMobile : styles.selectorButtonText}>English</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
         </View>
       </View>
     </Modal>
   );
 }
+
 
 const styles = StyleSheet.create({
   modalOverlay: { 
@@ -223,59 +210,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'neodgm',
   },
-  colorOptionsContainer: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-around', 
-    width: '100%',
-    paddingVertical: 5,
-  },
-  colorOption: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    borderWidth: 3 
-  },
-  colorOptionMobile: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 2,
-  },
-  fontSizeSelector: { 
+  selectorContainer: {
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     width: '100%', 
     backgroundColor: 'rgba(0,0,0,0.2)', 
     borderRadius: 8 
   },
-  fontSizeSelectorMobile: {
+  selectorContainerMobile: {
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     width: '100%', 
     backgroundColor: 'rgba(0,0,0,0.2)', 
     borderRadius: 6,
   },
-  fontSizeButton: { 
+  selectorButton: {
     flex: 1, 
     paddingVertical: 10, 
     alignItems: 'center', 
     borderRadius: 8 
   },
-  fontSizeButtonMobile: {
+  selectorButtonMobile: {
     flex: 1, 
     paddingVertical: 7,
     alignItems: 'center', 
     borderRadius: 6, 
   },
-  fontSizeButtonActive: { 
+  selectorButtonActive: {
     backgroundColor: '#7C3AED' 
   },
-  fontSizeButtonText: { 
+  selectorButtonText: {
     color: '#fff', 
     fontWeight: '600',
     fontFamily: 'neodgm',
   },
-  fontSizeButtonTextMobile: { 
+  selectorButtonTextMobile: {
     color: '#fff', 
     fontWeight: '600',
     fontSize: 13,

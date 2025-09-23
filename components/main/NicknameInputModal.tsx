@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import {
+  Modal,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import api from '../../services/api';
@@ -21,7 +31,6 @@ export default function NicknameInputModal({
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // 폰트 로딩
   const [fontsLoaded] = useFonts({
     'neodgm': require('../../assets/fonts/neodgm.ttf'),
   });
@@ -35,22 +44,20 @@ export default function NicknameInputModal({
   }, [visible, initialNickname]);
 
   const handleSave = async () => {
-    if(isSaving) return;
+    if (isSaving) return;
 
-    console.log(`nickname : ${nickname.trim()}, 길이 : ${nickname.trim().length}`);
-
-    if(!nickname.trim()) {
+    if (!nickname.trim()) {
       setErrorMessage('닉네임을 입력해주세요.');
       return;
     }
 
-    if(nickname.trim().length < 2 || nickname.trim().length > 10) {
+    if (nickname.trim().length < 2 || nickname.trim().length > 10) {
       setErrorMessage('닉네임은 2자 이상 10자 이하로 입력해주세요.');
       return;
     }
 
     const nicknameRegex = /^[a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ]*$/;
-    if(!nicknameRegex.test(nickname.trim())) {
+    if (!nicknameRegex.test(nickname.trim())) {
       setErrorMessage('닉네임은 한글, 영문, 숫자만 사용할 수 있습니다.');
       return;
     }
@@ -60,14 +67,13 @@ export default function NicknameInputModal({
     try {
       const response = await api.put(`/auth/user/update`, { nickname: nickname.trim() });
       
-      if(response.status === 409) {
-          setErrorMessage('이미 사용 중인 닉네임입니다. 다른 닉네임을 사용해주세요.');
-          setIsSaving(false);
-          return;
+      if (response.status === 409) {
+        setErrorMessage('이미 사용 중인 닉네임입니다. 다른 닉네임을 사용해주세요.');
+        setIsSaving(false);
+        return;
       }
-      
-      onSave(nickname.trim());
 
+      onSave(nickname.trim());
       alert('닉네임이 성공적으로 설정되었습니다!');
       onClose(true);
     } catch (error: any) {
@@ -82,7 +88,7 @@ export default function NicknameInputModal({
     }
   };
 
-  if(!fontsLoaded) {
+  if (!fontsLoaded) {
     return null;
   }
 
@@ -93,57 +99,78 @@ export default function NicknameInputModal({
       onRequestClose={() => onClose(false)}
     >
       <KeyboardAvoidingView
-        style={styles.modalOverlay}
+        style={styles.overlayWrapper}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.modalBox}>
-           <TouchableOpacity style={styles.closeIcon} onPress={() => onClose(false)}>
-            <Ionicons name="close" size={24} color="#aaa" />
-          </TouchableOpacity>
+        {/* 배경을 터치하면 닫히도록 */}
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => onClose(false)}
+        >
+          {/* 모달 안쪽은 터치 이벤트 전파 막기 */}
+          <TouchableWithoutFeedback>
+            <View style={styles.modalBox}>
+              <TouchableOpacity
+                style={styles.closeIcon}
+                onPress={() => onClose(false)}
+              >
+                <Ionicons name="close" size={24} color="#aaa" />
+              </TouchableOpacity>
 
-          <Text style={styles.modalTitle}>닉네임 설정</Text>
-          <Text style={styles.modalDescription}>
-            모험을 시작하기 전에 멋진 닉네임을 설정해주세요!
-          </Text>
+              <Text style={styles.modalTitle}>닉네임 설정</Text>
+              <Text style={styles.modalDescription}>
+                모험을 시작하기 전에 멋진 닉네임을 설정해주세요!
+              </Text>
 
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.nicknameInput}
-              placeholder="여기에 닉네임을 입력하세요"
-              placeholderTextColor="#888"
-              value={nickname}
-              onChangeText={setNickname}
-              maxLength={10}
-              autoCapitalize="none"
-              keyboardAppearance="dark"
-            />
-          </View>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.nicknameInput}
+                  placeholder="여기에 닉네임을 입력하세요"
+                  placeholderTextColor="#888"
+                  value={nickname}
+                  onChangeText={setNickname}
+                  maxLength={10}
+                  autoCapitalize="none"
+                  keyboardAppearance="dark"
+                />
+              </View>
 
-          {errorMessage ? ( <Text style={styles.errorMessage}>{errorMessage}</Text>) : null}
+              {errorMessage ? (
+                <Text style={styles.errorMessage}>{errorMessage}</Text>
+              ) : null}
 
-          <TouchableOpacity
-            style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-            onPress={handleSave}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <Text style={styles.saveButtonText}>저장 중...</Text>
-            ) : (
-              <Text style={styles.saveButtonText}>닉네임 저장</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+              <TouchableOpacity
+                style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                onPress={handleSave}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <Text style={styles.saveButtonText}>저장 중...</Text>
+                ) : (
+                  <Text style={styles.saveButtonText}>닉네임 저장</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  overlayWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
   },
   modalBox: {
     width: '85%',
