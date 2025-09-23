@@ -4,6 +4,7 @@ import React, { useState, useCallback } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, Switch } from "react-native";
 import api from "../../../../services/api";
 import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
 
 interface CreateRoomScreenProps {
   onClose: () => void;
@@ -11,6 +12,9 @@ interface CreateRoomScreenProps {
 }
 
 export default function CreateRoomScreen({ onClose, onRoomCreated }: CreateRoomScreenProps) {
+  const [fontsLoaded, fontError] = useFonts({
+    'neodgm': require('../../../../assets/fonts/neodgm.ttf'),
+  });
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(4);
@@ -64,6 +68,10 @@ export default function CreateRoomScreen({ onClose, onRoomCreated }: CreateRoomS
       setIsCreating(false);
     }
   };
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAvoidingContainer}>
@@ -136,17 +144,17 @@ const styles = StyleSheet.create({
   container: { width: "100%", backgroundColor: "#2B355E", borderRadius: 16, padding: 20 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
   closeButton: { padding: 5 },
-  title: { fontSize: 22, fontWeight: "bold", color: "#E2C044" },
+  title: { fontSize: 22, fontWeight: "bold", color: "#E2C044", fontFamily: 'neodgm', },
   form: { marginTop: 10 },
-  label: { fontSize: 16, fontWeight: "600", marginBottom: 8, color: "#D1C4E9" },
-  input: { backgroundColor: "rgba(255,255,255,0.1)", color: "white", borderRadius: 8, paddingVertical: 12, paddingHorizontal: 15, marginBottom: 15, fontSize: 16, borderColor: "#131A33", borderWidth: 1 },
+  label: { fontSize: 16, fontWeight: "600", marginBottom: 8, color: "#D1C4E9", fontFamily: 'neodgm', },
+  input: { backgroundColor: "rgba(255,255,255,0.1)", color: "white", borderRadius: 8, paddingVertical: 12, paddingHorizontal: 15, marginBottom: 15, fontSize: 16, borderColor: "#131A33", borderWidth: 1, fontFamily: 'neodgm', },
   descriptionInput: { height: 100, textAlignVertical: "top" },
   playerCountSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 8, marginBottom: 15, borderColor: "#131A33", borderWidth: 1, paddingVertical: 8 },
   playerCountButton: { padding: 10 },
   playerCountButtonDisabled: { opacity: 0.5 },
-  playerCountText: { fontSize: 20, fontWeight: 'bold', color: 'white', marginHorizontal: 20, minWidth: 30, textAlign: 'center' },
+  playerCountText: { fontSize: 20, fontWeight: 'bold', color: 'white', marginHorizontal: 20, minWidth: 30, textAlign: 'center', fontFamily: 'neodgm', },
   createButton: { backgroundColor: "#61dafb", padding: 15, borderRadius: 10, alignItems: "center", marginTop: 20 },
   createButtonDisabled: { backgroundColor: "#9CA3AF" },
-  buttonText: { fontSize: 18, color: "#0B1021", fontWeight: "bold" },
+  buttonText: { fontSize: 18, color: "#0B1021", fontWeight: "bold", fontFamily: 'neodgm', },
   optionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 }, // label과 스타일 통일감을 위해 padding 추가
 });

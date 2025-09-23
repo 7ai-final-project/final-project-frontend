@@ -153,7 +153,15 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1);
   const [backgroundColor, setBackgroundColor] = useState("#20232a");
 
-  const defaultImagePath = require("../../assets/images/game/multi_mode/background/scene_door.png");
+  const [defaultImagePath] = useState(() => {
+    const images = [
+      require("../../assets/images/game/story/default_image_1.jpg"),
+      require("../../assets/images/game/story/default_image_2.png"),
+      require("../../assets/images/game/story/default_image_3.jpg"),
+    ];
+    const randomIndex = Math.floor(Math.random() * images.length);
+    return images[randomIndex];
+  });
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [isChoiceLoading, setIsChoiceLoading] = useState(false);
 

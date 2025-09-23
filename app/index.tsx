@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo, ReactNode } from 'react';
+import React, { useState, useEffect, useRef, useMemo, ReactNode, useCallback } from 'react';
 import { useWindowDimensions, View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Pressable, ImageBackground, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { Audio } from 'expo-av'
 import { useAuth } from '../hooks/useAuth';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 import { useKakaoAuth } from '../hooks/useKakaoAuth';
@@ -155,6 +156,7 @@ export default function HomeScreen() {
   const isMobile = width < 768;
 
   const [fontsLoaded, fontError] = useFonts({'neodgm': require('../assets/fonts/neodgm.ttf'),});
+  const soundRef = useRef<Audio.Sound | null>(null);
   
   const [loginModalVisible, setLoginModalVisible] = useState(false);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false); 
@@ -195,6 +197,49 @@ export default function HomeScreen() {
     require('../assets/images/main/background_image7.jpg'), 
     require('../assets/images/main/background_image8.jpg'), 
   ];
+
+  useFocusEffect(
+    useCallback(() => {
+      const manageMusic = async () => {
+        // 🛑 BGM 설정이 꺼져있으면 음악을 멈춥니다.
+        if (loading || !isBgmOn) {
+          if (soundRef.current) {
+            await soundRef.current.stopAsync();
+          }
+          return;
+        }
+  
+        // ✅ BGM 설정이 켜져있으면 음악을 재생합니다.
+        try {
+          if (soundRef.current === null) {
+            await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+            const { sound } = await Audio.Sound.createAsync(
+              require('../assets/sounds/home_music.mp3'),
+              { isLooping: true }
+            );
+            soundRef.current = sound;
+          }
+          await soundRef.current.playAsync();
+        } catch (error) {
+          console.error("음악 관리 중 오류:", error);
+        }
+      };
+  
+      manageMusic();
+  
+      return () => {
+        if (soundRef.current) {
+          soundRef.current.stopAsync();
+        }
+      };
+    }, [loading, isBgmOn]) // ❗ 여기가 핵심입니다!
+  );
+  
+  useEffect(() => {
+    return () => {
+      soundRef.current?.unloadAsync();
+    };
+  }, []);
   
   useEffect(() => {
     if (fontError) throw fontError;

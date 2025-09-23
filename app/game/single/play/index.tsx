@@ -6,6 +6,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import GameSetup from "@/components/game/SingleGameSetup";
 import GameEngineRealtime from "@/components/game/SingleGameEngineRealtime";
 import { Character as ApiCharacter, continueGame } from "@/services/api"; // ✅ continueGame 임포트
+import { useFonts } from 'expo-font';
 
 
 // --- 타입 정의 ---
@@ -27,6 +28,9 @@ interface LoadedSessionData {
 type GamePhase = 'loading' | 'summary' | 'setup' | 'playing';
 
 export default function GameScreen() {
+  const [fontsLoaded, fontError] = useFonts({
+    'neodgm': require('../../../../assets/fonts/neodgm.ttf'),
+  });
   const params = useLocalSearchParams<{
     topic: string; 
     difficulty: string; 
@@ -97,7 +101,7 @@ export default function GameScreen() {
     }
   };
 
-  if (gamePhase === 'loading') {
+  if ((!fontsLoaded && !fontError) || gamePhase === 'loading') {
     return (
       <SafeAreaView style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#E2C044" />
@@ -160,11 +164,11 @@ export default function GameScreen() {
 const styles = StyleSheet.create({
   fullContainer: { flex: 1, backgroundColor: "#0B1021" },
   centerContainer: { flex: 1, backgroundColor: "#0B1021", justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: "white", marginTop: 10, fontSize: 16 },
+  loadingText: { color: "white", marginTop: 10, fontSize: 16, fontFamily: 'neodgm', },
   summaryContainer: { width: '60%', padding: 30, backgroundColor: '#161B2E', borderRadius: 20, alignItems: 'center' },
-  summaryTitle: { fontSize: 28, fontWeight: 'bold', color: '#E2C044', marginBottom: 20 },
+  summaryTitle: { fontSize: 28, fontWeight: 'bold', color: '#E2C044', marginBottom: 20, fontFamily: 'neodgm', },
   summaryBox: { width: '100%', maxHeight: 200, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 20, marginBottom: 30 },
-  summaryText: { fontSize: 16, color: '#D4D4D4', lineHeight: 24, textAlign: 'center' },
+  summaryText: { fontSize: 16, color: '#D4D4D4', lineHeight: 24, textAlign: 'center', fontFamily: 'neodgm', },
   startButton: { backgroundColor: '#7C3AED', paddingVertical: 15, paddingHorizontal: 40, borderRadius: 15 },
-  startButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  startButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold', fontFamily: 'neodgm', },
 });

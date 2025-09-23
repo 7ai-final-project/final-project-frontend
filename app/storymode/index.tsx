@@ -23,7 +23,7 @@ interface Story {
   image_path: string | null;
 }
 
-const defaultStoryImage = require("../../assets/images/game/multi_mode/background/sun_and_moon.jpg");
+const defaultStoryImage = require("../../assets/images/game/story/tiger_cigarette.jpg");
 
 export default function StorySelectorScreen() {
   const { width } = useWindowDimensions();

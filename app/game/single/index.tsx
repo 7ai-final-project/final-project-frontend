@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
 import { router } from 'expo-router'; // This part is correct
 import {
   fetchScenarios,
@@ -82,6 +83,10 @@ const scenarioImages = [
 
 // --- 컴포넌트 시작 ---
 export default function GameStarterScreen() {
+  const [fontsLoaded, fontError] = useFonts({
+    'neodgm': require('../../../assets/fonts/neodgm.ttf'),
+  });
+
   const [isLoading, setIsLoading] = useState(true);
   const [isScenarioModalVisible, setScenarioModalVisible] = useState(false);
   const [isGameStartModalVisible, setGameStartModalVisible] = useState(false);
@@ -110,6 +115,10 @@ export default function GameStarterScreen() {
     genre: '',
   });
 
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   // --- useEffect Hooks ---
   useEffect(() => {
     const loadGameOptions = async () => {
@@ -126,6 +135,11 @@ export default function GameStarterScreen() {
         setDifficulties(difficultiesRes.data.results || difficultiesRes.data);
         setModes(modesRes.data.results || modesRes.data);
         setGenres(genresRes.data.results || genresRes.data);
+        const modesData = modesRes.data.results || modesRes.data;
+        setModes(modesData);
+        if (modesData.length > 0 && !selectedModeId) {
+          setSelectedModeId(modesData[0].id);
+        }
       } catch (error) {
         console.error("게임 옵션 로딩 실패:", error);
         Alert.alert("오류", "게임 옵션 정보를 불러오는 데 실패했습니다.");
@@ -532,11 +546,13 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: COLORS.primary,
     marginBottom: 5,
+    fontFamily: 'neodgm',
   },
   subText: {
     fontSize: FONT_SIZES.subTitle,
     color: COLORS.subText,
     marginBottom: 20,
+    fontFamily: 'neodgm',
   },
   scenarioCarousel: {
     flexDirection: 'row',
@@ -562,13 +578,15 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: COLORS.text,
     marginBottom: 5,
+    fontFamily: 'neodgm',
   },
   scenarioDescription: {
     fontSize: FONT_SIZES.cardDescription,
     color: COLORS.subText,
     textAlign: 'center',
+    fontFamily: 'neodgm',
   },
-  loadingText: { color: COLORS.text, marginTop: 10 },
+  loadingText: { color: COLORS.text, marginTop: 10, fontFamily: 'neodgm', },
 
   // 모달 공통 스타일
   modalOverlay: {
@@ -596,8 +614,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: "center",
+    fontFamily: 'neodgm',
   },
-  modalSubTitle: { color: COLORS.subText, marginBottom: 10, fontSize: 16 },
+  modalSubTitle: { color: COLORS.subText, marginBottom: 10, fontSize: 16, fontFamily: 'neodgm', },
   topicOption: {
     padding: 12,
     borderRadius: 8,
@@ -608,7 +627,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.selected,
     borderWidth: 0,
   },
-  topicText: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
+  topicText: { color: '#fff', textAlign: 'center', fontWeight: 'bold', fontFamily: 'neodgm', },
   modalButtonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -632,6 +651,7 @@ const styles = StyleSheet.create({
     color: COLORS.background,
     fontWeight: 'bold',
     fontSize: 16,
+    fontFamily: 'neodgm',
   },
 
   // 카운트다운 모달
@@ -649,6 +669,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
+    fontFamily: 'neodgm',
   },
   selectedOptionContainer: {
     flexDirection: 'row',
@@ -659,11 +680,13 @@ const styles = StyleSheet.create({
     color: COLORS.subText,
     fontSize: 16,
     marginRight: 10,
+    fontFamily: 'neodgm',
   },
   optionValue: {
     color: COLORS.text,
     fontSize: 16,
     fontWeight: 'bold',
+    fontFamily: 'neodgm',
   },
   countdownText: {
     color: COLORS.primary,
@@ -672,6 +695,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     marginBottom: 25,
+    fontFamily: 'neodgm',
   },
   cancelButton: {
     padding: 12,
@@ -684,6 +708,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+    fontFamily: 'neodgm',
   },
   summaryBox: {
     width: '100%',
@@ -697,5 +722,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#D4D4D4',
     lineHeight: 22,
+    fontFamily: 'neodgm',
   },
 });

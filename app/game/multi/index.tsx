@@ -7,6 +7,7 @@ import api from "../../../services/api";
 import { Ionicons } from '@expo/vector-icons';
 import CreateRoomScreen from './room/create_room';
 import { Audio } from "expo-av";
+import { useFonts } from 'expo-font';
 
 // Android에서 LayoutAnimation을 사용하기 위한 설정
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -24,6 +25,9 @@ interface GameRoom {
 }
 
 export default function MultiModeLobby() {
+  const [fontsLoaded, fontError] = useFonts({
+    'neodgm': require('../../../assets/fonts/neodgm.ttf'),
+  });
   const [rooms, setRooms] = useState<GameRoom[]>([]);
   const [createRoomModalVisible, setCreateRoomModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -41,28 +45,33 @@ export default function MultiModeLobby() {
   const [music, setMusic] = useState<Audio.Sound | null>(null);
 
   // ★★★ 3. 로비 화면이 나타날 때 배경 음악을 로드하고 재생합니다. ★★★
-  useEffect(() => {
-    const loadAndPlayMusic = async () => {
+  useFocusEffect(
+    useCallback(() => {
+      let soundObject: Audio.Sound | null = null;
+      const loadAndPlayMusic = async () => {
         try {
-            await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-            const { sound } = await Audio.Sound.createAsync(
-               require('../../../assets/sounds/lobby_music.mp3'), // 경로를 확인해주세요!
-               { shouldPlay: true } // 로드 후 바로 재생
-            );
-            setMusic(sound);
+          await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+          const { sound } = await Audio.Sound.createAsync(
+            require('../../../assets/sounds/lobby_music.mp3'),
+            { shouldPlay: true, isLooping: true } // isLooping을 추가하여 반복 재생
+          );
+          soundObject = sound;
         } catch (error) {
-            console.error("배경 음악 로딩 실패:", error);
+          console.error("배경 음악 로딩 실패:", error);
         }
-    };
+      };
 
-    loadAndPlayMusic();
+      loadAndPlayMusic();
 
-    // 이 화면을 떠날 때 (게임 방에 들어가거나, 뒤로 갈 때) 음악을 정리합니다.
-    return () => {
+      // 클린업 함수: 화면을 떠날 때 호출됩니다.
+      return () => {
         console.log("로비 화면을 떠나므로 음악을 정지합니다.");
-        music?.unloadAsync();
-    };
-  }, []); // 이 useEffect는 로비 화면에 처음 들어왔을 때 딱 한 번만 실행됩니다.
+        if (soundObject) {
+          soundObject.unloadAsync();
+        }
+      };
+    }, [])
+  );
 
   const fetchRooms = useCallback(async (isRefresh = false) => {
     // ... (이전과 동일한 fetchRooms 함수)
@@ -279,24 +288,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, 
     marginBottom: 10 
   },
-  header: { fontSize: 28, fontWeight: "bold", color: "#E2C044" },
+  header: { fontSize: 28, fontWeight: "bold", color: "#E2C044", fontFamily: 'neodgm' },
   headerIcon: {
     padding: 5,
   },
-  emptyListText: { color: "#D1C4E9", fontSize: 16, textAlign: "center", marginTop: 50 },
+  emptyListText: { color: "#D1C4E9", fontSize: 16, textAlign: "center", marginTop: 50, fontFamily: 'neodgm' },
   roomCard: { padding: 15, marginHorizontal: 20, marginVertical: 8, backgroundColor: "#1E293B", borderRadius: 10, borderColor: "#334155", borderWidth: 1 },
   roomCardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  roomName: { flexShrink: 1, fontSize: 18, fontWeight: "bold", color: "white" },
+  roomName: { flexShrink: 1, fontSize: 18, fontWeight: "bold", color: "white", fontFamily: 'neodgm' },
   deleteButton: { padding: 5, marginLeft: 'auto' },
-  roomDescription: { color: "#D1C4E9", fontSize: 14, marginBottom: 10, minHeight: 35 },
+  roomDescription: { color: "#D1C4E9", fontSize: 14, marginBottom: 10, minHeight: 35, fontFamily: 'neodgm' },
   roomCardFooter: { flexDirection: 'row', alignItems: 'center' },
-  roomParticipants: { color: "#9CA3AF", fontSize: 14, marginLeft: 8 },
+  roomParticipants: { color: "#9CA3AF", fontSize: 14, marginLeft: 8, fontFamily: 'neodgm' },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", alignItems: "center" },
   modalContent: { width: "90%", maxHeight: "80%", borderRadius: 16, overflow: 'hidden' },
   statusIndicator: { borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10, marginRight: 10 },
-  statusText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
+  statusText: { color: 'white', fontWeight: 'bold', fontSize: 12, fontFamily: 'neodgm' },
   listHeader: { paddingHorizontal: 20, marginBottom: 10 },
-  searchInput: { backgroundColor: "#1E293B", color: 'white', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 15, borderColor: "#334155", borderWidth: 1 },
+  searchInput: { backgroundColor: "#1E293B", color: 'white', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 15, borderColor: "#334155", borderWidth: 1, fontFamily: 'neodgm' },
   filterContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   filterText: { color: 'white', fontSize: 16 },
   // --- 👇 추가: 삭제 확인 모달 스타일 ---
@@ -314,6 +323,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 10,
+    fontFamily: 'neodgm'
   },
   confirmModalText: {
     fontSize: 16,
@@ -321,6 +331,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
     lineHeight: 24,
+    fontFamily: 'neodgm'
   },
   confirmModalButtons: {
     flexDirection: 'row',
@@ -341,6 +352,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: 'neodgm'
   },
   deleteConfirmButton: {
     backgroundColor: '#DC2626',
@@ -349,5 +361,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+    fontFamily: 'neodgm'
   },
 });
