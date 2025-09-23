@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Settings } from "lucide-react";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Image, useWindowDimensions, LayoutAnimation, UIManager, Platform, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Image, useWindowDimensions, LayoutAnimation, UIManager, Platform, ScrollView, Modal } from "react-native";
 import { router } from "expo-router";
 import api from "../../services/api";
 import OptionsModal from "../../components/OptionsModal";
+import { useSettings } from "../../components/context/SettingsContext";
 import { useFonts } from 'expo-font';
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -36,11 +37,20 @@ export default function StorySelectorScreen() {
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
 
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false); // 추가
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const [isBgmOn, setIsBgmOn] = useState(true);
-  const [isSfxOn, setIsSfxOn] = useState(true);
-  const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1);
-  const [backgroundColor, setBackgroundColor] = useState("#1a202c");
+  const {
+    isBgmOn,
+    setIsBgmOn,
+    isSfxOn,
+    setIsSfxOn,
+    fontSizeMultiplier,
+    setFontSizeMultiplier,
+    language,
+    setLanguage,
+    isLoading: isSettingsLoading,
+  } = useSettings();
 
   useEffect(() => {
     if (fontError) throw fontError;
@@ -55,7 +65,8 @@ export default function StorySelectorScreen() {
         setStories(data.stories);
       } catch (error: any) {
         console.error("스토리 로드 중 오류 발생: ", error);
-        alert("이야기 목록을 불러올 수 없습니다. 서버를 확인해주세요.");
+        setErrorMessage("이야기 목록을 불러올 수 없습니다. 서버를 확인해주세요.");
+        setErrorModalVisible(true);
       } finally {
         setLoading(false);
       }
@@ -163,14 +174,6 @@ export default function StorySelectorScreen() {
         <OptionsModal
           visible={optionsModalVisible}
           onClose={() => setOptionsModalVisible(false)}
-          isBgmOn={isBgmOn}
-          setIsBgmOn={setIsBgmOn}
-          isSfxOn={isSfxOn}
-          setIsSfxOn={setIsSfxOn}
-          fontSizeMultiplier={fontSizeMultiplier}
-          setFontSizeMultiplier={setFontSizeMultiplier}
-          backgroundColor={backgroundColor}
-          setBackgroundColor={setBackgroundColor}
         />
       </View>
 
@@ -230,6 +233,25 @@ export default function StorySelectorScreen() {
             }
           })()}
       </View>
+        <Modal
+        transparent={true}
+        visible={errorModalVisible}
+        animationType="fade"
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>오류</Text>
+            <Text style={styles.modalMessage}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setErrorModalVisible(false)}
+            >
+              <Text style={styles.modalButtonText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -473,5 +495,53 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   startButtonText: {
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+  },
+  modalBox: {
+    width: '85%',
+    maxWidth: 400,
+    backgroundColor: "#1c2033",
+    borderRadius: 12,
+    padding: 25,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: '#F4E4BC',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#F4E4BC",
+    fontFamily: "neodgm",
+    marginBottom: 15,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "#F4E1D2",
+    fontFamily: "neodgm",
+    textAlign: "center",
+    marginBottom: 25,
+    lineHeight: 24,
+  },
+  modalButton: {
+    backgroundColor: '#7C3AED', 
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+  },
+  modalButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontFamily: "neodgm",
+    fontWeight: "bold",
   },
 });

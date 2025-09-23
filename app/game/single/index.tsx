@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   SafeAreaView,
   View,
@@ -11,10 +11,10 @@ import {
   ActivityIndicator,
   ImageBackground,
 } from 'react-native';
-
+import { Audio } from "expo-av";
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
-import { router } from 'expo-router'; // This part is correct
+import { router, useFocusEffect } from 'expo-router'; // This part is correct
 import {
   fetchScenarios,
   fetchDifficulties,
@@ -24,6 +24,7 @@ import {
   Character as ApiCharacter,
   checkSingleGameSession,
 } from '../../../services/api';
+import { useSettings } from '../../../components/context/SettingsContext';
 
 // --- 인터페이스 정의 ---
 interface Scenario {
@@ -79,6 +80,9 @@ const FONT_SIZES = {
 const scenarioImages = [
   require('../../../assets/images/game/single/back_1.jpg'),
   require('../../../assets/images/game/single/back_2.jpg'),
+  require('../../../assets/images/game/single/back_3.jpg'),
+  require('../../../assets/images/game/single/back_4.jpg'),
+  require('../../../assets/images/game/single/back_5.jpg'),
 ];
 
 // --- 컴포넌트 시작 ---
@@ -86,6 +90,21 @@ export default function GameStarterScreen() {
   const [fontsLoaded, fontError] = useFonts({
     'neodgm': require('../../../assets/fonts/neodgm.ttf'),
   });
+
+  const [isNotificationModalVisible, setNotificationModalVisible] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState({ title: '', body: '' });
+
+  const {
+    isBgmOn,
+    setIsBgmOn,
+    isSfxOn,
+    setIsSfxOn,
+    fontSizeMultiplier,
+    setFontSizeMultiplier,
+    language,
+    setLanguage,
+    isLoading: isSettingsLoading,
+  } = useSettings();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isScenarioModalVisible, setScenarioModalVisible] = useState(false);
@@ -117,7 +136,61 @@ export default function GameStarterScreen() {
     return null;
   }
 
+  const showNotification = (title: string, body: string) => {
+    setNotificationMessage({ title, body });
+    setNotificationModalVisible(true);
+  };
+
   // --- useEffect Hooks ---
+  const musicRef = useRef<Audio.Sound | null>(null);
+  
+    // ★★★ 3. 로비 화면이 나타날 때 배경 음악을 로드하고 재생합니다. ★★★
+    useFocusEffect(
+      useCallback(() => {
+        const manageMusic = async () => {
+            // BGM 설정이 켜져있을 때
+            if (isBgmOn) {
+            // 아직 음악이 로드되지 않았다면, 새로 로드하고 재생합니다.
+            if (!musicRef.current) {
+                try {
+                await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+                const { sound } = await Audio.Sound.createAsync(
+                    require('../../../assets/sounds/single_music.mp3'),
+                    { isLooping: true }
+                );
+                await sound.playAsync();
+                musicRef.current = sound; // 재생된 sound 객체를 state에 저장
+                } catch (error) {
+                console.error("배경 음악 로딩 실패:", error);
+                }
+            }
+            // BGM 설정이 꺼졌다가 다시 켜진 경우, 기존 음악을 재생합니다.
+            else {
+                await musicRef.current.playAsync();
+            }
+            } 
+            // BGM 설정이 꺼져있을 때
+            else {
+            // 재생 중인 음악이 있다면 정지합니다.
+            if (musicRef.current) {
+                await musicRef.current.stopAsync();
+            }
+            }
+        };
+  
+        manageMusic();
+  
+        // 클린업 함수: 화면을 떠날 때 음악을 언로드합니다.
+        return () => {
+            if (musicRef.current) {
+            musicRef.current.unloadAsync();
+            musicRef.current = null; // state 초기화
+            }
+        };
+        // 👇 중요: isBgmOn이 바뀔 때마다 이 로직이 다시 실행됩니다.
+        }, [isBgmOn]) 
+    );
+
   useEffect(() => {
     const loadGameOptions = async () => {
       try {
@@ -134,7 +207,7 @@ export default function GameStarterScreen() {
         
       } catch (error) {
         console.error("게임 옵션 로딩 실패:", error);
-        Alert.alert("오류", "게임 옵션 정보를 불러오는 데 실패했습니다.");
+        showNotification("오류", "게임 옵션 정보를 불러오는 데 실패했습니다.");
       } finally {
         setIsLoading(false);
       }
@@ -154,7 +227,7 @@ export default function GameStarterScreen() {
           console.log(`[index.tsx] 캐릭터 ${chars.length}명 로딩 완료`);
         } catch (error) {
           console.error("캐릭터 목록 로딩 실패:", error);
-          Alert.alert("오류", "캐릭터 정보를 불러오는 데 실패했습니다.");
+          showNotification("오류", "캐릭터 정보를 불러오는 데 실패했습니다.");
         }
       }
     };
@@ -193,7 +266,7 @@ export default function GameStarterScreen() {
         handleStartNewGame();
       } else {
         console.error("세션 확인 중 오류:", error);
-        Alert.alert("오류", "저장된 게임 정보를 확인하는 중 문제가 발생했습니다.");
+        showNotification("오류", "저장된 게임 정보를 확인하는 중 문제가 발생했습니다.");
       }
     }
   };
@@ -224,13 +297,13 @@ export default function GameStarterScreen() {
 
   const handleConfirmScenarioOptions = () => {
     if (!selectedScenario || !selectedDifficultyId || !selectedGenreId) {
-      Alert.alert("알림", "모든 옵션을 선택해야 합니다.");
+      showNotification("알림", "모든 옵션을 선택해야 합니다.");
       return;
     }
     
     // ✅ [핵심 수정] 캐릭터가 아직 로딩되지 않았다면, 여기서 로딩 상태를 확인하고 대기합니다.
     if (characters.length === 0) {
-      Alert.alert("알림", "캐릭터 정보를 불러오는 중입니다. 잠시만 기다려주세요.");
+      showNotification("알림", "캐릭터 정보를 불러오는 중입니다. 잠시만 기다려주세요.");
       return;
     }
 
@@ -433,6 +506,27 @@ export default function GameStarterScreen() {
                 <Text style={styles.buttonText}>선택 완료</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        transparent={true}
+        visible={isNotificationModalVisible}
+        animationType="fade"
+        onRequestClose={() => setNotificationModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>{notificationMessage.title}</Text>
+            <Text style={styles.notificationBodyText}>
+              {notificationMessage.body}
+            </Text>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.confirmButton, { width: '100%', marginLeft: 0, marginTop: 10 }]}
+              onPress={() => setNotificationModalVisible(false)}
+            >
+              <Text style={styles.buttonText}>확인</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -664,5 +758,13 @@ const styles = StyleSheet.create({
     color: '#D4D4D4',
     lineHeight: 22,
     fontFamily: 'neodgm',
+  },
+  notificationBodyText: {
+    fontSize: FONT_SIZES.subTitle,
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: 20,
+    fontFamily: 'neodgm',
+    lineHeight: 24,
   },
 });

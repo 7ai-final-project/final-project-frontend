@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   TextInput,
   ImageBackground,
+  Animated,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { storage } from "../../../../services/storage";
@@ -67,6 +68,28 @@ interface Difficulty { id: string; name: string; }
 interface Mode { id: string; name: string; }
 interface Genre { id: string; name: string; }
 
+const Toast: React.FC<{ message: string; visible: boolean; onHide: () => void; }> = ({ message, visible, onHide }) => {
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (visible) {
+            Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+            const timer = setTimeout(() => {
+                Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => onHide());
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [visible, fadeAnim, onHide]);
+
+    if (!visible) return null;
+
+    return (
+        <Animated.View style={[styles.toastContainer, { opacity: fadeAnim }]}>
+            <Text style={styles.toastText}>{message}</Text>
+        </Animated.View>
+    );
+};
+
 // --- 컴포넌트 시작 ---
 export default function RoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -107,6 +130,9 @@ export default function RoomScreen() {
   const [loadedSession, setLoadedSession] = useState<LoadedSessionData | null>(null);
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
   const [notificationModalContent, setNotificationModalContent] = useState({ title: "", message: "" });
+  const [notificationModalCallback, setNotificationModalCallback] = useState<(() => void) | null>(null);
+
+  const [toast, setToast] = useState({ visible: false, message: "" });
 
   const [isGameLoaded, setIsGameLoaded] = useState(false);
   const [isLoadingGame, setIsLoadingGame] = useState(false);
@@ -230,22 +256,38 @@ export default function RoomScreen() {
           }
           // 방 삭제 처리 (기존 코드의 버그 수정)
           else if (message.type === "room_deleted") {
-            Alert.alert("알림", "방이 삭제되어 로비로 이동합니다.", [
-              { text: "확인", onPress: () => router.replace("/game/multi") },
-            ]);
+            setNotificationModalContent({
+              title: "알림",
+              message: "방이 삭제되어 로비로 이동합니다.",
+            });
+            setNotificationModalCallback(() => () => router.replace("/game/multi"));
+            setIsNotificationModalVisible(true);
           }
           return; // 처리가 끝났으므로 함수 종료
         }
       };
     } catch (error) {
       console.error("웹소켓 연결 실패:", error);
-      Alert.alert("연결 실패", "안전한 웹소켓 연결에 실패했습니다.");
+      setNotificationModalContent({
+        title: "연결 실패",
+        message: "안전한 웹소켓 연결에 실패했습니다.",
+      });
+      setIsNotificationModalVisible(true);
     }
   };
 
+  const handleCloseNotificationModal = () => {
+    setIsNotificationModalVisible(false);
+    // 콜백 함수가 있으면 실행하고 초기화합니다.
+    if (notificationModalCallback) {
+        notificationModalCallback();
+        setNotificationModalCallback(null);
+    }
+};
+
   const handleJoinPrivateRoom = async () => {
     if (!passwordInput) {
-      Alert.alert("경고", "비밀번호를 입력해주세요.");
+      setToast({ visible: true, message: "비밀번호를 입력해주세요." });
       return;
     }
     try {
@@ -255,7 +297,10 @@ export default function RoomScreen() {
       setPasswordInput("");
       connectWebSocket();
     } catch (error: any) {
-      Alert.alert("입장 실패", error.response?.data?.detail || "비밀번호가 올바르지 않습니다.");
+      setToast({ 
+        visible: true, 
+        message: error.response?.data?.detail || "비밀번호가 올바르지 않습니다." 
+      });
     }
   };
 
@@ -333,8 +378,13 @@ export default function RoomScreen() {
           connectWebSocket();
         }
       } catch (error) {
-        Alert.alert("오류", "방 정보를 조회하는 데 실패했습니다.");
-        router.replace("/game/multi");
+        setNotificationModalContent({
+            title: "오류",
+            message: "방 정보를 조회하는 데 실패했습니다. 로비로 돌아갑니다.",
+        });
+        // 모달이 닫힌 후 로비로 이동하도록 콜백 설정
+        setNotificationModalCallback(() => () => router.replace("/game/multi"));
+        setIsNotificationModalVisible(true);
       }
     };
 
@@ -375,13 +425,17 @@ export default function RoomScreen() {
     if (!roomId) return;
     try {
       await leaveRoom(roomId);
-      Alert.alert("알림", "방에서 나갔습니다.");
       setIsLeaveModalVisible(false);
+      // Alert 없이 바로 페이지 이동
       router.replace("/game/multi");
     } catch (error) {
       console.error("방 나가기 실패:", error);
-      Alert.alert("오류", "방을 나가는 데 실패했습니다.");
       setIsLeaveModalVisible(false);
+      setNotificationModalContent({
+        title: "오류",
+        message: "방을 나가는 데 실패했습니다.",
+      });
+      setIsNotificationModalVisible(true);
     }
   };
 
@@ -392,7 +446,7 @@ export default function RoomScreen() {
   const handleOptionSelect = () => { // 'async' 키워드 제거
     if (!isOwner) return;
     if (!selectedScenarioId || !selectedDifficultyId || !selectedModeId || !selectedGenreId) {
-      Alert.alert("알림", "모든 게임 옵션을 선택해야 합니다.");
+      setToast({ visible: true, message: "모든 게임 옵션을 선택해야 합니다." });
       return;
     }
     
@@ -490,11 +544,19 @@ export default function RoomScreen() {
   // ✅ [2단계] '불러온 게임 시작'을 위한 새 함수 추가
   const onStartLoadedGame = () => {
       if (!loadedSessionRef.current) {
-          Alert.alert("오류", "불러온 게임 데이터가 없습니다.");
+          setNotificationModalContent({
+            title: "오류",
+            message: "불러온 게임 데이터가 없습니다.",
+          });
+          setIsNotificationModalVisible(true);
           return;
       }
       if (!canStart) {
-          Alert.alert("알림", "모든 플레이어가 준비를 완료해야 시작할 수 있습니다.");
+          setNotificationModalContent({
+            title: "알림",
+            message: "모든 플레이어가 준비를 완료해야 시작할 수 있습니다.",
+          });
+          setIsNotificationModalVisible(true);
           return;
       }
 
@@ -683,7 +745,7 @@ export default function RoomScreen() {
         transparent={true}
         visible={isNotificationModalVisible}
         animationType="fade"
-        onRequestClose={() => setIsNotificationModalVisible(false)}
+        onRequestClose={handleCloseNotificationModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.notificationModalBox}>
@@ -691,7 +753,7 @@ export default function RoomScreen() {
             <Text style={styles.notificationModalMessage}>{notificationModalContent.message}</Text>
             <TouchableOpacity
               style={styles.modalConfirmButton}
-              onPress={() => setIsNotificationModalVisible(false)}
+              onPress={handleCloseNotificationModal}
             >
               <Text style={styles.topicText}>확인</Text>
             </TouchableOpacity>
@@ -712,6 +774,11 @@ export default function RoomScreen() {
       </Modal>
 
       {isChatVisible && <ChatBox roomId={roomId} chatSocketRef={chatSocketRef} />}
+      <Toast
+        message={toast.message}
+        visible={toast.visible}
+        onHide={() => setToast({ visible: false, message: "" })}
+      />
     </SafeAreaView>
   );
 }
@@ -1044,5 +1111,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
     fontFamily: 'neodgm',
+  },
+  toastContainer: {
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    elevation: 10,
+    zIndex: 9999, // 다른 요소들 위에 보이도록 zIndex 추가
+  },
+  toastText: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: 'neodgm',
+    fontWeight: 'bold',
   },
 });

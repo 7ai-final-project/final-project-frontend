@@ -24,6 +24,7 @@ import { Audio } from "expo-av";
 import { useAuth } from "@/hooks/useAuth";
 import ShariHud from "./ShariHud";
 import { useFonts } from 'expo-font';
+import ConfettiCannon from 'react-native-confetti-cannon';
 
 interface LoadedSessionData {
   choice_history: any;
@@ -68,6 +69,8 @@ export default function GameEngineRealtime({
       'neodgm': require('@/assets/fonts/neodgm.ttf'),
     });
 
+    const [showConfetti, setShowConfetti] = useState(false);
+
     console.log("내 캐릭터 데이터:", JSON.stringify(myCharacter, null, 2));
 
     const wsRef = useRef<WebSocket | null>(null);
@@ -79,6 +82,7 @@ export default function GameEngineRealtime({
     const [clickSound, setClickSound] = useState<Audio.Sound | null>(null);
     const [pageTurnSound, setPageTurnSound] = useState<Audio.Sound | null>(null);
     const [diceRollSound, setDiceRollSound] = useState<Audio.Sound | null>(null);
+    const [fireworksSound, setFireworksSound] = useState<Audio.Sound | null>(null);
     
     // [수정] sceneTemplates 배열 대신, 현재 씬 객체 하나만 관리합니다.
     const [currentScene, setCurrentScene] = useState<SceneTemplate | null>(null);
@@ -156,6 +160,13 @@ export default function GameEngineRealtime({
             setHasNewHudInfo(true);
         }
     }, [shariBlockData]);
+
+    useEffect(() => {
+        if (phase === 'end') {
+            setShowConfetti(true);
+            fireworksSound?.replayAsync();
+        }
+    }, [phase, fireworksSound]);
 
     useEffect(() => {
         let ws: WebSocket | null = null;
@@ -265,11 +276,28 @@ export default function GameEngineRealtime({
                             setSceneImageUrl(imageUrl);
                         } else {
                             setSceneImageUrl(null);
-}
+                        }
                         setTurnWaitingState({ submitted_users: [], total_users: 0 }); // 대기 상태 초기화
                         setPhase("cinematic");
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+                    
+                    // ▼▼▼▼▼ [핵심 수정] 게임 종료 이벤트 처리 로직 추가 ▼▼▼▼▼
+                    } else if (data.type === "game_update" && data.payload.event === "game_over") {
+                        const { narration, image } = data.payload;
+                        setCinematicText(narration); // 마지막 서사 설정
+                        
+                        if (image?.url) {
+                            setSceneImageUrl(image.url); // 마지막 이미지 설정
+                        }
+                        
+                        setPhase("end"); // 게임 단계(phase)를 'end'로 변경
+                        
+                        // 애니메이션 효과
+                        phaseAnim.setValue(0);
+                        Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+                    // ▲▲▲▲▲ [핵심 수정] 게임 종료 이벤트 처리 로직 종료 ▲▲▲▲▲
+
                     } else if (data.type === "save_success") {
                         setSaveModalMessage(data.message);
                         setIsSaveModalVisible(true);
@@ -315,6 +343,8 @@ export default function GameEngineRealtime({
                 setPageTurnSound(loadedPageTurnSound);
                 const { sound: loadedDiceRollSound } = await Audio.Sound.createAsync(require('@/assets/sounds/dice_roll.mp3'));
                 setDiceRollSound(loadedDiceRollSound);
+                const { sound: loadedFireworksSound } = await Audio.Sound.createAsync(require('@/assets/sounds/fireworks.mp3'));
+                setFireworksSound(loadedFireworksSound);
             } catch (error) { console.error("사운드 로딩 실패:", error); }
         };
         loadSounds();
@@ -322,6 +352,7 @@ export default function GameEngineRealtime({
             clickSound?.unloadAsync();
             pageTurnSound?.unloadAsync();
             diceRollSound?.unloadAsync();
+            fireworksSound?.unloadAsync();
         };
     }, []);
 
@@ -618,6 +649,16 @@ export default function GameEngineRealtime({
 
     return (
         <SafeAreaView style={styles.safeArea}>
+            {showConfetti && (
+                <ConfettiCannon
+                    count={200} // 터지는 개수
+                    origin={{ x: -10, y: 0 }}
+                    autoStart={true}
+                    fadeOut={true}
+                    explosionSpeed={400}
+                    fallSpeed={3000}
+                />
+            )}
             <View style={styles.mainContainer}>
                 <TouchableOpacity 
                     style={styles.hudIconContainer} 
@@ -742,7 +783,7 @@ export default function GameEngineRealtime({
                     {phase === "choice" && (
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
                             <Text style={styles.title}>{title}</Text>
-                            <ScrollView style={styles.descriptionBox}>
+                            <ScrollView style={styles.descriptionBox} showsVerticalScrollIndicator={false}>
                                 <Text style={styles.descriptionText}>
                                     {roundSpec.description}
                                 </Text>
@@ -776,7 +817,7 @@ export default function GameEngineRealtime({
                                 </View>
                             )}
 
-                            <ScrollView style={{ flex: 1, width: '100%' }}>
+                            <ScrollView style={{ flex: 1, width: '100%' }} showsVerticalScrollIndicator={false}>
                                 {myChoices.map((c) => (
                                     <TouchableOpacity
                                         key={c.id}
@@ -847,12 +888,12 @@ export default function GameEngineRealtime({
                                 />
                                 {imgLoading && <ActivityIndicator style={styles.imgSpinner} />}
 
-                                <ScrollView style={styles.cinematicBox}>
+                                <ScrollView style={styles.cinematicBox} showsVerticalScrollIndicator={false}>
                                     <Text style={styles.cinematicText}>{cinematicText}</Text>
                                 </ScrollView>
                             </View>
                             ) : (
-                                <ScrollView style={styles.cinematicBox_noImage}>
+                                <ScrollView style={styles.cinematicBox_noImage} showsVerticalScrollIndicator={false}>
                                     <Text style={styles.cinematicText}>{cinematicText}</Text>
                                 </ScrollView>
                             )}
@@ -893,7 +934,29 @@ export default function GameEngineRealtime({
 
                     {phase === "end" && (
                         <Animated.View style={[styles.center, { opacity: phaseAnim }]}>
-                            <Text style={styles.title}>엔딩</Text>
+                            <Text style={styles.title}>이야기의 끝</Text>
+                            {/* 최종 서사(내레이션)를 보여주는 부분 */}
+                            <ScrollView style={[styles.cinematicBox_noImage, { maxHeight: 300, marginBottom: 20 }]} showsVerticalScrollIndicator={false}>
+                                <Text style={styles.cinematicText}>{cinematicText}</Text>
+                            </ScrollView>
+                            {/* 최종 이미지가 있다면 보여주는 부분 */}
+                            {sceneImageUrl ? (
+                                <View style={[styles.sceneImageWrap, { width: "50%"}]}>
+                                    <Image
+                                        source={{ uri: sceneImageUrl }}
+                                        style={styles.sceneImage}
+                                        resizeMode="cover"
+                                    />
+                                <ScrollView style={styles.cinematicBox} showsVerticalScrollIndicator={false}>
+                                        <Text style={styles.cinematicText}>{cinematicText}</Text>
+                                    </ScrollView>
+                                </View>
+                            ) : (
+                                // 이미지가 없을 경우: 텍스트 박스만 표시
+                                <ScrollView style={[styles.cinematicBox_noImage, { maxHeight: 300, marginBottom: 20 }]}>
+                                    <Text style={styles.cinematicText}>{cinematicText}</Text>
+                                </ScrollView>
+                            )}
                             <Text style={styles.subtitle}>수고하셨습니다!</Text>
                             <TouchableOpacity style={styles.primary} onPress={confirmReturnToRoom}>
                                 <Text style={styles.primaryText}>대기실로 돌아가기</Text>

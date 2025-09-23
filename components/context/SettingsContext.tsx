@@ -6,6 +6,7 @@ interface Settings {
   isBgmOn: boolean;
   isSfxOn: boolean;
   fontSizeMultiplier: number;
+  language: 'ko' | 'en'; // 언어 설정 추가
 }
 
 // 컨텍스트가 제공할 값들의 타입 정의 (상태 + 상태 변경 함수)
@@ -13,6 +14,7 @@ interface SettingsContextType extends Settings {
   setIsBgmOn: (value: boolean) => void;
   setIsSfxOn: (value: boolean) => void;
   setFontSizeMultiplier: (value: number) => void;
+  setLanguage: (value: 'ko' | 'en') => void; // 언어 설정 함수 추가
   isLoading: boolean;
 }
 
@@ -26,6 +28,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
     isBgmOn: true,
     isSfxOn: true,
     fontSizeMultiplier: 1,
+    language: 'ko', // 기본 언어
   });
 
   // 앱 시작 시 AsyncStorage에서 저장된 설정 불러오기
@@ -34,7 +37,9 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
       try {
         const savedSettings = await AsyncStorage.getItem('appSettings');
         if (savedSettings) {
-          setSettings(JSON.parse(savedSettings));
+          // 저장된 설정에 새로운 값이 없을 경우를 대비해 기본값과 병합
+          const loaded = JSON.parse(savedSettings);
+          setSettings(prevSettings => ({ ...prevSettings, ...loaded }));
         }
       } catch (e) {
         console.error("Failed to load settings.", e);
@@ -56,12 +61,14 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const setIsBgmOn = (value: boolean) => setSettings(s => ({ ...s, isBgmOn: value }));
   const setIsSfxOn = (value: boolean) => setSettings(s => ({ ...s, isSfxOn: value }));
   const setFontSizeMultiplier = (value: number) => setSettings(s => ({ ...s, fontSizeMultiplier: value }));
+  const setLanguage = (value: 'ko' | 'en') => setSettings(s => ({ ...s, language: value })); // 함수 구현
 
   const value = {
     ...settings,
     setIsBgmOn,
     setIsSfxOn,
     setFontSizeMultiplier,
+    setLanguage, // Context 값으로 전달
     isLoading,
   };
 

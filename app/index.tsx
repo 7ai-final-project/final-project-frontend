@@ -163,17 +163,20 @@ export default function HomeScreen() {
   const [optionsModalVisible, setOptionsModalVisible] = useState(false); 
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [nicknameInputModalVisible, setNicknameInputModalVisible] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false); // 추가
+  const [errorMessage, setErrorMessage] = useState(''); 
 
-  
-  const { 
-    isBgmOn, 
-    setIsBgmOn, 
-    isSfxOn, 
-    setIsSfxOn, 
-    isLoading: isSettingsLoading, 
-    fontSizeMultiplier, 
-    setFontSizeMultiplier 
-  } = useSettings();
+  const {
+      isBgmOn,
+      setIsBgmOn,
+      isSfxOn,
+      setIsSfxOn,
+      fontSizeMultiplier,
+      setFontSizeMultiplier,
+      language,
+      setLanguage,
+      isLoading: isSettingsLoading,
+    } = useSettings();
   
   const { user, setUser, loading, handleLogout } = useAuth();
   const [tempLoginUser, setTempLoginUser] = useState<any>(null);
@@ -190,7 +193,8 @@ export default function HomeScreen() {
 
     } catch (error) {
       console.error("닉네임 변경 실패:", error);
-      Alert.alert("오류", "닉네임 변경 중 오류가 발생했습니다.");
+      setErrorMessage("닉네임 변경 중 오류가 발생했습니다.");
+      setErrorModalVisible(true);
     }
   };
   
@@ -378,8 +382,8 @@ return (
         </View>
 
        <Modal visible={loginModalVisible} animationType="fade" transparent={true} onRequestClose={() => setLoginModalVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <View style={isMobile ? styles.modalBoxMobile : styles.modalBox}>
+          <Pressable style={styles.modalOverlay} onPress={() => setLoginModalVisible(false)}>
+            <Pressable style={isMobile ? styles.modalBoxMobile : styles.modalBox}>
               <TouchableOpacity style={styles.closeIcon} onPress={() => setLoginModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#aaa" />
               </TouchableOpacity>
@@ -422,8 +426,8 @@ return (
                 </TouchableOpacity>
                 <Text style={isMobile ? styles.termsTextMobile : styles.termsText}>에 동의하는 것으로 간주됩니다.</Text>
               </View>
-            </View>
-          </View>
+            </Pressable>
+          </Pressable>
         </Modal>
 
       <ProfileModal
@@ -436,12 +440,6 @@ return (
       <OptionsModal
         visible={optionsModalVisible}
         onClose={() => setOptionsModalVisible(false)}
-        isBgmOn={isBgmOn}
-        setIsBgmOn={setIsBgmOn}
-        isSfxOn={isSfxOn}
-        setIsSfxOn={setIsSfxOn}
-        fontSizeMultiplier={fontSizeMultiplier}
-        setFontSizeMultiplier={setFontSizeMultiplier}
       />
 
       <NicknameInputModal
@@ -450,6 +448,29 @@ return (
         onSave={handleNicknameSaved}
         initialNickname={tempLoginUser?.nickname || ''}
       />
+
+      <Modal visible={errorModalVisible} animationType="fade" transparent={true} onRequestClose={() => setErrorModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={isMobile ? styles.modalBoxMobile : styles.modalBox}>
+            <TouchableOpacity style={styles.closeIcon} onPress={() => setErrorModalVisible(false)}>
+              <Ionicons name="close" size={24} color="#aaa" />
+            </TouchableOpacity>
+
+            <Text style={isMobile ? styles.modalTitleMobile : styles.modalTitle}>오류</Text>
+
+            <Text style={[isMobile ? styles.loggedInTextMobile : styles.loggedInText, { marginVertical: 20, textAlign: 'center' }]}>
+              {errorMessage}
+            </Text>
+
+            <TouchableOpacity 
+              style={[isMobile ? styles.loginButtonMobile : styles.loginButton, { backgroundColor: '#DC2626' }]} 
+              onPress={() => setErrorModalVisible(false)}
+            >
+              <Text style={isMobile ? styles.loginTextMobile : styles.loginText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       </View>
     </ImageBackground> 
   );

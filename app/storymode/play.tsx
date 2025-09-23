@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, ActivityIndicator, StyleSheet, useWindowDimensions, Platform } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet, useWindowDimensions, Platform, Modal, TouchableOpacity } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import StoryModeGame from "../../components/game/StoryModeGame";
 import api from "../../services/api";
@@ -27,6 +27,8 @@ export default function StorySelectorScreen() {
   const { story, should_continue } = useLocalSearchParams();
   const [initialHistory, setInitialHistory] = useState<SceneData[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [errorModalVisible, setErrorModalVisible] = useState(false); // 추가
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     if (fontError) throw fontError;
@@ -47,7 +49,8 @@ export default function StorySelectorScreen() {
         }
       } catch (error: any) {
         console.error("게임 시작 에러:", error);
-        alert("게임을 시작할 수 없습니다. 서버 연결을 확인해주세요.");
+        setErrorMessage("게임을 시작할 수 없습니다. 서버 연결을 확인해주세요.");
+        setErrorModalVisible(true);
       } finally {
         setIsLoading(false);
       }
@@ -118,6 +121,25 @@ export default function StorySelectorScreen() {
           </Text>
         </View>
       )}
+      <Modal
+        transparent={true}
+        visible={errorModalVisible}
+        animationType="fade"
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>오류</Text>
+            <Text style={styles.modalMessage}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setErrorModalVisible(false)}
+            >
+              <Text style={styles.modalButtonText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -184,5 +206,48 @@ const styles = StyleSheet.create({
     color: "#EF4444",
     textAlign: "center",
     marginBottom: 6,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+  },
+  modalBox: {
+    width: '85%',
+    maxWidth: 400,
+    backgroundColor: "#1c2033",
+    borderRadius: 12,
+    padding: 25,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: '#F4E4BC',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#F4E4BC",
+    fontFamily: "neodgm",
+    marginBottom: 15,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "#F4E1D2",
+    fontFamily: "neodgm",
+    textAlign: "center",
+    marginBottom: 25,
+    lineHeight: 24,
+  },
+  modalButton: {
+    backgroundColor: '#7C3AED',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+  },
+  modalButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontFamily: "neodgm",
+    fontWeight: "bold",
   },
 });

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, ReactNode, FunctionComponent } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image, Pressable, Animated, LayoutChangeEvent, ViewStyle, useWindowDimensions } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image, Pressable, Animated, LayoutChangeEvent, ViewStyle, useWindowDimensions, Modal } from "react-native";
 import api from "../../services/api";
 import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import OptionsModal from "../../components/OptionsModal";
+import { useSettings } from '../../components/context/SettingsContext';
 import { router } from "expo-router";
 import { useFonts } from 'expo-font';
 
@@ -145,14 +146,24 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
   const currentScene = history[history.length - 1];
 
   const [error, setError] = useState("");
+  const [modalMessage, setModalMessage] = useState("");
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
 
   const [scrollWidth, setScrollWidth] = useState(0);
   const [isTyping, setIsTyping] = useState(true);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
-  const [isBgmOn, setIsBgmOn] = useState(true);
-  const [isSfxOn, setIsSfxOn] = useState(true);
-  const [fontSizeMultiplier, setFontSizeMultiplier] = useState(1);
-  const [backgroundColor, setBackgroundColor] = useState("#20232a");
+  const {
+        isBgmOn,
+        setIsBgmOn,
+        isSfxOn,
+        setIsSfxOn,
+        fontSizeMultiplier,
+        setFontSizeMultiplier,
+        language,
+        setLanguage,
+        isLoading: isSettingsLoading,
+      } = useSettings();
 
   const [defaultImagePath] = useState(() => {
     const images = [
@@ -292,10 +303,13 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
         history: history,
       });
 
-      alert("지금까지의 이야기가 저장되었습니다.");
+      const [error, setError] = useState("");
+      setModalMessage("지금까지의 이야기가 저장되었습니다.");
+      setSuccessModalVisible(true);
     } catch (error) {
       console.error("저장 실패:", error);
-      alert("저장에 실패했습니다. 서버 연결을 확인해주세요.");
+      setModalMessage("저장에 실패했습니다. 서버 연결을 확인해주세요.");
+      setErrorModalVisible(true);
     }
   };
 
@@ -309,7 +323,7 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: backgroundColor }}>
+    <View style={{ flex: 1, backgroundColor: '#20232a' }}>
       <ScrollView contentContainerStyle={isMobile ? styles.containerMobile : styles.container}>
         {/* --- 1. 헤더 --- */}
         <View style={isMobile ? styles.headerMobile : styles.header}>
@@ -437,16 +451,47 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
         <OptionsModal
           visible={optionsModalVisible}
           onClose={() => setOptionsModalVisible(false)}
-          isBgmOn={isBgmOn}
-          setIsBgmOn={setIsBgmOn}
-          isSfxOn={isSfxOn}
-          setIsSfxOn={setIsSfxOn}
-          fontSizeMultiplier={fontSizeMultiplier}
-          setFontSizeMultiplier={setFontSizeMultiplier}
-          backgroundColor={backgroundColor}
-          setBackgroundColor={setBackgroundColor}
         />
       </ScrollView>
+      <Modal
+        transparent={true}
+        visible={successModalVisible}
+        animationType="fade"
+        onRequestClose={() => setSuccessModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>알림</Text>
+            <Text style={styles.modalMessage}>{modalMessage}</Text>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonSuccess]}
+              onPress={() => setSuccessModalVisible(false)}
+            >
+              <Text style={styles.modalButtonText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        transparent={true}
+        visible={errorModalVisible}
+        animationType="fade"
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>오류</Text>
+            <Text style={styles.modalMessage}>{modalMessage}</Text>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonError]}
+              onPress={() => setErrorModalVisible(false)}
+            >
+              <Text style={styles.modalButtonText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -859,5 +904,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "neodgm",
     fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+  },
+  modalBox: {
+    width: '85%',
+    maxWidth: 400,
+    backgroundColor: "#2a2d47",
+    borderRadius: 12,
+    padding: 25,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: '#F4E4BC',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#F4E4BC",
+    fontFamily: "neodgm",
+    marginBottom: 15,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "#F4E1D2",
+    fontFamily: "neodgm",
+    textAlign: "center",
+    marginBottom: 25,
+    lineHeight: 24,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    width: '50%',
+    alignItems: 'center',
+  },
+  modalButtonSuccess: {
+    backgroundColor: '#3B82F6', // Blue color for success
+  },
+  modalButtonError: {
+    backgroundColor: '#EF4444', // Red color for error
+  },
+  modalButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontFamily: "neodgm",
+    fontWeight: "bold",
   },
 });
