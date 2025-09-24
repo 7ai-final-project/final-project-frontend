@@ -18,7 +18,7 @@ const Toast: React.FC<{ message: string; visible: boolean; onHide: () => void; }
             Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
             const timer = setTimeout(() => {
                 Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => onHide());
-            }, 1500); // 1.5초 후 사라짐
+            }, 1000); // 1.0초 후 사라짐
             return () => clearTimeout(timer);
         }
     }, [visible, fadeAnim, onHide]);

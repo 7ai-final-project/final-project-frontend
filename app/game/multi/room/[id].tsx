@@ -286,10 +286,16 @@ export default function RoomScreen() {
 };
 
   const handleJoinPrivateRoom = async () => {
+    if (room && room.selected_by_room.length >= room.max_players) {
+      setToast({ visible: true, message: "방이 가득 찼습니다." });
+      return; // 함수를 즉시 종료
+    }
+    
     if (!passwordInput) {
       setToast({ visible: true, message: "비밀번호를 입력해주세요." });
       return;
     }
+
     try {
       const res = await joinRoom(roomId, { password: passwordInput });
       setRoom(res.data);

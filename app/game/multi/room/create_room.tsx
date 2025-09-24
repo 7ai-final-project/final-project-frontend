@@ -6,9 +6,19 @@ import api from "../../../../services/api";
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 
+interface GameRoom {
+  id: number;
+  name: string;
+  description: string;
+  selected_by_room: any[];
+  max_players: number;
+  status: 'waiting' | 'play';
+  room_type: 'public' | 'private';
+}
+
 interface CreateRoomScreenProps {
   onClose: () => void;
-  onRoomCreated: () => void;
+  onRoomCreated: (newRoom: GameRoom) => void;
 }
 
 export default function CreateRoomScreen({ onClose, onRoomCreated }: CreateRoomScreenProps) {
@@ -43,24 +53,21 @@ export default function CreateRoomScreen({ onClose, onRoomCreated }: CreateRoomS
 
     setIsCreating(true);
     try {
-      // --- 🎨 API 요청 데이터 수정 ---
       const payload: any = {
         name,
         description,
         max_players: maxPlayers,
-        // room_type 필드는 백엔드 Room 모델 및 Serializer에 추가되어야 합니다.
         room_type: isPrivate ? 'private' : 'public',
       };
       
-      // 비밀방일 경우에만 password 필드를 추가합니다.
       if (isPrivate) {
         payload.password = password;
       }
 
-      await api.post("game/", payload);
+      const response = await api.post("game/", payload);
 
-      Alert.alert("성공", "방이 성공적으로 생성되었습니다!");
-      onRoomCreated();
+      onRoomCreated(response.data);
+
     } catch (err) {
       console.error("방 생성 실패:", err);
       Alert.alert("오류", "방 생성에 실패했습니다. 다시 시도해주세요.");

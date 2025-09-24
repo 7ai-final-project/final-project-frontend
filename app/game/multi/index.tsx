@@ -174,9 +174,17 @@ export default function MultiModeLobby() {
     }
   };
 
-  const handleRoomCreated = () => {
-    setCreateRoomModalVisible(false);
-    fetchPage(1, true);
+  const handleRoomCreated = (newRoom: GameRoom) => {
+    if (newRoom && newRoom.id) {
+      setCreateRoomModalVisible(false);
+      // 새로 생성된 방의 ID를 가지고 방 화면으로 즉시 이동합니다.
+      router.push({ pathname: "/game/multi/room/[id]", params: { id: newRoom.id.toString() } });
+    } else {
+      // 혹시 모를 예외 처리
+      setCreateRoomModalVisible(false);
+      Alert.alert("오류", "방 생성 후 정보를 받아오지 못했습니다.");
+      fetchPage(1, true); // 목록 새로고침
+    }
   };
   
   const renderRoomStatus = (status: 'waiting' | 'play') => {
