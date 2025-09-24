@@ -67,7 +67,7 @@ export default function StorySelectorScreen() {
                   try {
                   await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
                   const { sound } = await Audio.Sound.createAsync(
-                      require('../../../assets/sounds/storylist.mp3'),
+                      require('../../assets/sounds/storylist.mp3'),
                       { isLooping: true }
                   );
                   await sound.playAsync();
@@ -542,33 +542,26 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   modalBox: {
     width: '85%',
     maxWidth: 400,
-    backgroundColor: "#1c2033",
+    backgroundColor: "#2a2d47",
     borderRadius: 12,
     padding: 25,
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: '#F4E4BC',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 10,
   },
   modalTitle: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#F4E4BC",
+    color: "#FFFFFF",
     fontFamily: "neodgm",
     marginBottom: 15,
   },
   modalMessage: {
     fontSize: 16,
-    color: "#F4E1D2",
+    color: "#FFFFFF",
     fontFamily: "neodgm",
     textAlign: "center",
     marginBottom: 25,

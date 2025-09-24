@@ -183,12 +183,8 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
 
   const [clickSound, setClickSound] = useState<Audio.Sound | null>(null);
   const [pageTurnSound, setPageTurnSound] = useState<Audio.Sound | null>(null);
-  const [goodEndingMusic, setGoodEndingMusic] = useState<Audio.Sound | null>(
-    null
-  );
-  const [badEndingMusic, setBadEndingMusic] = useState<Audio.Sound | null>(
-    null
-  );
+  const [goodEndingMusic, setGoodEndingMusic] = useState<Audio.Sound | null>(null);
+  const [badEndingMusic, setBadEndingMusic] = useState<Audio.Sound | null>(null);
 
   useEffect(() => {
     if (fontError) throw fontError;
@@ -303,7 +299,6 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
         history: history,
       });
 
-      const [error, setError] = useState("");
       setModalMessage("지금까지의 이야기가 저장되었습니다.");
       setSuccessModalVisible(true);
     } catch (error) {
@@ -909,7 +904,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   modalBox: {
     width: '85%',
@@ -918,19 +913,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 25,
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: '#F4E4BC',
   },
   modalTitle: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#F4E4BC",
+    color: "#FFFFFF",
     fontFamily: "neodgm",
     marginBottom: 15,
   },
   modalMessage: {
     fontSize: 16,
-    color: "#F4E1D2",
+    color: "#FFFFFF",
     fontFamily: "neodgm",
     textAlign: "center",
     marginBottom: 25,
@@ -944,10 +937,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalButtonSuccess: {
-    backgroundColor: '#3B82F6', // Blue color for success
+    backgroundColor: '#7C3AED',
   },
   modalButtonError: {
-    backgroundColor: '#EF4444', // Red color for error
+    backgroundColor: '#EF4444',
   },
   modalButtonText: {
     color: "white",
