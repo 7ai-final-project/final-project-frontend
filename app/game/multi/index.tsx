@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
   listHeader: { paddingHorizontal: 20, marginBottom: 10 },
   searchInput: { backgroundColor: "#1E293B", color: 'white', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 15, borderColor: "#334155", borderWidth: 1, fontFamily: 'neodgm' },
   filterContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  filterText: { color: 'white', fontSize: 16 },
+  filterText: { color: 'white', fontSize: 16, fontFamily: 'neodgm' },
   confirmModalContent: {
     width: '80%',
     backgroundColor: '#1E293B',
