@@ -431,6 +431,12 @@ export default function GameStarterScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setContinueModalVisible(false)}
+            >
+              <Ionicons name="close" size={28} color={COLORS.subText} />
+            </TouchableOpacity>
             <Text style={styles.modalTitle}>{loadedSession?.scenario}</Text>
             <Text style={styles.modalSubTitle}>지난 줄거리</Text>
             {/* 줄거리 요약 표시 */}
@@ -766,5 +772,11 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontFamily: 'neodgm',
     lineHeight: 24,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    zIndex: 1,
   },
 });
