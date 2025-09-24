@@ -782,6 +782,7 @@ export default function GameEngineRealtime({
                 <View style={styles.gamePanel}>
                     {phase === "choice" && (
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
+                            {currentScene && <Text style={styles.turnCounter}>- {currentScene.index + 1}번째 이야기 -</Text>}
                             <Text style={styles.title}>{title}</Text>
                             <ScrollView style={styles.descriptionBox} showsVerticalScrollIndicator={false}>
                                 <Text style={styles.descriptionText}>
@@ -873,9 +874,9 @@ export default function GameEngineRealtime({
 
                     {phase === "cinematic" && (
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
+                            {currentScene && <Text style={styles.turnCounter}>- {currentScene.index + 1}번째 이야기 -</Text>}
                             <Text style={styles.title}>{title}</Text>
                             {diceResult && <Text style={styles.resultText}>{diceResult}</Text>}
-                            {/* ✅ 여기에 '장면 이미지' 블록을 추가하세요 (ScrollView 위) */}
                             {sceneImageUrl ? (
                             <View style={styles.sceneImageWrap}>
                                 <Image
@@ -1587,5 +1588,12 @@ const styles = StyleSheet.create({
         left: "50%",
         marginLeft: -10,
         marginTop: -10,
+    },
+    turnCounter: {
+        color: '#A0A0E0',
+        fontSize: 16,
+        textAlign: 'center',
+        marginBottom: 8,
+        fontFamily: 'neodgm',
     },
 });
