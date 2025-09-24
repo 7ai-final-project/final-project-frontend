@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   },
   modalBox: {
     width: '85%',
-    maxWidth: 400,
+    maxWidth: 500,
     backgroundColor: '#2a2d47',
     borderRadius: 16,
     padding: 24,

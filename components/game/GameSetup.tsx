@@ -14,6 +14,7 @@ import { Character } from "@/services/api";
 import { useWebSocket } from "@/components/context/WebSocketContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useFonts } from 'expo-font';
+import { useSettings } from "@/components/context/SettingsContext"; // SettingsContext 훅 임포트
 
 const API_BASE_URL = "https://team6-backend.koreacentral.cloudapp.azure.com";
 
@@ -48,27 +49,27 @@ interface GameSetupProps {
 }
 
 // --- 자식 컴포넌트: 상세 정보 표시용 ---
-const CharacterDetails = ({ char }: { char: Character }) => (
+const CharacterDetails = ({ char, fontSizeMultiplier }: { char: Character, fontSizeMultiplier: number }) => (
   <>
-    <Text style={styles.characterDescription}>{char.description}</Text>
+    <Text style={[styles.characterDescription, { fontSize: 13 * fontSizeMultiplier }]}>{char.description}</Text>
     <View style={styles.statsContainer}>
-        <Text style={styles.listTitle}>능력치</Text>
+        <Text style={[styles.listTitle, { fontSize: 13 * fontSizeMultiplier }]}>능력치</Text>
       {Object.entries(char.stats).map(([stat, value]) => (
-        <Text key={stat} style={styles.statText}>
+        <Text key={stat} style={[styles.statText, { fontSize: 12 * fontSizeMultiplier }]}>
           {stat}: {value}
         </Text>
       ))}
     </View>
     {char.skills?.length > 0 && (
       <View style={styles.listContainer}>
-        <Text style={styles.listTitle}>스킬</Text>
-        {char.skills.map(skill => <Text key={skill.name} style={styles.listItemText}>- {skill.name}</Text>)}
+        <Text style={[styles.listTitle, { fontSize: 13 * fontSizeMultiplier }]}>스킬</Text>
+        {char.skills.map(skill => <Text key={skill.name} style={[styles.listItemText, { fontSize: 12 * fontSizeMultiplier }]}>- {skill.name}</Text>)}
       </View>
     )}
     {char.items?.length > 0 && (
       <View style={styles.listContainer}>
-        <Text style={styles.listTitle}>아이템</Text>
-        {char.items.map(item => <Text key={item.name} style={styles.listItemText}>- {item.name}</Text>)}
+        <Text style={[styles.listTitle, { fontSize: 13 * fontSizeMultiplier }]}>아이템</Text>
+        {char.items.map(item => <Text key={item.name} style={[styles.listItemText, { fontSize: 12 * fontSizeMultiplier }]}>- {item.name}</Text>)}
       </View>
     )}
   </>
@@ -85,6 +86,7 @@ export default function GameSetup({
 }: GameSetupProps) {
   const { user } = useAuth();
   const { wsRef } = useWebSocket();
+  const { fontSizeMultiplier } = useSettings(); // 설정 컨텍스트에서 폰트 크기 가져오기
   const [fontsLoaded, fontError] = useFonts({
     'neodgm': require('@/assets/fonts/neodgm.ttf'),
   });
@@ -92,14 +94,12 @@ export default function GameSetup({
   const allCharacters: Character[] = useMemo(() => {
     try {
       const chars = JSON.parse(initialCharacters);
-      // ✅ [추가] 이 console.log로 터미널이나 개발자 도구에서 데이터 확인
       console.log("서버로부터 받은 캐릭터 데이터:", JSON.stringify(chars, null, 2));
       return chars;
     } 
     catch (e) { console.error("캐릭터 데이터 파싱 실패:", e); return []; }
   }, [initialCharacters]);
   
-  // ✅ [수정] Stale한 prop 대신 실시간으로 업데이트될 참가자 state를 만듭니다.
   const [realtimeParticipants, setRealtimeParticipants] = useState<Participant[]>(() => {
     try { return JSON.parse(initialParticipants); }
     catch (e) { return []; }
@@ -118,14 +118,12 @@ export default function GameSetup({
   
   const allPlayersSelected = useMemo(() => {
     const participantCount = realtimeParticipants.length;
-    // ✅ [수정] 선택한 '사람의 수'를 중복 없이 계산합니다.
     const selectionCount = new Set(Object.values(characterSelections)).size;
 
     if (participantCount === 0 || selectionCount < participantCount) {
         return false;
     }
     
-    // ✅ [수정] 선택된 userId 목록과 전체 참가자의 id 목록을 비교합니다.
     const selectedUserIds = new Set(Object.values(characterSelections));
     return realtimeParticipants.every(p => selectedUserIds.has(p.id));
 
@@ -141,25 +139,21 @@ export default function GameSetup({
       if (!ws) return;
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        // ✅ [로그 1] 서버로부터 받은 모든 메시지를 그대로 출력합니다.
         console.log("--- 📥 [1] WebSocket 메시지 수신 ---", data);
 
         if (data.type === "room_state") {
-          // ✅ [수정] 이제 Record<charId, userId> 형태가 됩니다.
           const newSelections: Record<string, string> = {}; 
           const updatedParticipants: Participant[] = [];
 
           if (Array.isArray(data.selected_by_room)) {
               data.selected_by_room.forEach((p: SelectedRoomParticipant) => {
                   updatedParticipants.push({ id: p.id, username: p.username });
-                  // ✅ [수정] username 대신 user_id를 newSelections에 저장합니다.
                   if (p.selected_character && p.selected_character.id && p.selected_character.user_id) {
                       newSelections[p.selected_character.id] = p.selected_character.user_id;
                   }
               });
           }
           
-          // ✅ [로그 3] 가공 후 state에 저장될 최종 데이터를 확인합니다.
           console.log("--- [3] State에 반영될 참가자/선택 정보 ---", { updatedParticipants, newSelections });
           setRealtimeParticipants(updatedParticipants);
           setCharacterSelections(newSelections);
@@ -233,7 +227,6 @@ export default function GameSetup({
   }, [phase, mySelectedCharacterId, characterSelections, allCharacters, user, allPlayersSelected]);
 
   useEffect(() => {
-    // allPlayersSelected가 true가 되는 순간 딱 한 번만 실행되도록 수정합니다.
     if (allPlayersSelected) {
       setShowCharacterModal(false);
       setPhase("loading_steps");
@@ -246,7 +239,7 @@ export default function GameSetup({
           step++;
         } else {
           clearInterval(interval);
-          setPhase("confirm"); // 이제 이 코드가 정상적으로 실행됩니다.
+          setPhase("confirm");
         }
       }, 1500);
 
@@ -268,7 +261,6 @@ export default function GameSetup({
       console.log("캐릭터 선택 현황:", characterSelections);
       console.log("판단 결과 (allPlayersSelected):", allPlayersSelected);
       
-      // ✅ [추가] 현재 phase와 isOwner 값을 직접 확인합니다.
       console.log("현재 Phase:", phase);
       console.log("방장 여부 (isOwner):", isOwner);
 
@@ -289,7 +281,6 @@ export default function GameSetup({
     const ws = wsRef?.current;
     if (!ws) return;
     
-    // ✅ [수정] 이제 클라이언트는 '시작' 신호만 보냅니다. 데이터 계산은 서버가 합니다.
     ws.send(JSON.stringify({
       action: "confirm_selections",
     }));
@@ -301,29 +292,25 @@ export default function GameSetup({
         <ImageBackground source={loadingImage} style={styles.loadingBackground} imageStyle={{ opacity: 0.2 }}>
           <View style={styles.loadingBox}>
             {phase === 'confirm' ? (
-              // 최종 확인 단계 UI
               <>
                 {isOwner ? (
-                  // 방장에게 보여줄 UI
                   <>
-                    <Text style={styles.loadingText}>모든 플레이어의 준비가 완료되었습니다.</Text>
+                    <Text style={[styles.loadingText, { fontSize: 18 * fontSizeMultiplier }]}>모든 플레이어의 준비가 완료되었습니다.</Text>
                     <TouchableOpacity style={styles.finalStartBtn} onPress={handleGameStart}>
-                      <Text style={styles.finalStartBtnText}>게임 시작!</Text>
+                      <Text style={[styles.finalStartBtnText, { fontSize: 20 * fontSizeMultiplier }]}>게임 시작!</Text>
                     </TouchableOpacity>
                   </>
                 ) : (
-                  // 참여자에게 보여줄 UI
                   <>
                     <ActivityIndicator size="large" color="#E2C044" />
-                    <Text style={styles.loadingText}>방장이 게임을 시작하기를 기다리고 있습니다...</Text>
+                    <Text style={[styles.loadingText, { fontSize: 18 * fontSizeMultiplier }]}>방장이 게임을 시작하기를 기다리고 있습니다...</Text>
                   </>
                 )}
               </>
             ) : (
-              // 캐릭터 선택 후 로딩 단계 UI
               <>
                 <ActivityIndicator size="large" color="#E2C044" />
-                <Text style={styles.loadingText}>{loadingMessage}</Text>
+                <Text style={[styles.loadingText, { fontSize: 18 * fontSizeMultiplier }]}>{loadingMessage}</Text>
               </>
             )}
           </View>
@@ -333,13 +320,13 @@ export default function GameSetup({
       <Modal transparent visible={showCharacterModal} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>캐릭터 선택</Text>
-            {remainingTime > 0 && <Text style={styles.timerText}>{remainingTime}초 안에 캐릭터를 선택하세요!</Text>}
-            {mySelectedCharacterId && !allPlayersSelected && <Text style={styles.timerText}>선택 완료! 다른 플레이어를 기다립니다...</Text>}
+            <Text style={[styles.modalTitle, { fontSize: 24 * fontSizeMultiplier }]}>캐릭터 선택</Text>
+            {remainingTime > 0 && <Text style={[styles.timerText, { fontSize: 16 * fontSizeMultiplier }]}>{remainingTime}초 안에 캐릭터를 선택하세요!</Text>}
+            {mySelectedCharacterId && !allPlayersSelected && <Text style={[styles.timerText, { fontSize: 16 * fontSizeMultiplier }]}>선택 완료! 다른 플레이어를 기다립니다...</Text>}
             {allCharacters.length === 0 ? (
               <View style={{padding: 20}}>
                 <ActivityIndicator size="large" color="#E2C044" />
-                <Text style={styles.loadingText}>캐릭터 목록을 불러오는 중...</Text>
+                <Text style={[styles.loadingText, { fontSize: 18 * fontSizeMultiplier }]}>캐릭터 목록을 불러오는 중...</Text>
               </View>
             ) : (
               <ScrollView contentContainerStyle={styles.characterGridContainer} showsVerticalScrollIndicator={false}>
@@ -368,11 +355,11 @@ export default function GameSetup({
                         style={styles.characterImage}
                         resizeMode="contain"
                       />
-                      <Text style={styles.characterName}>{char.name}</Text>
-                      <CharacterDetails char={char} />
+                      <Text style={[styles.characterName, { fontSize: 18 * fontSizeMultiplier }]}>{char.name}</Text>
+                      <CharacterDetails char={char} fontSizeMultiplier={fontSizeMultiplier} />
                       {(isSelectedByMe || isTakenByOther) && (
                       <View style={styles.takenOverlay}>
-                        <Text style={styles.takenText}>{selector?.username}</Text>
+                        <Text style={[styles.takenText, { fontSize: 20 * fontSizeMultiplier }]}>{selector?.username}</Text>
                       </View>
                       )}
                     </TouchableOpacity>
@@ -391,13 +378,13 @@ export default function GameSetup({
 const styles = StyleSheet.create({
   loadingBackground: { flex: 1, width: "100%", justifyContent: "center", alignItems: "center" },
   loadingBox: { alignItems: "center", justifyContent: "center", padding: 20 },
-  loadingText: { marginTop: 16, color: "#fff", fontSize: 18, fontWeight: "600", textAlign: 'center', fontFamily: 'neodgm' },
+  loadingText: { marginTop: 16, color: "#fff", /* fontSize: 18, */ fontWeight: "600", textAlign: 'center', fontFamily: 'neodgm' },
   finalStartBtn: { marginTop: 30, backgroundColor: "#4CAF50", paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30 },
-  finalStartBtnText: { color: "#fff", fontSize: 20, fontWeight: "bold", fontFamily: 'neodgm' },
+  finalStartBtnText: { color: "#fff", /* fontSize: 20, */ fontWeight: "bold", fontFamily: 'neodgm' },
   modalOverlay: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.8)" },
   modalBox: { width: "85%", maxHeight: "85%", backgroundColor: "#1E293B", borderRadius: 16, padding: 20, alignItems: "center", borderWidth: 1, borderColor: '#334155' },
-  modalTitle: { fontSize: 24, color: "#E2C044", marginBottom: 8, fontWeight: "bold", fontFamily: 'neodgm' },
-  timerText: { fontSize: 16, color: "#A0A0A0", marginBottom: 16, fontStyle: 'italic', fontFamily: 'neodgm' },
+  modalTitle: { /* fontSize: 24, */ color: "#E2C044", marginBottom: 8, fontWeight: "bold", fontFamily: 'neodgm' },
+  timerText: { /* fontSize: 16, */ color: "#A0A0A0", marginBottom: 16, fontStyle: 'italic', fontFamily: 'neodgm' },
   characterGridContainer: { paddingBottom: 16 },
   characterGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around",},
   characterCard: { 
@@ -420,13 +407,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     borderRadius: 8 
   },
-  takenText: { color: "#E2C044", fontWeight: "bold", fontSize: 20, fontFamily: 'neodgm' },
+  takenText: { color: "#E2C044", fontWeight: "bold", /* fontSize: 20, */ fontFamily: 'neodgm' },
   characterImage: { width: 120, height: 120, marginBottom: 8, borderRadius: 8 },
-  characterName: { fontSize: 18, fontWeight: "bold", color: "#fff", textAlign: "center", marginBottom: 6, fontFamily: 'neodgm' },
-  characterDescription: { fontSize: 13, color: '#A0A0A0', textAlign: 'center', marginBottom: 8, fontFamily: 'neodgm' },
+  characterName: { /* fontSize: 18, */ fontWeight: "bold", color: "#fff", textAlign: "center", marginBottom: 6, fontFamily: 'neodgm' },
+  characterDescription: { /* fontSize: 13, */ color: '#A0A0A0', textAlign: 'center', marginBottom: 8, fontFamily: 'neodgm' },
   statsContainer: { width: '100%', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#4A5568', alignItems: 'center' },
-  statText: { color: '#CBD5E1', fontSize: 12, textAlign: 'center', lineHeight: 16, fontFamily: 'neodgm' },
+  statText: { color: '#CBD5E1', /* fontSize: 12, */ textAlign: 'center', lineHeight: 16, fontFamily: 'neodgm' },
   listContainer: { width: '100%', marginTop: 10, alignItems: 'center' },
-  listTitle: { fontSize: 13, fontWeight: 'bold', color: '#E2C044', marginBottom: 4, fontFamily: 'neodgm' },
-  listItemText: { color: "#CBD5E1", fontSize: 12, lineHeight: 16, fontFamily: 'neodgm' },
+  listTitle: { /* fontSize: 13, */ fontWeight: 'bold', color: '#E2C044', marginBottom: 4, fontFamily: 'neodgm' },
+  listItemText: { color: "#CBD5E1", /* fontSize: 12, */ lineHeight: 16, fontFamily: 'neodgm' },
 });

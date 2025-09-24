@@ -38,18 +38,14 @@ export default function StorySelectorScreen() {
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
 
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
-  const [errorModalVisible, setErrorModalVisible] = useState(false); // 추가
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const {
     isBgmOn,
-    setIsBgmOn,
     isSfxOn,
-    setIsSfxOn,
-    fontSizeMultiplier,
-    setFontSizeMultiplier,
+    fontSizeMultiplier, // 폰트 크기 설정을 가져옵니다.
     language,
-    setLanguage,
     isLoading: isSettingsLoading,
   } = useSettings();
 
@@ -165,14 +161,16 @@ export default function StorySelectorScreen() {
             </View>
           )}
           <View style={styles.cardTitleContainer}>
-            <Text style={styles.cardTitle}>{story.title}</Text>
+            {/* 폰트 크기 적용 */}
+            <Text style={[styles.cardTitle, { fontSize: 20 * fontSizeMultiplier }]}>{story.title}</Text>
           </View>
         </View>
 
         {isSelected && (
           <View style={styles.cardContent}>
-            <Text style={styles.cardWorld}>{story.title}</Text>
-            <Text style={styles.cardDesc}>{story.description}</Text>
+            {/* 폰트 크기 적용 */}
+            <Text style={[styles.cardWorld, { fontSize: 16 * fontSizeMultiplier }]}>{story.title}</Text>
+            <Text style={[styles.cardDesc, { fontSize: 14 * fontSizeMultiplier }]}>{story.description}</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -188,7 +186,8 @@ export default function StorySelectorScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#F4E4BC" />
-        <Text style={styles.loadingText}>이야기를 불러오는 중...</Text>
+        {/* 폰트 크기 적용 */}
+        <Text style={[styles.loadingText, { fontSize: 18 * fontSizeMultiplier }]}>이야기를 불러오는 중...</Text>
       </View>
     );
   }
@@ -202,11 +201,10 @@ export default function StorySelectorScreen() {
           onPress={() => router.back()}
         >
           <Ionicons name="arrow-back" size={isMobile ? 24 : 28} color="#F4E4BC" />
-          {/* <ArrowLeft size={isMobile ? 20 : 24} color="#F4E4BC" /> */}
-          {/* <Text style={isMobile ? styles.headerButtonTextMobile : styles.headerButtonText}>Back</Text> */}
         </TouchableOpacity>
 
-        <Text style={isMobile ? styles.headerTitleMobile : styles.headerTitle}>스토리 리스트</Text>
+        {/* 폰트 크기 적용 */}
+        <Text style={[isMobile ? styles.headerTitleMobile : styles.headerTitle, { fontSize: (isMobile ? 20 : 24) * fontSizeMultiplier }]}>스토리 리스트</Text>
         <View style={isMobile ? styles.headerIconsMobile : styles.headerIcons}>
           <TouchableOpacity onPress={() => setOptionsModalVisible(true)}>
             <Settings size={isMobile ? 24 : 28} color="#F4E4BC" />
@@ -249,13 +247,15 @@ export default function StorySelectorScreen() {
                     style={[isMobile ? styles.actionButtonMobile : styles.actionButton, styles.continueButton]}
                     onPress={() => handleStorySelect(true)}
                   >
-                    <Text style={isMobile ? styles.actionButtonTextMobile : styles.actionButtonText}>이어서 하기</Text>
+                    {/* 폰트 크기 적용 */}
+                    <Text style={[isMobile ? styles.actionButtonTextMobile : styles.actionButtonText, {fontSize: (isMobile ? 16 : 18) * fontSizeMultiplier}]}>이어서 하기</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[isMobile ? styles.actionButtonMobile : styles.actionButton, styles.restartButton]}
                     onPress={() => handleStorySelect(false)}
                   >
-                    <Text style={isMobile ? styles.actionButtonTextMobile : styles.actionButtonText}>처음부터 시작</Text>
+                    {/* 폰트 크기 적용 */}
+                    <Text style={[isMobile ? styles.actionButtonTextMobile : styles.actionButtonText, {fontSize: (isMobile ? 16 : 18) * fontSizeMultiplier}]}>처음부터 시작</Text>
                   </TouchableOpacity>
                 </View>
               );
@@ -265,8 +265,9 @@ export default function StorySelectorScreen() {
                   style={[isMobile ? styles.actionButtonMobile : styles.actionButton, styles.startButton]}
                   onPress={() => handleStorySelect(false)}
                 >
+                  {/* 폰트 크기 적용 */}
                   <Text
-                    style={[isMobile ? styles.actionButtonTextMobile : styles.actionButtonText, styles.startButtonText]}
+                    style={[isMobile ? styles.actionButtonTextMobile : styles.actionButtonText, styles.startButtonText, {fontSize: (isMobile ? 16 : 18) * fontSizeMultiplier}]}
                   >
                     시작하기
                   </Text>
@@ -283,13 +284,15 @@ export default function StorySelectorScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>오류</Text>
-            <Text style={styles.modalMessage}>{errorMessage}</Text>
+            {/* 폰트 크기 적용 */}
+            <Text style={[styles.modalTitle, { fontSize: 22 * fontSizeMultiplier }]}>오류</Text>
+            <Text style={[styles.modalMessage, { fontSize: 16 * fontSizeMultiplier }]}>{errorMessage}</Text>
             <TouchableOpacity
               style={styles.modalButton}
               onPress={() => setErrorModalVisible(false)}
             >
-              <Text style={styles.modalButtonText}>확인</Text>
+              {/* 폰트 크기 적용 */}
+              <Text style={[styles.modalButtonText, { fontSize: 16 * fontSizeMultiplier }]}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>

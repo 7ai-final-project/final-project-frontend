@@ -34,6 +34,8 @@ import ChatBox from "../../../../components/chat/ChatBox";
 import { useWebSocket } from "@//components/context/WebSocketContext";
 import { useAuth } from '../../../../hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
+import { useSettings } from "../../../../components/context/SettingsContext";
+import OptionsModal from "../../../../components/OptionsModal"; // 옵션 모달 컴포넌트 임포트
 
 // --- 인터페이스 정의 ---
 interface Participant {
@@ -68,7 +70,7 @@ interface Difficulty { id: string; name: string; }
 interface Mode { id: string; name: string; }
 interface Genre { id: string; name: string; }
 
-const Toast: React.FC<{ message: string; visible: boolean; onHide: () => void; }> = ({ message, visible, onHide }) => {
+const Toast: React.FC<{ message: string; visible: boolean; onHide: () => void; fontSizeMultiplier: number; }> = ({ message, visible, onHide, fontSizeMultiplier }) => {
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -85,7 +87,7 @@ const Toast: React.FC<{ message: string; visible: boolean; onHide: () => void; }
 
     return (
         <Animated.View style={[styles.toastContainer, { opacity: fadeAnim }]}>
-            <Text style={styles.toastText}>{message}</Text>
+            <Text style={[styles.toastText, { fontSize: 15 * fontSizeMultiplier }]}>{message}</Text>
         </Animated.View>
     );
 };
@@ -94,6 +96,8 @@ const Toast: React.FC<{ message: string; visible: boolean; onHide: () => void; }
 export default function RoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const roomId = id as string;
+
+  const { fontSizeMultiplier } = useSettings();
 
   const backgroundImages = [
     require('../../../../assets/images/game/multi/background/gameroom_image_1.png'),
@@ -126,6 +130,7 @@ export default function RoomScreen() {
   const [isTopicModalVisible, setIsTopicModalVisible] = useState(false);
   const [isChatVisible, setIsChatVisible] = useState<boolean>(false);
   const [isLeaveModalVisible, setIsLeaveModalVisible] = useState(false);
+  const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false); // 옵션 모달 상태 추가
 
   const [loadedSession, setLoadedSession] = useState<LoadedSessionData | null>(null);
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
@@ -171,30 +176,25 @@ export default function RoomScreen() {
       ws.onclose = () => setWsMsg("🔌 연결 종료");
       ws.onerror = (e) => console.error("WebSocket Error:", e);
 
-      // ✨ 해결책: 메시지 처리 로직을 명확하게 분리하여 수정
       ws.onmessage = (ev: MessageEvent) => {
         const data = JSON.parse(ev.data);
 
-        // 1. type이 최상위에 있는 메시지를 먼저 처리합니다.
         if (data.type === "room_state") {
           if (roomRef.current?.status === 'play') {
             fetchRoomDetail(roomId).then((res) => setRoom(res.data));
           } else {
             setRoom((prevRoom) => {
               if (!prevRoom) return null;
-              // 참가자 목록(selected_by_room)을 새 데이터로 교체합니다.
               return { ...prevRoom, selected_by_room: data.selected_by_room };
             });
           }
-          return; // 처리가 끝났으므로 함수 종료
+          return;
         }
 
-        // 2. 'room_broadcast' 타입 내부에 실제 내용이 있는 메시지를 처리합니다.
         if (data.type === "room_broadcast") {
           const message = data.message;
           if (!message) return;
 
-          // 옵션 업데이트 처리
           if (message.type === "options_update") {
             const { options } = message;
             setSelectedScenarioId(options.scenarioId);
@@ -202,11 +202,9 @@ export default function RoomScreen() {
             setSelectedDifficultyId(options.difficultyId);
             setSelectedModeId(options.modeId);
           }
-          // 게임 시작 처리
           else if (message.event === "game_start") {
             if (isStartingRef.current) return;
             isStartingRef.current = true;
-            // ... (기존 게임 시작 카운트다운 로직은 변경 없음) ...
             setWsMsg("⏳ 게임 카운트다운...");
             setIsCountdownModalVisible(true);
             const gameOptions = {
@@ -254,7 +252,6 @@ export default function RoomScreen() {
               }
             }, 1000);
           }
-          // 방 삭제 처리 (기존 코드의 버그 수정)
           else if (message.type === "room_deleted") {
             setNotificationModalContent({
               title: "알림",
@@ -263,7 +260,7 @@ export default function RoomScreen() {
             setNotificationModalCallback(() => () => router.replace("/game/multi"));
             setIsNotificationModalVisible(true);
           }
-          return; // 처리가 끝났으므로 함수 종료
+          return;
         }
       };
     } catch (error) {
@@ -278,7 +275,6 @@ export default function RoomScreen() {
 
   const handleCloseNotificationModal = () => {
     setIsNotificationModalVisible(false);
-    // 콜백 함수가 있으면 실행하고 초기화합니다.
     if (notificationModalCallback) {
         notificationModalCallback();
         setNotificationModalCallback(null);
@@ -288,7 +284,7 @@ export default function RoomScreen() {
   const handleJoinPrivateRoom = async () => {
     if (room && room.selected_by_room.length >= room.max_players) {
       setToast({ visible: true, message: "방이 가득 찼습니다." });
-      return; // 함수를 즉시 종료
+      return;
     }
     
     if (!passwordInput) {
@@ -310,7 +306,6 @@ export default function RoomScreen() {
     }
   };
 
-  // ✅ [오류 수정 2] useMemo 선언들을 useEffect 위로 이동
   const isOwner = useMemo(() => room?.owner === user?.id && !!user?.id, [room, user]);
   const allReady = useMemo(() => room?.selected_by_room?.every((p) => p.is_ready) && (room?.selected_by_room?.length ?? 0) > 0, [room]);
   const selectedScenarioTitle = useMemo(() => scenarios.find(s => s.id === selectedScenarioId)?.title, [scenarios, selectedScenarioId]);
@@ -366,21 +361,14 @@ export default function RoomScreen() {
       if (!roomId || !user) return;
 
       try {
-        // 1. 방 정보를 먼저 조회하여 비공개 방인지 확인합니다.
         const roomDetails = await fetchRoomDetail(roomId);
         
         if (roomDetails.data.room_type === 'private') {
-          // 비공개 방이면, 비밀번호 모달을 띄웁니다.
-          // setRoom은 비밀번호 입력 후 handleJoinPrivateRoom에서 처리됩니다.
-          setRoom(roomDetails.data); // 모달에 방 정보를 표시하기 위해 먼저 설정
+          setRoom(roomDetails.data);
           setIsPasswordModalVisible(true);
         } else {
-          // 2. ✨ 공개 방이면, 이전처럼 joinRoom의 응답을 직접 사용합니다.
-          // 이 방식이 가장 안정적이고 확실합니다.
           const joinRes = await joinRoom(roomId);
           setRoom(joinRes.data);
-
-          // 3. 방 상태가 성공적으로 설정된 후에 웹소켓을 연결합니다.
           connectWebSocket();
         }
       } catch (error) {
@@ -388,7 +376,6 @@ export default function RoomScreen() {
             title: "오류",
             message: "방 정보를 조회하는 데 실패했습니다. 로비로 돌아갑니다.",
         });
-        // 모달이 닫힌 후 로비로 이동하도록 콜백 설정
         setNotificationModalCallback(() => () => router.replace("/game/multi"));
         setIsNotificationModalVisible(true);
       }
@@ -432,7 +419,6 @@ export default function RoomScreen() {
     try {
       await leaveRoom(roomId);
       setIsLeaveModalVisible(false);
-      // Alert 없이 바로 페이지 이동
       router.replace("/game/multi");
     } catch (error) {
       console.error("방 나가기 실패:", error);
@@ -449,14 +435,13 @@ export default function RoomScreen() {
     router.replace('/'); 
   };
 
-  const handleOptionSelect = () => { // 'async' 키워드 제거
+  const handleOptionSelect = () => {
     if (!isOwner) return;
     if (!selectedScenarioId || !selectedDifficultyId || !selectedModeId || !selectedGenreId) {
       setToast({ visible: true, message: "모든 게임 옵션을 선택해야 합니다." });
       return;
     }
     
-    // 기존의 HTTP API 호출(saveRoomOptions) 대신 WebSocket으로 메시지를 전송합니다.
     if (wsRef.current) {
       wsRef.current.send(JSON.stringify({
         action: "set_options",
@@ -481,15 +466,12 @@ export default function RoomScreen() {
       if (sessionData && sessionData.character_history && sessionData.choice_history) {
         setLoadedSession(sessionData);
 
-        // 불러온 옵션 이름에 해당하는 ID를 찾습니다.
         const loadedScenario = scenarios.find(s => s.title === sessionData.scenario);
         const loadedDifficulty = difficulties.find(d => d.name === sessionData.difficulty);
         const loadedGenre = genres.find(g => g.name === sessionData.genre);
         const loadedMode = modes.find(m => m.name === sessionData.mode);
         
-        // 모든 옵션 ID를 찾았는지 확인합니다.
         if (loadedScenario && loadedDifficulty && loadedGenre && loadedMode) {
-          // 1. 프론트엔드 UI 상태를 업데이트합니다.
           setSelectedScenarioId(loadedScenario.id);
           setSelectedDifficultyId(loadedDifficulty.id);
           setSelectedGenreId(loadedGenre.id);
@@ -542,12 +524,10 @@ export default function RoomScreen() {
 
   const onStartGame = () => {
       if (canStart && wsRef.current) {
-        // 이 함수는 이제 '새 게임' 시작 전용입니다.
         wsRef.current.send(JSON.stringify({ action: "start_game" }));
       }
   };
 
-  // ✅ [2단계] '불러온 게임 시작'을 위한 새 함수 추가
   const onStartLoadedGame = () => {
       if (!loadedSessionRef.current) {
           setNotificationModalContent({
@@ -566,16 +546,13 @@ export default function RoomScreen() {
           return;
       }
 
-      // WebSocket을 통하지 않고, 불러온 데이터를 가지고 바로 게임 화면으로 이동합니다.
       router.push({
           pathname: "/game/multi/play/[id]",
           params: {
               id: roomId,
               topic: selectedScenarioTitle || "",
               difficulty: selectedDifficultyName || "",
-              // ✅ isLoaded 플래그를 'true'로 설정하는 것이 핵심입니다.
               isLoaded: 'true',
-              // ✅ 불러온 세션 데이터를 문자열로 변환하여 전달합니다.
               loadedSessionData: JSON.stringify(loadedSessionRef.current),
               isOwner: String(isOwner),
           },
@@ -600,7 +577,7 @@ export default function RoomScreen() {
     return (
       <SafeAreaView style={styles.center}>
         <ActivityIndicator size="large" color="#E2C044" />
-        <Text style={styles.text}>정보를 불러오는 중...</Text>
+        <Text style={[styles.text, { fontSize: 16 * fontSizeMultiplier }]}>정보를 불러오는 중...</Text>
       </SafeAreaView>
     );
   }
@@ -615,24 +592,36 @@ export default function RoomScreen() {
           <View style={styles.mainContainer}>
             <View style={styles.leftPanel}>
               <View style={styles.infoBox}>
-                <Text style={styles.title}>#{room.name}</Text>
-                <Text style={styles.desc}>{room.description}</Text>
+                <Text style={[styles.title, { fontSize: 24 * fontSizeMultiplier }]}>#{room.name}</Text>
+                <Text style={[styles.desc, { fontSize: 14 * fontSizeMultiplier }]}>{room.description}</Text>
                 <View style={styles.divider} />
-                <Text style={styles.status}><Ionicons name="game-controller" size={14} color="#ccc" /> 상태: {room.status}</Text>
+                <View style={styles.status}>
+                    <Ionicons name="game-controller" size={14 * fontSizeMultiplier} color="#ccc" />
+                    <Text style={[styles.statusText, { fontSize: 15 * fontSizeMultiplier }]}>상태: {room.status}</Text>
+                </View>
               </View>
 
-              {/* 개선 사항: 게임 옵션을 별도의 그룹으로 묶어 가독성 향상 */}
               <View style={styles.optionsBox}>
-                <Text style={styles.optionsBoxTitle}>게임 설정</Text>
-                <Text style={styles.status}><Ionicons name="book" size={14} color="#ccc" /> 주제: {selectedScenarioTitle || "선택되지 않음"}</Text>
-                {/* 개선 사항: 아이콘에 의미에 맞는 색상 부여 */}
-                <Text style={styles.status}><Ionicons name="color-palette" size={14} color="#A78BFA" /> 장르: {selectedGenreName || "선택되지 않음"}</Text>
-                <Text style={styles.status}><Ionicons name="star" size={14} color="#E2C044" /> 난이도: {selectedDifficultyName || "선택되지 않음"}</Text>
-                <Text style={styles.status}><Ionicons name="swap-horizontal" size={14} color="#ccc" /> 방식: {selectedModeName || "선택되지 않음"}</Text>
+                <Text style={[styles.optionsBoxTitle, { fontSize: 18 * fontSizeMultiplier }]}>게임 설정</Text>
+                <View style={styles.status}>
+                    <Ionicons name="book" size={14 * fontSizeMultiplier} color="#ccc" />
+                    <Text style={[styles.statusText, { fontSize: 15 * fontSizeMultiplier }]}>주제: {selectedScenarioTitle || "선택되지 않음"}</Text>
+                </View>
+                <View style={styles.status}>
+                    <Ionicons name="color-palette" size={14 * fontSizeMultiplier} color="#A78BFA" />
+                    <Text style={[styles.statusText, { fontSize: 15 * fontSizeMultiplier }]}>장르: {selectedGenreName || "선택되지 않음"}</Text>
+                </View>
+                <View style={styles.status}>
+                    <Ionicons name="star" size={14 * fontSizeMultiplier} color="#E2C044" />
+                    <Text style={[styles.statusText, { fontSize: 15 * fontSizeMultiplier }]}>난이도: {selectedDifficultyName || "선택되지 않음"}</Text>
+                </View>
+                <View style={styles.status}>
+                    <Ionicons name="swap-horizontal" size={14 * fontSizeMultiplier} color="#ccc" />
+                    <Text style={[styles.statusText, { fontSize: 15 * fontSizeMultiplier }]}>방식: {selectedModeName || "선택되지 않음"}</Text>
+                </View>
               </View>
 
               {isOwner && (
-                // ✅ [수정] 버튼들을 감싸는 View 추가
                 <View style={styles.ownerButtonRow}>
                   <TouchableOpacity 
                     style={[styles.gameOptionButton, isGameLoaded && styles.btnDisabled]} 
@@ -640,7 +629,7 @@ export default function RoomScreen() {
                     disabled={isGameLoaded}
                   >
                     <Ionicons name="settings-sharp" size={20} color="#E2C044" />
-                    <Text style={styles.gameOptionButtonText}>옵션 설정</Text>
+                    <Text style={[styles.gameOptionButtonText, { fontSize: 16 * fontSizeMultiplier }]}>옵션 설정</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
@@ -648,13 +637,12 @@ export default function RoomScreen() {
                     onPress={handleLoadGame}
                     disabled={isLoadingGame}
                   >
-                    {/* 개선 사항: 불러오기 버튼에 로딩 인디케이터 적용 */}
                     {isLoadingGame ? (
                       <ActivityIndicator size="small" color="#E2C044" />
                     ) : (
                       <>
                         <Ionicons name="cloud-download" size={20} color="#E2C044" />
-                        <Text style={styles.gameOptionButtonText}>불러오기</Text>
+                        <Text style={[styles.gameOptionButtonText, { fontSize: 16 * fontSizeMultiplier }]}>불러오기</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -668,7 +656,7 @@ export default function RoomScreen() {
                   disabled={room.status !== "waiting"}
                 >
                   <Ionicons name={myParticipant?.is_ready ? "close-circle" : "checkbox"} size={22} color="#fff" />
-                  <Text style={styles.btnText}>{myParticipant?.is_ready ? "준비 해제" : "준비 완료"}</Text>
+                  <Text style={[styles.btnText, { fontSize: 18 * fontSizeMultiplier }]}>{myParticipant?.is_ready ? "준비 해제" : "준비 완료"}</Text>
                 </TouchableOpacity>
                 
                 {isOwner && room.status === 'waiting' && (
@@ -679,19 +667,17 @@ export default function RoomScreen() {
                       disabled={!canStart}
                     >
                       <Ionicons name="play-sharp" size={22} color="#fff" />
-                      {/* 개선 사항: isGameLoaded 상태에 따라 버튼 텍스트 변경 */}
-                      <Text style={styles.btnText}>{isGameLoaded ? '불러온 게임 시작' : '새 게임 시작'}</Text>
+                      <Text style={[styles.btnText, { fontSize: 18 * fontSizeMultiplier }]}>{isGameLoaded ? '불러온 게임 시작' : '새 게임 시작'}</Text>
                     </TouchableOpacity>
-                    {/* 개선 사항: 버튼이 비활성화된 경우, 그 이유를 텍스트로 표시 */}
                     {startGameDisabledReason && (
-                      <Text style={styles.disabledReasonText}>{startGameDisabledReason}</Text>
+                      <Text style={[styles.disabledReasonText, { fontSize: 13 * fontSizeMultiplier }]}>{startGameDisabledReason}</Text>
                     )}
                   </View>
                 )}
                 {isOwner && room.status === 'play' && (
                   <TouchableOpacity style={[styles.btn, styles.endBtn]} onPress={onEndGame}>
                     <Ionicons name="stop-circle" size={22} color="#fff" />
-                    <Text style={styles.btnText}>게임 종료</Text>
+                    <Text style={[styles.btnText, { fontSize: 18 * fontSizeMultiplier }]}>게임 종료</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -699,8 +685,12 @@ export default function RoomScreen() {
 
             <View style={styles.rightPanel}>
               <View style={styles.participantsHeader}>
-                <Text style={styles.subTitle}>참가자 ({room.selected_by_room?.length || 0}/{room.max_players})</Text>
+                <Text style={[styles.subTitle, { fontSize: 20 * fontSizeMultiplier }]}>참가자 ({room.selected_by_room?.length || 0}/{room.max_players})</Text>
                 <View style={styles.headerButtonContainer}>
+                  {/* 설정 버튼 추가 */}
+                  <TouchableOpacity style={styles.headerIconBtn} onPress={() => setIsOptionsModalVisible(true)}>
+                    <Ionicons name="settings-outline" size={20} color="#E0E0E0" />
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.headerIconBtn} onPress={handleGoHome}>
                     <Ionicons name="home-outline" size={20} color="#E0E0E0" />
                   </TouchableOpacity>
@@ -720,31 +710,37 @@ export default function RoomScreen() {
                 {room.selected_by_room?.map((p) => (
                   <View key={p.id} style={styles.participantRow}>
                     <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      {room.owner === p.id && <Ionicons name="key" size={16} color="#E2C044" style={{ marginRight: 8 }} />}
-                      <Text style={styles.participantName}>{p.username}</Text>
+                      {room.owner === p.id && <Ionicons name="key" size={16 * fontSizeMultiplier} color="#E2C044" style={{ marginRight: 8 }} />}
+                      <Text style={[styles.participantName, { fontSize: 16 * fontSizeMultiplier }]}>{p.username}</Text>
                     </View>
                     {p.is_away ? (
                       <View style={styles.awayStatus}>
-                        <Ionicons name="time-outline" size={16} color="#FFC107" />
-                        <Text style={styles.awayText}>자리 비움</Text>
+                        <Ionicons name="time-outline" size={16 * fontSizeMultiplier} color="#FFC107" />
+                        <Text style={[styles.awayText, { fontSize: 14 * fontSizeMultiplier }]}>자리 비움</Text>
                       </View>
                     ) : (
                       <View style={p.is_ready ? styles.ready : styles.notReady}>
-                        <Ionicons name={p.is_ready ? "checkmark-circle" : "hourglass-outline"} size={16} color={p.is_ready ? "#4CAF50" : "#aaa"} />
-                        <Text style={p.is_ready ? styles.readyText : styles.notReadyText}>{p.is_ready ? "READY" : "WAITING"}</Text>
+                        <Ionicons name={p.is_ready ? "checkmark-circle" : "hourglass-outline"} size={16 * fontSizeMultiplier} color={p.is_ready ? "#4CAF50" : "#aaa"} />
+                        <Text style={p.is_ready ? [styles.readyText, { fontSize: 14 * fontSizeMultiplier }] : [styles.notReadyText, { fontSize: 14 * fontSizeMultiplier }]}>{p.is_ready ? "READY" : "WAITING"}</Text>
                       </View>
                     )}
                   </View>
                 ))}
               </ImageBackground>
-              <Text style={styles.wsMsg}>{wsMsg}</Text>
+              <Text style={[styles.wsMsg, { fontSize: 12 * fontSizeMultiplier }]}>{wsMsg}</Text>
             </View>
           </View>
         </ScrollView>
       )}
 
+      {/* 옵션 모달 렌더링 */}
+      <OptionsModal 
+        visible={isOptionsModalVisible} 
+        onClose={() => setIsOptionsModalVisible(false)} 
+      />
+
       <Modal transparent={true} visible={isCountdownModalVisible} animationType="fade" onRequestClose={() => {}}>
-        <View style={styles.countdownModalOverlay}><View style={styles.countdownModalContentBox}><Text style={styles.countdownModalText}>{countdownModalContent}</Text></View></View>
+        <View style={styles.countdownModalOverlay}><View style={styles.countdownModalContentBox}><Text style={[styles.countdownModalText, { fontSize: 22 * fontSizeMultiplier }]}>{countdownModalContent}</Text></View></View>
       </Modal>
 
       <Modal
@@ -755,28 +751,36 @@ export default function RoomScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.notificationModalBox}>
-            <Text style={styles.modalTitle}>{notificationModalContent.title}</Text>
-            <Text style={styles.notificationModalMessage}>{notificationModalContent.message}</Text>
+            <Text style={[styles.modalTitle, { fontSize: 20 * fontSizeMultiplier }]}>{notificationModalContent.title}</Text>
+            <Text style={[styles.notificationModalMessage, { fontSize: 16 * fontSizeMultiplier }]}>{notificationModalContent.message}</Text>
             <TouchableOpacity
               style={styles.modalConfirmButton}
               onPress={handleCloseNotificationModal}
             >
-              <Text style={styles.topicText}>확인</Text>
+              <Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
       <Modal transparent={true} visible={isTopicModalVisible} animationType="fade" onRequestClose={() => setIsTopicModalVisible(false)}>
-        <View style={styles.modalOverlay}><View style={styles.modalBox}><Text style={styles.modalTitle}>게임 옵션</Text><ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}><Text style={styles.modalSubTitle}>주제 선택</Text>{scenarios.map((scenario)=><TouchableOpacity key={scenario.id} style={[styles.topicOption,selectedScenarioId===scenario.id&&styles.topicSelected]} onPress={()=>setSelectedScenarioId(scenario.id)}><Text style={styles.topicText}>{scenario.title}</Text></TouchableOpacity>)}<Text style={styles.modalSubTitle}>장르 선택</Text>{genres.map((genre)=><TouchableOpacity key={genre.id} style={[styles.topicOption,selectedGenreId===genre.id&&styles.topicSelected]} onPress={()=>setSelectedGenreId(genre.id)}><Text style={styles.topicText}>{genre.name}</Text></TouchableOpacity>)}<Text style={styles.modalSubTitle}>난이도 선택</Text>{difficulties.map((dif)=><TouchableOpacity key={dif.id} style={[styles.topicOption,selectedDifficultyId===dif.id&&styles.topicSelected]} onPress={()=>setSelectedDifficultyId(dif.id)}><Text style={styles.topicText}>{dif.name}</Text></TouchableOpacity>)}<Text style={styles.modalSubTitle}>게임 방식 선택</Text>{modes.map((mode)=><TouchableOpacity key={mode.id} style={[styles.topicOption,selectedModeId===mode.id&&styles.topicSelected]} onPress={()=>setSelectedModeId(mode.id)}><Text style={styles.topicText}>{mode.name}</Text></TouchableOpacity>)}</ScrollView><TouchableOpacity style={styles.modalCloseButton} onPress={handleOptionSelect}><Text style={styles.topicText}>선택 완료</Text></TouchableOpacity></View></View>
+        <View style={styles.modalOverlay}><View style={styles.modalBox}><Text style={[styles.modalTitle, { fontSize: 20 * fontSizeMultiplier }]}>게임 옵션</Text><ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}><Text style={[styles.modalSubTitle, { fontSize: 16 * fontSizeMultiplier }]}>주제 선택</Text>{scenarios.map((scenario)=><TouchableOpacity key={scenario.id} style={[styles.topicOption,selectedScenarioId===scenario.id&&styles.topicSelected]} onPress={()=>setSelectedScenarioId(scenario.id)}><Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>{scenario.title}</Text></TouchableOpacity>)}<Text style={[styles.modalSubTitle, { fontSize: 16 * fontSizeMultiplier }]}>장르 선택</Text>{genres.map((genre)=><TouchableOpacity key={genre.id} style={[styles.topicOption,selectedGenreId===genre.id&&styles.topicSelected]} onPress={()=>setSelectedGenreId(genre.id)}><Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>{genre.name}</Text></TouchableOpacity>)}<Text style={[styles.modalSubTitle, { fontSize: 16 * fontSizeMultiplier }]}>난이도 선택</Text>{difficulties.map((dif)=><TouchableOpacity key={dif.id} style={[styles.topicOption,selectedDifficultyId===dif.id&&styles.topicSelected]} onPress={()=>setSelectedDifficultyId(dif.id)}><Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>{dif.name}</Text></TouchableOpacity>)}<Text style={[styles.modalSubTitle, { fontSize: 16 * fontSizeMultiplier }]}>게임 방식 선택</Text>{modes.map((mode)=><TouchableOpacity key={mode.id} style={[styles.topicOption,selectedModeId===mode.id&&styles.topicSelected]} onPress={()=>setSelectedModeId(mode.id)}><Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>{mode.name}</Text></TouchableOpacity>)}</ScrollView> <View style={[styles.modalButtonContainer, { marginTop: 15 }]}>
+                    <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setIsTopicModalVisible(false)}>
+                        <Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>돌아가기</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.modalButton, styles.optionsConfirmButton]} onPress={handleOptionSelect}>
+                        <Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>선택 완료</Text>
+                    </TouchableOpacity>
+                </View>
+                </View></View>
       </Modal>
 
       <Modal transparent={true} visible={isLeaveModalVisible} animationType="fade" onRequestClose={() => setIsLeaveModalVisible(false)}>
-        <View style={styles.modalOverlay}><View style={styles.leaveModalBox}><Text style={styles.leaveModalText}>{isOwner?"방장이 나가면 방이 삭제됩니다.\n정말 나가시겠습니까?":"방에서 나가시겠습니까?"}</Text><View style={styles.modalButtonContainer}><TouchableOpacity style={[styles.modalButton,styles.cancelButton]} onPress={()=>setIsLeaveModalVisible(false)}><Text style={styles.topicText}>아니요</Text></TouchableOpacity><TouchableOpacity style={[styles.modalButton,styles.confirmButton]} onPress={handleLeaveRoom}><Text style={styles.topicText}>예</Text></TouchableOpacity></View></View></View>
+        <View style={styles.modalOverlay}><View style={styles.leaveModalBox}><Text style={[styles.leaveModalText, { fontSize: 18 * fontSizeMultiplier }]}>{isOwner?"방장이 나가면 방이 삭제됩니다.\n정말 나가시겠습니까?":"방에서 나가시겠습니까?"}</Text><View style={styles.modalButtonContainer}><TouchableOpacity style={[styles.modalButton,styles.cancelButton]} onPress={()=>setIsLeaveModalVisible(false)}><Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>아니요</Text></TouchableOpacity><TouchableOpacity style={[styles.modalButton,styles.confirmButton]} onPress={handleLeaveRoom}><Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>예</Text></TouchableOpacity></View></View></View>
       </Modal>
       
       <Modal transparent={true} visible={isPasswordModalVisible} animationType="fade" onRequestClose={() => setIsPasswordModalVisible(false)}>
-        <View style={styles.modalOverlay}><View style={styles.passwordModalBox}><Text style={styles.modalTitle}>비밀번호를 입력하세요</Text><TextInput style={styles.input} value={passwordInput} onChangeText={setPasswordInput} secureTextEntry={true} placeholder="비밀번호" placeholderTextColor="#9CA3AF" /><View style={styles.modalButtonContainer}><TouchableOpacity style={[styles.modalButton,styles.cancelButton]} onPress={()=>{setIsPasswordModalVisible(false);router.replace("/game/multi");}}><Text style={styles.topicText}>취소</Text></TouchableOpacity><TouchableOpacity style={[styles.modalButton,styles.confirmButton]} onPress={handleJoinPrivateRoom}><Text style={styles.topicText}>입장</Text></TouchableOpacity></View></View></View>
+        <View style={styles.modalOverlay}><View style={styles.passwordModalBox}><Text style={[styles.modalTitle, { fontSize: 20 * fontSizeMultiplier }]}>비밀번호를 입력하세요</Text><TextInput style={[styles.input, { fontSize: 16 * fontSizeMultiplier }]} value={passwordInput} onChangeText={setPasswordInput} secureTextEntry={true} placeholder="비밀번호" placeholderTextColor="#9CA3AF" /><View style={styles.modalButtonContainer}><TouchableOpacity style={[styles.modalButton,styles.cancelButton]} onPress={()=>{setIsPasswordModalVisible(false);router.replace("/game/multi");}}><Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>취소</Text></TouchableOpacity><TouchableOpacity style={[styles.modalButton,styles.confirmButton]} onPress={handleJoinPrivateRoom}><Text style={[styles.topicText, { fontSize: 16 * fontSizeMultiplier }]}>입장</Text></TouchableOpacity></View></View></View>
       </Modal>
 
       {isChatVisible && <ChatBox roomId={roomId} chatSocketRef={chatSocketRef} />}
@@ -784,11 +788,13 @@ export default function RoomScreen() {
         message={toast.message}
         visible={toast.visible}
         onHide={() => setToast({ visible: false, message: "" })}
+        fontSizeMultiplier={fontSizeMultiplier}
       />
     </SafeAreaView>
   );
 }
 
+// Styles...
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -813,7 +819,6 @@ const styles = StyleSheet.create({
     borderColor: "#2C344E",
     gap: 8,
   },
-  // 개선 사항: 옵션 그룹을 위한 새로운 스타일 추가
   optionsBox: {
     backgroundColor: "#161B2E",
     padding: 20,
@@ -824,7 +829,7 @@ const styles = StyleSheet.create({
     fontFamily: 'neodgm',
   },
   optionsBoxTitle: {
-    fontSize: 18,
+    /* fontSize: 18, */ // 동적 적용
     fontWeight: 'bold',
     color: '#E0E0E0',
     marginBottom: 8,
@@ -832,12 +837,21 @@ const styles = StyleSheet.create({
     borderBottomColor: '#2C344E',
     paddingBottom: 8,
   },
-  title: { fontSize: 24, fontWeight: "bold", color: "#E0E0E0", marginBottom: 4, fontFamily: 'neodgm',},
-  desc: { fontSize: 14, color: "#A0A0A0", marginBottom: 12, fontStyle: 'italic', fontFamily: 'neodgm', },
+  title: { /* fontSize: 24, */ fontWeight: "bold", color: "#E0E0E0", marginBottom: 4, fontFamily: 'neodgm',},
+  desc: { /* fontSize: 14, */ color: "#A0A0A0", marginBottom: 12, fontStyle: 'italic', fontFamily: 'neodgm', },
   divider: { height: 1, backgroundColor: '#2C344E', marginVertical: 8 },
-  status: { fontSize: 15, color: "#ccc", alignItems: 'center', gap: 8, fontFamily: 'neodgm', }, // 개선 사항: 폰트 크기 및 gap 조정
+  status: { 
+    flexDirection: 'row', // 아이콘과 텍스트를 가로로 배열
+    alignItems: 'center', 
+    gap: 8, 
+  },
+  statusText: { // 텍스트 전용 스타일 추가
+    /* fontSize: 15, */ // 동적 적용
+    color: "#ccc",
+    fontFamily: 'neodgm',
+  },
   gameOptionButton: {
-    flex: 1, // 개선 사항: ownerButtonRow 내에서 버튼이 공간을 균등하게 차지하도록 flex: 1 추가
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -851,7 +865,7 @@ const styles = StyleSheet.create({
   gameOptionButtonText: {
     color: '#E2C044',
     fontWeight: 'bold',
-    fontSize: 16,
+    /* fontSize: 16, */ // 동적 적용
     fontFamily: 'neodgm',
   },
   buttonContainer: { flex: 1, justifyContent: 'flex-end', gap: 12 },
@@ -869,16 +883,15 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  btnText: { color: "#fff", fontSize: 18, fontWeight: 'bold', fontFamily: 'neodgm', },
+  btnText: { color: "#fff", /* fontSize: 18, */ fontWeight: 'bold', fontFamily: 'neodgm', },
   readyBtn: { backgroundColor: "#1D7A50" },
   unreadyBtn: { backgroundColor: "#A0A0A0" },
   startBtn: { backgroundColor: "#7C3AED" },
   endBtn: { backgroundColor: '#E53E3E' },
   btnDisabled: { backgroundColor: "#4A5568", opacity: 0.7 },
-  // 개선 사항: '게임 시작' 버튼 비활성화 이유 텍스트 스타일 추가
   disabledReasonText: {
-    color: '#FBBF24', // 눈에 띄는 경고 색상
-    fontSize: 13,
+    color: '#FBBF24',
+    /* fontSize: 13, */ // 동적 적용
     marginTop: 8,
     textAlign: 'center',
     fontWeight: '600',
@@ -890,7 +903,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10
   },
-  subTitle: { fontSize: 20, fontWeight: "bold", color: "#E2C044", fontFamily: 'neodgm', },
+  subTitle: { /* fontSize: 20, */ fontWeight: "bold", color: "#E2C044", fontFamily: 'neodgm', },
   chatBtn: {
     padding: 8,
     backgroundColor: '#161B2E',
@@ -922,7 +935,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
   },
-  participantName: { color: "#E0E0E0", fontSize: 16, fontFamily: 'neodgm', },
+  participantName: { color: "#E0E0E0", /* fontSize: 16, */ fontFamily: 'neodgm', },
   ready: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -933,9 +946,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6
   },
-  readyText: { fontWeight: "bold", color: "#4CAF50", fontSize: 14, fontFamily: 'neodgm', },
-  notReadyText: { color: "#aaa", fontSize: 14, fontFamily: 'neodgm', },
-  wsMsg: { fontSize: 12, color: "#aaa", textAlign: "center", marginTop: 10, fontFamily: 'neodgm', },
+  readyText: { fontWeight: "bold", color: "#4CAF50", /* fontSize: 14, */ fontFamily: 'neodgm', },
+  notReadyText: { color: "#aaa", /* fontSize: 14, */ fontFamily: 'neodgm', },
+  wsMsg: { /* fontSize: 12, */ color: "#aaa", textAlign: "center", marginTop: 10, fontFamily: 'neodgm', },
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -956,14 +969,14 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   modalTitle: {
-    fontSize: 20,
+    /* fontSize: 20, */ // 동적 적용
     color: "#E0E0E0",
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: "center",
     fontFamily: 'neodgm',
   },
-  modalSubTitle: { color: '#A0A0A0', marginBottom: 10, fontSize: 16, marginTop: 10, fontFamily: 'neodgm', },
+  modalSubTitle: { color: '#A0A0A0', marginBottom: 10, /* fontSize: 16, */ marginTop: 10, fontFamily: 'neodgm', },
   topicOption: {
     padding: 12,
     borderRadius: 8,
@@ -971,7 +984,7 @@ const styles = StyleSheet.create({
     marginVertical: 6,
   },
   topicSelected: { backgroundColor: "#7C3AED", borderWidth: 0 },
-  topicText: { color: "#fff", textAlign: "center", fontWeight: 'bold', fontFamily: 'neodgm', },
+  topicText: { color: "#fff", textAlign: "center", fontWeight: 'bold', fontFamily: 'neodgm', /* fontSize: 16 */ },
   modalCloseButton: {
     padding: 12,
     borderRadius: 8,
@@ -995,13 +1008,13 @@ const styles = StyleSheet.create({
   },
   countdownModalText: {
     color: '#E0E0E0',
-    fontSize: 22,
+    /* fontSize: 22, */ // 동적 적용
     fontWeight: 'bold',
     textAlign: 'center',
     lineHeight: 32,
     fontFamily: 'neodgm',
   },
-  text: { color: '#fff', fontFamily: 'neodgm', },
+  text: { color: '#fff', fontFamily: 'neodgm', /* fontSize: 16 */ },
   headerButtonContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1033,7 +1046,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   leaveModalText: {
-    fontSize: 18,
+    /* fontSize: 18, */ // 동적 적용
     color: "#E0E0E0",
     fontWeight: 'bold',
     marginBottom: 20,
@@ -1056,7 +1069,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 15,
     marginBottom: 15,
-    fontSize: 16,
+    /* fontSize: 16, */ // 동적 적용
     borderColor: "#131A33",
     borderWidth: 1,
     fontFamily: 'neodgm',
@@ -1093,7 +1106,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   notificationModalMessage: {
-    fontSize: 16,
+    /* fontSize: 16, */ // 동적 적용
     color: "#D4D4D4",
     textAlign: 'center',
     marginBottom: 25,
@@ -1113,8 +1126,8 @@ const styles = StyleSheet.create({
   },
   awayText: {
     fontWeight: "bold",
-    color: "#FFC107", // 주황색 계열로 강조
-    fontSize: 14,
+    color: "#FFC107",
+    /* fontSize: 14, */ // 동적 적용
     fontStyle: 'italic',
     fontFamily: 'neodgm',
   },
@@ -1127,12 +1140,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 25,
     elevation: 10,
-    zIndex: 9999, // 다른 요소들 위에 보이도록 zIndex 추가
+    zIndex: 9999,
   },
   toastText: {
     color: '#fff',
-    fontSize: 15,
+    /* fontSize: 15, */ // 동적 적용
     fontFamily: 'neodgm',
     fontWeight: 'bold',
+  },
+  optionsConfirmButton: {
+    backgroundColor: '#7C3AED',
   },
 });

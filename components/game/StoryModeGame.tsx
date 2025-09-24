@@ -30,16 +30,21 @@ interface MedievalButtonProps {
   disabled?: boolean;
   buttonStyle?: ViewStyle;
   isMobile: boolean;
+  fontSizeMultiplier: number;
 }
 
-const TypingText = ({
-  text,
-  onFinished,
-  isMobile,
-}: {
+interface TypingTextProps {
   text: string;
   onFinished: () => void;
   isMobile: boolean;
+  fontSizeMultiplier: number;
+}
+
+const TypingText: FunctionComponent<TypingTextProps> = ({
+  text,
+  onFinished,
+  isMobile,
+  fontSizeMultiplier,
 }) => {
   const [displayedText, setDisplayedText] = useState("");
 
@@ -63,7 +68,10 @@ const TypingText = ({
   }, [text]);
 
   return (
-    <Text style={isMobile ? styles.sceneDescriptionMobile : styles.sceneDescription}>
+    <Text style={[
+        isMobile ? styles.sceneDescriptionMobile : styles.sceneDescription,
+        { fontSize: (isMobile ? 16 : 22) * fontSizeMultiplier }
+    ]}>
       {displayedText}
       {displayedText.length < text.length && (
         <Text style={{ opacity: 0.5 }}>|</Text>
@@ -72,13 +80,13 @@ const TypingText = ({
   );
 };
 
-// React.FC 대신 FunctionComponent를 사용하여 타입을 정의합니다.
 const MedievalButton: FunctionComponent<MedievalButtonProps> = ({
   children,
   onPress,
   disabled = false,
   buttonStyle = {},
   isMobile,
+  fontSizeMultiplier,
 }) => {
   const scaleValue = useRef(new Animated.Value(1)).current;
   const [isPressed, setIsPressed] = useState(false);
@@ -115,7 +123,14 @@ const MedievalButton: FunctionComponent<MedievalButtonProps> = ({
         <View style={styles.outerBorder} />
         <View style={styles.innerBorder} />
         <View style={[isMobile ? styles.buttonBodyMobile : styles.buttonBody, isPressed && styles.pressed]}>
-          <Text style={[isMobile ? styles.mediumButtonTextMobile : styles.buttonText, {fontFamily: "neodgm", color: "#f0e6d2"}]}>
+          <Text style={[
+              isMobile ? styles.mediumButtonTextMobile : styles.buttonText, 
+              {
+                fontFamily: "neodgm", 
+                color: "#f0e6d2",
+                fontSize: (isMobile ? 20 : 28) * fontSizeMultiplier
+              }
+          ]}>
             {children}
           </Text>
         </View>
@@ -153,6 +168,7 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
   const [scrollWidth, setScrollWidth] = useState(0);
   const [isTyping, setIsTyping] = useState(true);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
+  
   const {
         isBgmOn,
         setIsBgmOn,
@@ -233,32 +249,40 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
     };
   }, []);
 
+  // ▼▼▼ 이 부분이 수정되었습니다 ▼▼▼
   useEffect(() => {
-    if (currentScene.current_moment_title.startsWith("ENDING_")) {
-      const goodEndings = ["GOOD", "FUNNY", "HAPPY", "SECRET"];
-      const badEndings = ["BAD", "GIVEUP"];
+    const isEndingScene = currentScene.current_moment_title.startsWith("ENDING_");
 
-      if (
-        goodEndings.some((pattern) =>
-          currentScene.current_moment_title.includes(pattern)
-        )
-      ) {
-        goodEndingMusic?.playAsync();
-      } else if (
-        badEndings.some((pattern) =>
-          currentScene.current_moment_title.includes(pattern)
-        )
-      ) {
-        badEndingMusic?.playAsync();
-      }
+    if (!isBgmOn || !isEndingScene) {
+      // BGM이 꺼져 있거나 엔딩 장면이 아니면 모든 엔딩 음악을 중지합니다.
+      goodEndingMusic?.stopAsync();
+      badEndingMusic?.stopAsync();
+      return; // 더 이상 진행하지 않습니다.
     }
-  }, [currentScene.current_moment_id, currentScene.current_moment_title]);
+
+    // BGM이 켜져 있고, 엔딩 장면일 경우에만 음악을 재생합니다.
+    const goodEndings = ["GOOD", "FUNNY", "HAPPY", "SECRET"];
+    const badEndings = ["BAD", "GIVEUP"];
+
+    if (goodEndings.some((pattern) => currentScene.current_moment_title.includes(pattern))) {
+      goodEndingMusic?.playAsync();
+    } else if (badEndings.some((pattern) => currentScene.current_moment_title.includes(pattern))) {
+      badEndingMusic?.playAsync();
+    }
+
+    // 클린업 함수: 장면이 바뀌거나 BGM 설정이 변경될 때 음악을 중지합니다.
+    return () => {
+      goodEndingMusic?.stopAsync();
+      badEndingMusic?.stopAsync();
+    };
+  }, [currentScene.current_moment_id, currentScene.current_moment_title, isBgmOn, goodEndingMusic, badEndingMusic]);
+
 
   const handleChoice = async (choiceIndex: number) => {
     goodEndingMusic?.stopAsync();
     badEndingMusic?.stopAsync();
 
-    await clickSound?.replayAsync();
+    if (isSfxOn) await clickSound?.replayAsync();
     setIsChoiceLoading(true);
     setError("");
 
@@ -269,7 +293,7 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
         current_moment_id: currentScene.current_moment_id,
       });
 
-      await pageTurnSound?.replayAsync();
+      if (isSfxOn) await pageTurnSound?.replayAsync();
 
       const nextScene: SceneData = response.data;
 
@@ -286,7 +310,7 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
 
   const handleGoBack = () => {
     if (history.length > 1) {
-      pageTurnSound?.replayAsync();
+      if (isSfxOn) pageTurnSound?.replayAsync();
       setIsTyping(true);
       setHistory((prevHistory) => prevHistory.slice(0, -1));
     }
@@ -347,14 +371,14 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
 
           {/* 2. 가운데: 스토리 제목 (양쪽 버튼과 겹치지 않도록 flex 추가) */}
           <View style={styles.headerTitleContainer}>
-            <Text style={isMobile ? styles.storyTitleMobile : styles.storyTitle}>{currentScene.story_title}</Text>
+            <Text style={[isMobile ? styles.storyTitleMobile : styles.storyTitle, { fontSize: (isMobile ? 20 : 28) * fontSizeMultiplier }]}>{currentScene.story_title}</Text>
           </View>
           
           {/* 3. 오른쪽: 저장 & 설정 버튼 그룹 */}
           <View style={isMobile ? styles.headerRightMobile : styles.headerRight}>
             <TouchableOpacity style={isMobile ? styles.headerButtonMobile : styles.headerButton} onPress={handleSave}>
               <Ionicons name="save-outline" size={isMobile ? 24 : 28} color="#F4E4BC" />
-              { !isMobile && <Text style={styles.headerButtonText}>저장</Text> }
+              { !isMobile && <Text style={[styles.headerButtonText, { fontSize: 16 * fontSizeMultiplier }]}>저장</Text> }
             </TouchableOpacity>
             <TouchableOpacity
               style={isMobile ? styles.headerButtonMobile : styles.headerButton}
@@ -390,6 +414,7 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
                   text={currentScene.scene || ""}
                   onFinished={() => setIsTyping(false)}
                   isMobile={isMobile}
+                  fontSizeMultiplier={fontSizeMultiplier}
                 />
               </ScrollView>
             </View>
@@ -407,6 +432,7 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
                         onPress={() => handleChoice(index)}
                         disabled={isChoiceLoading}
                         isMobile={isMobile}
+                        fontSizeMultiplier={fontSizeMultiplier}
                         buttonStyle={
                           scrollWidth > 0 ? { width: scrollWidth } : { width: isMobile ? "90%" : "100%" }
                         }
@@ -417,13 +443,12 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
                   )}
                 {!isTyping &&
                   !isChoiceLoading &&
-                  currentScene.choices.length === 0 && ( // 👈 조건: 선택지가 0개일 때 보임
+                  currentScene.choices.length === 0 && (
                     <TouchableOpacity
                       style={[isMobile ? styles.actionButtonMobile : styles.actionButton, styles.startButton]}
-                      // replace를 사용하면 뒤로가기로 엔딩 화면에 다시 돌아오는 것을 방지할 수 있습니다.
                       onPress={() => router.replace('/storymode')}
                     >
-                      <Text style={isMobile ? styles.actionButtonTextMobile : styles.actionButtonText}>
+                      <Text style={[isMobile ? styles.actionButtonTextMobile : styles.actionButtonText, { fontSize: (isMobile ? 16 : 18) * fontSizeMultiplier }]}>
                         이야기 목록으로 돌아가기
                       </Text>
                     </TouchableOpacity>
@@ -434,13 +459,13 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
                 )}
               </ScrollView>
             </View>
-
-            {error && <Text style={styles.errorMessage}>{error}</Text>}
+            
+            {error && <Text style={[styles.errorMessage, { fontSize: 14 * fontSizeMultiplier }]}>{error}</Text>}
           </View>
         </View>
 
         {/* 에러 메시지 (화면 하단에 고정) */}
-        {error && <Text style={styles.errorMessage}>{error}</Text>}
+        {error && <Text style={[styles.errorMessage, { fontSize: 14 * fontSizeMultiplier }]}>{error}</Text>}
 
         {/* 설정 모달 컴포넌트를 렌더링합니다. */}
         <OptionsModal
@@ -456,13 +481,13 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>알림</Text>
-            <Text style={styles.modalMessage}>{modalMessage}</Text>
+            <Text style={[styles.modalTitle, { fontSize: 22 * fontSizeMultiplier }]}>알림</Text>
+            <Text style={[styles.modalMessage, { fontSize: 16 * fontSizeMultiplier }]}>{modalMessage}</Text>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalButtonSuccess]}
               onPress={() => setSuccessModalVisible(false)}
             >
-              <Text style={styles.modalButtonText}>확인</Text>
+              <Text style={[styles.modalButtonText, { fontSize: 16 * fontSizeMultiplier }]}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -476,13 +501,13 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>오류</Text>
-            <Text style={styles.modalMessage}>{modalMessage}</Text>
+            <Text style={[styles.modalTitle, { fontSize: 22 * fontSizeMultiplier }]}>오류</Text>
+            <Text style={[styles.modalMessage, { fontSize: 16 * fontSizeMultiplier }]}>{modalMessage}</Text>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalButtonError]}
               onPress={() => setErrorModalVisible(false)}
             >
-              <Text style={styles.modalButtonText}>확인</Text>
+              <Text style={[styles.modalButtonText, { fontSize: 16 * fontSizeMultiplier }]}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -493,7 +518,82 @@ export default function StoryModeGame({ initialData, initialHistoryProp }: GameP
 
 // 스타일 정의
 const styles = StyleSheet.create({
-  // 최상위 컨테이너
+  headerButtonText: {
+    color: "#F4E4BC",
+    fontFamily: "neodgm",
+  },
+  storyTitle: {
+    color: "#F4E4BC",
+    fontFamily: "neodgm",
+    fontWeight: "bold",
+    textAlign: 'center',
+  },
+  storyTitleMobile: {
+    color: "#F4E4BC",
+    fontFamily: "neodgm",
+    fontWeight: "bold",
+    textAlign: 'center',
+  },
+  sceneDescription: {
+    color: "#000000ff",
+    lineHeight: 40,
+    fontFamily: "neodgm",
+    textAlign: "center",
+  },
+  sceneDescriptionMobile: {
+    color: "#000000ff",
+    lineHeight: 28,
+    fontFamily: "neodgm",
+    textAlign: "center",
+  },
+  errorMessage: {
+    color: "#ff6b6b",
+    textAlign: "center",
+    marginTop: 20,
+    fontWeight: "bold",
+    fontFamily: "neodgm",
+  },
+  buttonText: {
+    fontFamily: "neodgm",
+    color: "#f0e6d2",
+    fontWeight: "normal", // 'regular' 대신 'normal' 사용
+    textShadowColor: "rgba(0, 0, 0, 0.75)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    paddingHorizontal: 10,
+  },
+  mediumButtonTextMobile: { 
+    fontFamily: "neodgm",
+    color: "#f0e6d2"
+  },
+  actionButtonText: {
+    color: "white",
+    fontFamily: "neodgm",
+    fontWeight: "600",
+  },
+  actionButtonTextMobile: {
+    color: "white",
+    fontFamily: "neodgm",
+    fontWeight: "600",
+  },
+  modalTitle: {
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    fontFamily: "neodgm",
+    marginBottom: 15,
+  },
+  modalMessage: {
+    color: "#FFFFFF",
+    fontFamily: "neodgm",
+    textAlign: "center",
+    marginBottom: 25,
+    lineHeight: 24,
+  },
+  modalButtonText: {
+    color: "white",
+    fontFamily: "neodgm",
+    fontWeight: "bold",
+  },
   outerContainer: {
     flex: 1,
     backgroundColor: "#1e1e1e",
@@ -514,7 +614,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginBottom: 15,
     flexShrink: 0,
-    // position: 'relative', // 더 이상 필요 없음
   },
   headerMobile: {
     flexDirection: "row",
@@ -523,27 +622,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     marginBottom: 10,
     flexShrink: 0,
-    // position: 'relative', // 더 이상 필요 없음
   },
   headerLeft: {
-    flex: 1, // 공간을 차지하게 함
+    flex: 1, 
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
     gap: 10,
-    // zIndex는 더 이상 필요 없음
   },
   headerLeftMobile: {
-    flex: 1, // 공간을 차지하게 함
+    flex: 1, 
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
     gap: 5,
-    // zIndex는 더 이상 필요 없음
   },
-  // headerCenter 대신 headerTitleContainer 사용
   headerTitleContainer: {
-    flex: 2, // 양쪽 버튼보다 더 많은 공간을 차지하게 함
+    flex: 2, 
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -557,45 +652,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 5,
   },
-  headerButtonText: {
-    color: "#F4E4BC",
-    fontSize: 16,
-    fontFamily: "neodgm",
-  },
   headerButtonTextMobile: {
     color: "#F4E4BC",
-    fontSize: 14,
     fontFamily: "neodgm",
   },
   headerRight: {
-    flex: 1, // 공간을 차지하게 함
+    flex: 1,
     flexDirection: "row",
     justifyContent: 'flex-end',
     alignItems: "center",
     gap: 10,
-    // zIndex는 더 이상 필요 없음
   },
   headerRightMobile: {
-    flex: 1, // 공간을 차지하게 함
+    flex: 1,
     flexDirection: "row",
     justifyContent: 'flex-end',
     alignItems: "center",
     gap: 5,
-    // zIndex는 더 이상 필요 없음
-  },
-  storyTitle: {
-    color: "#F4E4BC",
-    fontSize: 28,
-    fontFamily: "neodgm",
-    fontWeight: "bold",
-    textAlign: 'center',
-  },
-  storyTitleMobile: {
-    color: "#F4E4BC",
-    fontSize: 20,
-    fontFamily: "neodgm",
-    fontWeight: "bold",
-    textAlign: 'center',
   },
   mainContent: {
     flex: 1,
@@ -607,8 +680,6 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     gap: 10,
   },
-
-  // 왼쪽 패널 (이미지)
   leftPanel: {
     flex: 1,
     justifyContent: "center",
@@ -724,20 +795,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  sceneDescription: {
-    color: "#000000ff",
-    fontSize: 22,
-    lineHeight: 40,
-    fontFamily: "neodgm",
-    textAlign: "center",
-  },
-  sceneDescriptionMobile: {
-    color: "#000000ff",
-    fontSize: 16,
-    lineHeight: 28,
-    fontFamily: "neodgm",
-    textAlign: "center",
-  },
   choiceGrid: {
     marginTop: 20,
     gap: 10,
@@ -746,15 +803,8 @@ const styles = StyleSheet.create({
   choiceText: {
     color: "#282c34",
     fontSize: 4,
-    fontWeight: "light",
+    fontWeight: "normal", // 'light' 대신 'normal' 사용
     textAlign: "center",
-  },
-  errorMessage: {
-    color: "#ff6b6b",
-    textAlign: "center",
-    marginTop: 20,
-    fontWeight: "bold",
-    fontFamily: "neodgm",
   },
   buttonContainer: {
     justifyContent: "center",
@@ -811,23 +861,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   pressed: { backgroundColor: "#4a2c1a" },
-  buttonText: {
-    fontFamily: "neodgm",
-    fontSize: 28,
-    color: "#f0e6d2",
-    fontWeight: "regular",
-    textShadowColor: "rgba(0, 0, 0, 0.75)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-    paddingHorizontal: 10,
-  },
   mediumButtonText: { 
-    fontSize: 30,
-    fontFamily: "neodgm",
-    color: "#f0e6d2"
-  },
-  mediumButtonTextMobile: { 
-    fontSize: 20,
     fontFamily: "neodgm",
     color: "#f0e6d2"
   },
@@ -888,18 +922,6 @@ const styles = StyleSheet.create({
   startButton: {
     backgroundColor: "#7C3AED",
   },
-  actionButtonText: {
-    color: "white",
-    fontSize: 18,
-    fontFamily: "neodgm",
-    fontWeight: "600",
-  },
-  actionButtonTextMobile: {
-    color: "white",
-    fontSize: 16,
-    fontFamily: "neodgm",
-    fontWeight: "600",
-  },
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -914,21 +936,6 @@ const styles = StyleSheet.create({
     padding: 25,
     alignItems: "center",
   },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    fontFamily: "neodgm",
-    marginBottom: 15,
-  },
-  modalMessage: {
-    fontSize: 16,
-    color: "#FFFFFF",
-    fontFamily: "neodgm",
-    textAlign: "center",
-    marginBottom: 25,
-    lineHeight: 24,
-  },
   modalButton: {
     paddingVertical: 12,
     paddingHorizontal: 30,
@@ -941,11 +948,5 @@ const styles = StyleSheet.create({
   },
   modalButtonError: {
     backgroundColor: '#EF4444',
-  },
-  modalButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontFamily: "neodgm",
-    fontWeight: "bold",
   },
 });

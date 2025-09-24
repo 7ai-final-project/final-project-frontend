@@ -45,7 +45,8 @@ export default function MultiModeLobby() {
   const [roomToDelete, setRoomToDelete] = useState<number | null>(null);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
 
-  const { isBgmOn } = useSettings();
+  // ▼▼▼ 1. useSettings 훅에서 fontSizeMultiplier 가져오기 ▼▼▼
+  const { isBgmOn, fontSizeMultiplier } = useSettings();
   const musicRef = useRef<Audio.Sound | null>(null);
   const isFetching = useRef(false); // 중복 요청 방지 플래그
 
@@ -192,14 +193,16 @@ export default function MultiModeLobby() {
   const renderRoomStatus = (status: 'waiting' | 'play') => {
     const color = status === 'waiting' ? '#4CAF50' : '#F44336';
     const text = status === 'waiting' ? '대기중' : '게임중';
-    return <View style={[styles.statusIndicator, { backgroundColor: color }]}><Text style={styles.statusText}>{text}</Text></View>;
+    // ▼▼▼ 2. 폰트 크기 적용 ▼▼▼
+    return <View style={[styles.statusIndicator, { backgroundColor: color }]}><Text style={[styles.statusText, { fontSize: 12 * fontSizeMultiplier }]}>{text}</Text></View>;
   };
   
   const renderRoomItem = ({ item }: { item: GameRoom }) => (
     <TouchableOpacity style={styles.roomCard} onPress={() => router.push({ pathname: "/game/multi/room/[id]", params: { id: item.id.toString() } })}>
       <View style={styles.roomCardHeader}>
         {renderRoomStatus(item.status)}
-        <Text style={styles.roomName} numberOfLines={1}>{item.name}</Text>
+        {/* ▼▼▼ 2. 폰트 크기 적용 ▼▼▼ */}
+        <Text style={[styles.roomName, { fontSize: 18 * fontSizeMultiplier }]} numberOfLines={1}>{item.name}</Text>
         {item.room_type === "private" && (
           <Ionicons name="lock-closed" size={16} color="#E2C044" style={{ marginHorizontal: 8 }} />
         )}
@@ -213,10 +216,12 @@ export default function MultiModeLobby() {
           <Ionicons name="trash-outline" size={22} color="#DC2626" />
         </Pressable>
       </View>
-      <Text style={styles.roomDescription} numberOfLines={2}>{item.description || "설명 없음"}</Text>
+      {/* ▼▼▼ 2. 폰트 크기 적용 ▼▼▼ */}
+      <Text style={[styles.roomDescription, { fontSize: 14 * fontSizeMultiplier }]} numberOfLines={2}>{item.description || "설명 없음"}</Text>
       <View style={styles.roomCardFooter}>
         <Ionicons name="people" size={16} color="#9CA3AF" />
-        <Text style={styles.roomParticipants}>{item.selected_by_room?.length || 0} / {item.max_players} 명</Text>
+        {/* ▼▼▼ 2. 폰트 크기 적용 ▼▼▼ */}
+        <Text style={[styles.roomParticipants, { fontSize: 14 * fontSizeMultiplier }]}>{item.selected_by_room?.length || 0} / {item.max_players} 명</Text>
       </View>
     </TouchableOpacity>
   );
@@ -238,7 +243,8 @@ export default function MultiModeLobby() {
           <Ionicons name="chevron-back" size={24} color="white" />
         </TouchableOpacity>
         
-        <Text style={styles.paginationText}>페이지 {currentPage}</Text>
+        {/* ▼▼▼ 2. 폰트 크기 적용 ▼▼▼ */}
+        <Text style={[styles.paginationText, { fontSize: 16 * fontSizeMultiplier }]}>페이지 {currentPage}</Text>
         
         <TouchableOpacity
           style={[styles.paginationButton, !hasNextPage && styles.disabledButton]}
@@ -257,7 +263,8 @@ export default function MultiModeLobby() {
         <TouchableOpacity style={styles.headerIcon} onPress={() => router.push('/')}>
           <Ionicons name="arrow-back" size={32} color="#61dafb" />
         </TouchableOpacity>
-        <Text style={styles.header}>멀티 모드 로비</Text>
+        {/* ▼▼▼ 2. 폰트 크기 적용 ▼▼▼ */}
+        <Text style={[styles.header, { fontSize: 28 * fontSizeMultiplier }]}>멀티 모드 로비</Text>
         {/* 오른쪽 아이콘들을 View로 묶습니다. */}
         <View style={styles.headerRightIcons}>
           <TouchableOpacity style={styles.headerIcon} onPress={() => setCreateRoomModalVisible(true)}>
@@ -275,14 +282,16 @@ export default function MultiModeLobby() {
         renderItem={renderRoomItem}
         ListHeaderComponent={
             <View style={styles.listHeader}>
-                <TextInput style={styles.searchInput} placeholder="방 이름으로 검색..." placeholderTextColor="#9CA3AF" value={searchQuery} onChangeText={setSearchQuery} />
+                {/* ▼▼▼ 2. 폰트 크기 적용 ▼▼▼ */}
+                <TextInput style={[styles.searchInput, { fontSize: 16 * fontSizeMultiplier }]} placeholder="방 이름으로 검색..." placeholderTextColor="#9CA3AF" value={searchQuery} onChangeText={setSearchQuery} />
                 <View style={styles.filterContainer}>
-                <Text style={styles.filterText}>입장 가능한 방만 보기</Text>
+                {/* ▼▼▼ 2. 폰트 크기 적용 ▼▼▼ */}
+                <Text style={[styles.filterText, { fontSize: 16 * fontSizeMultiplier }]}>입장 가능한 방만 보기</Text>
                 <Switch value={showAvailableOnly} onValueChange={setShowAvailableOnly} trackColor={{ false: "#767577", true: "#81b0ff" }} thumbColor={showAvailableOnly ? "#61dafb" : "#f4f3f4"} />
                 </View>
             </View>
         }
-        ListEmptyComponent={!loading && !refreshing ? <Text style={styles.emptyListText}>참여할 수 있는 방이 없습니다.</Text> : null}
+        ListEmptyComponent={!loading && !refreshing ? <Text style={[styles.emptyListText, { fontSize: 16 * fontSizeMultiplier }]}>참여할 수 있는 방이 없습니다.</Text> : null}
         onRefresh={() => fetchPage(1, true)}
         refreshing={refreshing}
         ListFooterComponent={renderPaginationControls} 
@@ -304,20 +313,21 @@ export default function MultiModeLobby() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModalContent}>
-            <Text style={styles.confirmModalTitle}>방 삭제</Text>
-            <Text style={styles.confirmModalText}>정말로 이 방을 삭제하시겠습니까?{"\n"}이 작업은 되돌릴 수 없습니다.</Text>
+            {/* ▼▼▼ 2. 폰트 크기 적용 ▼▼▼ */}
+            <Text style={[styles.confirmModalTitle, { fontSize: 20 * fontSizeMultiplier }]}>방 삭제</Text>
+            <Text style={[styles.confirmModalText, { fontSize: 16 * fontSizeMultiplier }]}>정말로 이 방을 삭제하시겠습니까?{"\n"}이 작업은 되돌릴 수 없습니다.</Text>
             <View style={styles.confirmModalButtons}>
               <TouchableOpacity 
                 style={[styles.modalButton, styles.cancelButton]} 
                 onPress={() => setIsConfirmModalVisible(false)}
               >
-                <Text style={styles.cancelButtonText}>취소</Text>
+                <Text style={[styles.cancelButtonText, { fontSize: 16 * fontSizeMultiplier }]}>취소</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.modalButton, styles.deleteConfirmButton]} 
                 onPress={confirmDelete}
               >
-                <Text style={styles.deleteConfirmButtonText}>삭제</Text>
+                <Text style={[styles.deleteConfirmButtonText, { fontSize: 16 * fontSizeMultiplier }]}>삭제</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -342,7 +352,7 @@ const styles = StyleSheet.create({
   header: { 
     flex: 1,
     textAlign: 'center',
-    fontSize: 28, 
+    // fontSize: 28, // 원본 크기
     fontWeight: "bold", 
     color: "#E2C044", 
     fontFamily: 'neodgm' 
@@ -350,22 +360,22 @@ const styles = StyleSheet.create({
   headerIcon: {
     padding: 5,
   },
-  emptyListText: { color: "#D1C4E9", fontSize: 16, textAlign: "center", marginTop: 50, fontFamily: 'neodgm' },
+  emptyListText: { color: "#D1C4E9", /* fontSize: 16, */ textAlign: "center", marginTop: 50, fontFamily: 'neodgm' },
   roomCard: { padding: 15, marginHorizontal: 20, marginVertical: 8, backgroundColor: "#1E293B", borderRadius: 10, borderColor: "#334155", borderWidth: 1 },
   roomCardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  roomName: { flexShrink: 1, fontSize: 18, fontWeight: "bold", color: "white", fontFamily: 'neodgm' },
+  roomName: { flexShrink: 1, /* fontSize: 18, */ fontWeight: "bold", color: "white", fontFamily: 'neodgm' },
   deleteButton: { padding: 5, marginLeft: 'auto' },
-  roomDescription: { color: "#D1C4E9", fontSize: 14, marginBottom: 10, minHeight: 35, fontFamily: 'neodgm' },
+  roomDescription: { color: "#D1C4E9", /* fontSize: 14, */ marginBottom: 10, minHeight: 35, fontFamily: 'neodgm' },
   roomCardFooter: { flexDirection: 'row', alignItems: 'center' },
-  roomParticipants: { color: "#9CA3AF", fontSize: 14, marginLeft: 8, fontFamily: 'neodgm' },
+  roomParticipants: { color: "#9CA3AF", /* fontSize: 14, */ marginLeft: 8, fontFamily: 'neodgm' },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", alignItems: "center" },
   modalContent: { width: "90%", maxHeight: "80%", borderRadius: 16, overflow: 'hidden' },
   statusIndicator: { borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10, marginRight: 10 },
-  statusText: { color: 'white', fontWeight: 'bold', fontSize: 12, fontFamily: 'neodgm' },
+  statusText: { color: 'white', fontWeight: 'bold', /* fontSize: 12, */ fontFamily: 'neodgm' },
   listHeader: { paddingHorizontal: 20, marginBottom: 10 },
-  searchInput: { backgroundColor: "#1E293B", color: 'white', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 15, fontSize: 16, marginBottom: 15, borderColor: "#334155", borderWidth: 1, fontFamily: 'neodgm' },
+  searchInput: { backgroundColor: "#1E293B", color: 'white', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 15, /* fontSize: 16, */ marginBottom: 15, borderColor: "#334155", borderWidth: 1, fontFamily: 'neodgm' },
   filterContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  filterText: { color: 'white', fontSize: 16, fontFamily: 'neodgm' },
+  filterText: { color: 'white', /* fontSize: 16, */ fontFamily: 'neodgm' },
   confirmModalContent: {
     width: '80%',
     backgroundColor: '#1E293B',
@@ -376,14 +386,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   confirmModalTitle: {
-    fontSize: 20,
+    // fontSize: 20,
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 10,
     fontFamily: 'neodgm'
   },
   confirmModalText: {
-    fontSize: 16,
+    // fontSize: 16,
     color: '#D1C4E9',
     textAlign: 'center',
     marginBottom: 20,
@@ -407,7 +417,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: 'white',
-    fontSize: 16,
+    // fontSize: 16,
     fontWeight: '600',
     fontFamily: 'neodgm'
   },
@@ -416,7 +426,7 @@ const styles = StyleSheet.create({
   },
   deleteConfirmButtonText: {
     color: 'white',
-    fontSize: 16,
+    // fontSize: 16,
     fontWeight: 'bold',
     fontFamily: 'neodgm'
   },
@@ -438,7 +448,7 @@ const styles = StyleSheet.create({
   },
   paginationText: {
     color: 'white',
-    fontSize: 16,
+    // fontSize: 16,
     fontFamily: 'neodgm',
     fontWeight: 'bold',
   },

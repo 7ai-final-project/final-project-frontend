@@ -98,13 +98,8 @@ export default function GameStarterScreen() {
 
   const {
     isBgmOn,
-    setIsBgmOn,
     isSfxOn,
-    setIsSfxOn,
-    fontSizeMultiplier,
-    setFontSizeMultiplier,
-    language,
-    setLanguage,
+    fontSizeMultiplier, // 폰트 크기 설정을 가져옵니다.
     isLoading: isSettingsLoading,
   } = useSettings();
 
@@ -146,13 +141,10 @@ export default function GameStarterScreen() {
   // --- useEffect Hooks ---
   const musicRef = useRef<Audio.Sound | null>(null);
   
-    // ★★★ 3. 로비 화면이 나타날 때 배경 음악을 로드하고 재생합니다. ★★★
     useFocusEffect(
       useCallback(() => {
         const manageMusic = async () => {
-            // BGM 설정이 켜져있을 때
             if (isBgmOn) {
-            // 아직 음악이 로드되지 않았다면, 새로 로드하고 재생합니다.
             if (!musicRef.current) {
                 try {
                 await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
@@ -161,19 +153,16 @@ export default function GameStarterScreen() {
                     { isLooping: true }
                 );
                 await sound.playAsync();
-                musicRef.current = sound; // 재생된 sound 객체를 state에 저장
+                musicRef.current = sound;
                 } catch (error) {
                 console.error("배경 음악 로딩 실패:", error);
                 }
             }
-            // BGM 설정이 꺼졌다가 다시 켜진 경우, 기존 음악을 재생합니다.
             else {
                 await musicRef.current.playAsync();
             }
             } 
-            // BGM 설정이 꺼져있을 때
             else {
-            // 재생 중인 음악이 있다면 정지합니다.
             if (musicRef.current) {
                 await musicRef.current.stopAsync();
             }
@@ -182,14 +171,12 @@ export default function GameStarterScreen() {
   
         manageMusic();
   
-        // 클린업 함수: 화면을 떠날 때 음악을 언로드합니다.
         return () => {
             if (musicRef.current) {
             musicRef.current.unloadAsync();
-            musicRef.current = null; // state 초기화
+            musicRef.current = null;
             }
         };
-        // 👇 중요: isBgmOn이 바뀔 때마다 이 로직이 다시 실행됩니다.
         }, [isBgmOn]) 
     );
 
@@ -223,7 +210,6 @@ export default function GameStarterScreen() {
       if (selectedScenario?.title) {
         console.log(`[index.tsx] 시나리오 변경 감지: ${selectedScenario.title}`);
         try {
-          // fetchCharactersByTopic 함수를 사용하여 시나리오 주제에 맞는 캐릭터 목록을 가져옵니다.
           const chars = await fetchCharactersByTopic(selectedScenario.title);
           setCharacters(chars);
           console.log(`[index.tsx] 캐릭터 ${chars.length}명 로딩 완료`);
@@ -254,17 +240,15 @@ export default function GameStarterScreen() {
 
   // --- 이벤트 핸들러 ---
   const handleOpenScenarioModal = async (scenario: Scenario) => {
-    setSelectedScenario(scenario); // 먼저 현재 시나리오를 상태에 저장
+    setSelectedScenario(scenario);
     try {
-      // API 호출하여 저장된 세션 확인
       const response = await checkSingleGameSession(scenario.id);
       if (response.status === 200 && response.data) {
-        setLoadedSession(response.data); // 세션 데이터 저장
-        setContinueModalVisible(true); // '이어서 하기' 모달 열기
+        setLoadedSession(response.data);
+        setContinueModalVisible(true);
       }
     } catch (error: any) {
       if (error.response && error.response.status === 404) {
-        // 저장된 게임이 없으면 '새 게임' 설정 모달 열기
         handleStartNewGame();
       } else {
         console.error("세션 확인 중 오류:", error);
@@ -274,10 +258,10 @@ export default function GameStarterScreen() {
   };
 
   const handleStartNewGame = () => {
-    setContinueModalVisible(false); // '이어서 하기' 모달 닫기
+    setContinueModalVisible(false);
     setSelectedDifficultyId(null);
     setSelectedGenreId(null);
-    setScenarioModalVisible(true); // 옵션 설정 모달 열기
+    setScenarioModalVisible(true);
   };
 
   const handleContinueGame = () => {
@@ -292,7 +276,7 @@ export default function GameStarterScreen() {
         mode: loadedSession.mode,
         genre: loadedSession.genre,
         isLoaded: 'true',
-        loadedSessionData: JSON.stringify(loadedSession), // ✅ session ID 대신 전체 데이터 전달
+        loadedSessionData: JSON.stringify(loadedSession),
       },
     });
   };
@@ -303,7 +287,6 @@ export default function GameStarterScreen() {
       return;
     }
     
-    // ✅ [핵심 수정] 캐릭터가 아직 로딩되지 않았다면, 여기서 로딩 상태를 확인하고 대기합니다.
     if (characters.length === 0) {
       showNotification("알림", "캐릭터 정보를 불러오는 중입니다. 잠시만 기다려주세요.");
       return;
@@ -312,10 +295,8 @@ export default function GameStarterScreen() {
     const difficultyName = difficulties.find(d => d.id === selectedDifficultyId)?.name || '';
     const genreName = genres.find(g => g.id === selectedGenreId)?.name || '';
 
-    // 모든 준비가 완료되면 바로 라우터 이동
     setScenarioModalVisible(false);
     
-    // 이 부분이 핵심입니다. 타이머 모달을 스킵하고 바로 게임 화면으로 이동합니다.
     router.push({
       pathname: '/game/single/play',
       params: {
@@ -334,9 +315,6 @@ export default function GameStarterScreen() {
     setSelectedDifficultyId(null);
     setSelectedGenreId(null);
   };
-
-  // ⚠️ `handleGoBack`와 `isGameLoading` 관련 코드를 제거합니다.
-  // const handleGoBack = () => { setGameLoading(false); };
 
   const handlePrevScenario = () => {
     setCurrentScenarioIndex((prevIndex) => Math.max(0, prevIndex - 1));
@@ -358,22 +336,19 @@ export default function GameStarterScreen() {
     setSelectedGenreId(null);
     setCurrentScenarioIndex(0);
     
-    // 이 부분이 핵심입니다.
     router.push('/');
   };
 
-  // --- UI 렌더링 ---
-  // ⚠️ `isGameLoading` 조건부 렌더링 블록을 제거합니다.
 
   if (isLoading) {
     return (
       <SafeAreaView style={styles.center}>
-        {/* 홈 버튼 추가 */}
         <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
           <Ionicons name="home" size={24} color={COLORS.subText} />
         </TouchableOpacity>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>게임 옵션을 불러오는 중...</Text>
+        {/* ▼▼▼ 폰트 크기 적용 ▼▼▼ */}
+        <Text style={[styles.loadingText, { fontSize: 16 * fontSizeMultiplier }]}>게임 옵션을 불러오는 중...</Text>
       </SafeAreaView>
     );
   }
@@ -386,7 +361,6 @@ export default function GameStarterScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* 홈 버튼 추가 */}
       <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
         <Ionicons name="home" size={24} color={COLORS.subText} />
       </TouchableOpacity>
@@ -396,12 +370,13 @@ export default function GameStarterScreen() {
       <ImageBackground
         source={currentBackgroundImage}
         style={styles.backgroundImage}
-        imageStyle={styles.imageStyle} // 모서리를 둥글게 하기 위한 스타일
-        resizeMode="cover" // 이미지가 컨테이너를 꽉 채우도록 설정
+        imageStyle={styles.imageStyle}
+        resizeMode="cover"
       >
         <View style={styles.container}>
-          <Text style={styles.mainTitle}>시나리오 선택</Text>
-          <Text style={styles.subText}>원하는 시나리오를 선택하여 게임 옵션을 설정하세요.</Text>
+          {/* ▼▼▼ 폰트 크기 적용 ▼▼▼ */}
+          <Text style={[styles.mainTitle, { fontSize: FONT_SIZES.title * fontSizeMultiplier }]}>시나리오 선택</Text>
+          <Text style={[styles.subText, { fontSize: FONT_SIZES.subTitle * fontSizeMultiplier }]}>원하는 시나리오를 선택하여 게임 옵션을 설정하세요.</Text>
 
           <View style={styles.scenarioCarousel}>
             {canGoPrev && (
@@ -414,8 +389,9 @@ export default function GameStarterScreen() {
                 style={styles.scenarioCard}
                 onPress={() => handleOpenScenarioModal(currentScenario)}
               >
-                <Text style={styles.scenarioTitle}>{currentScenario.title}</Text>
-                <Text style={styles.scenarioDescription}>{currentScenario.description}</Text>
+                {/* ▼▼▼ 폰트 크기 적용 ▼▼▼ */}
+                <Text style={[styles.scenarioTitle, { fontSize: FONT_SIZES.cardTitle * fontSizeMultiplier }]}>{currentScenario.title}</Text>
+                <Text style={[styles.scenarioDescription, { fontSize: FONT_SIZES.cardDescription * fontSizeMultiplier }]}>{currentScenario.description}</Text>
               </TouchableOpacity>
             )}
             {canGoNext && (
@@ -427,7 +403,7 @@ export default function GameStarterScreen() {
         </View>
       </ImageBackground>
 
-      {/* 시나리오 옵션 선택 모달 */}
+      {/* '이어하기' 모달 */}
       <Modal
         transparent={true}
         visible={isContinueModalVisible}
@@ -442,32 +418,33 @@ export default function GameStarterScreen() {
             >
               <Ionicons name="close" size={28} color={COLORS.subText} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>{loadedSession?.scenario}</Text>
-            <Text style={styles.modalSubTitle}>지난 줄거리</Text>
-            {/* 줄거리 요약 표시 */}
+            {/* ▼▼▼ 폰트 크기 적용 ▼▼▼ */}
+            <Text style={[styles.modalTitle, { fontSize: 22 * fontSizeMultiplier }]}>{loadedSession?.scenario}</Text>
+            <Text style={[styles.modalSubTitle, { fontSize: 16 * fontSizeMultiplier }]}>지난 줄거리</Text>
             <ScrollView style={styles.summaryBox}>
-              <Text style={styles.summaryText}>
+              <Text style={[styles.summaryText, { fontSize: 14 * fontSizeMultiplier }]}>
                 {loadedSession?.choice_history?.summary || "저장된 줄거리가 없습니다."}
               </Text>
             </ScrollView>
-            <Text style={styles.modalSubTitle}>어떻게 하시겠습니까?</Text>
+            <Text style={[styles.modalSubTitle, { fontSize: 16 * fontSizeMultiplier }]}>어떻게 하시겠습니까?</Text>
             <View style={styles.modalButtonContainer}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.backButton]}
                 onPress={handleStartNewGame}
               >
-                <Text style={styles.buttonText}>새 게임</Text>
+                <Text style={[styles.buttonText, { fontSize: 16 * fontSizeMultiplier }]}>새 게임</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.confirmButton]}
                 onPress={handleContinueGame}
               >
-                <Text style={styles.buttonText}>이어서 하기</Text>
+                <Text style={[styles.buttonText, { fontSize: 16 * fontSizeMultiplier }]}>이어서 하기</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+      {/* '새 게임' 옵션 모달 */}
       <Modal
         transparent={true}
         visible={isScenarioModalVisible}
@@ -476,28 +453,29 @@ export default function GameStarterScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>{selectedScenario?.title}</Text>
+            {/* ▼▼▼ 폰트 크기 적용 ▼▼▼ */}
+            <Text style={[styles.modalTitle, { fontSize: 22 * fontSizeMultiplier }]}>{selectedScenario?.title}</Text>
             
             <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalSubTitle}>장르 선택</Text>
+              <Text style={[styles.modalSubTitle, { fontSize: 16 * fontSizeMultiplier }]}>장르 선택</Text>
               {genres.map((genre) => (
                 <TouchableOpacity
                   key={genre.id}
                   style={[styles.topicOption, selectedGenreId === genre.id && styles.topicSelected]}
                   onPress={() => setSelectedGenreId(genre.id)}
                 >
-                  <Text style={styles.topicText}>{genre.name}</Text>
+                  <Text style={[styles.topicText, { fontSize: 15 * fontSizeMultiplier }]}>{genre.name}</Text>
                 </TouchableOpacity>
               ))}
 
-              <Text style={styles.modalSubTitle}>난이도 선택</Text>
+              <Text style={[styles.modalSubTitle, { fontSize: 16 * fontSizeMultiplier }]}>난이도 선택</Text>
               {difficulties.map((dif) => (
                 <TouchableOpacity
                   key={dif.id}
                   style={[styles.topicOption, selectedDifficultyId === dif.id && styles.topicSelected]}
                   onPress={() => setSelectedDifficultyId(dif.id)}
                 >
-                  <Text style={styles.topicText}>{dif.name}</Text>
+                  <Text style={[styles.topicText, { fontSize: 15 * fontSizeMultiplier }]}>{dif.name}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -507,19 +485,20 @@ export default function GameStarterScreen() {
                 style={[styles.modalButton, styles.backButton]}
                 onPress={handleGoBackToScenario}
               >
-                <Text style={styles.buttonText}>돌아가기</Text>
+                <Text style={[styles.buttonText, { fontSize: 16 * fontSizeMultiplier }]}>돌아가기</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.modalButton, styles.confirmButton]}
                 onPress={handleConfirmScenarioOptions}
               >
-                <Text style={styles.buttonText}>선택 완료</Text>
+                <Text style={[styles.buttonText, { fontSize: 16 * fontSizeMultiplier }]}>선택 완료</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+      {/* 알림 모달 */}
       <Modal
         transparent={true}
         visible={isNotificationModalVisible}
@@ -528,19 +507,21 @@ export default function GameStarterScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>{notificationMessage.title}</Text>
-            <Text style={styles.notificationBodyText}>
+            {/* ▼▼▼ 폰트 크기 적용 ▼▼▼ */}
+            <Text style={[styles.modalTitle, { fontSize: 22 * fontSizeMultiplier }]}>{notificationMessage.title}</Text>
+            <Text style={[styles.notificationBodyText, { fontSize: FONT_SIZES.subTitle * fontSizeMultiplier }]}>
               {notificationMessage.body}
             </Text>
             <TouchableOpacity
               style={[styles.modalButton, styles.confirmButton, { width: '100%', marginLeft: 0, marginTop: 10 }]}
               onPress={() => setNotificationModalVisible(false)}
             >
-              <Text style={styles.buttonText}>확인</Text>
+              <Text style={[styles.buttonText, { fontSize: 16 * fontSizeMultiplier }]}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+      {/* 설정 모달 */}
       <OptionsModal
         visible={optionsModalVisible}
         onClose={() => setOptionsModalVisible(false)}
@@ -599,14 +580,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   mainTitle: {
-    fontSize: FONT_SIZES.title,
+    // fontSize: FONT_SIZES.title, // 원본 크기는 상단 변수에서 가져옵니다.
     fontWeight: "bold",
     color: COLORS.primary,
     marginBottom: 5,
     fontFamily: 'neodgm',
   },
   subText: {
-    fontSize: FONT_SIZES.subTitle,
+    // fontSize: FONT_SIZES.subTitle,
     color: COLORS.subText,
     marginBottom: 20,
     fontFamily: 'neodgm',
@@ -631,14 +612,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scenarioTitle: {
-    fontSize: FONT_SIZES.cardTitle,
+    // fontSize: FONT_SIZES.cardTitle,
     fontWeight: "bold",
     color: COLORS.text,
     marginBottom: 5,
     fontFamily: 'neodgm',
   },
   scenarioDescription: {
-    fontSize: FONT_SIZES.cardDescription,
+    // fontSize: FONT_SIZES.cardDescription,
     color: COLORS.subText,
     textAlign: 'center',
     fontFamily: 'neodgm',
@@ -666,14 +647,14 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   modalTitle: {
-    fontSize: 22,
+    // fontSize: 22,
     color: COLORS.primary,
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: "center",
     fontFamily: 'neodgm',
   },
-  modalSubTitle: { color: COLORS.subText, marginBottom: 10, fontSize: 16, fontFamily: 'neodgm', },
+  modalSubTitle: { color: COLORS.subText, marginBottom: 10, /* fontSize: 16, */ fontFamily: 'neodgm', },
   topicOption: {
     padding: 12,
     borderRadius: 8,
@@ -707,7 +688,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: COLORS.background,
     fontWeight: 'bold',
-    fontSize: 16,
+    // fontSize: 16,
     fontFamily: 'neodgm',
   },
 
@@ -776,13 +757,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     },
   summaryText: {
-    fontSize: 14,
+    // fontSize: 14,
     color: '#D4D4D4',
     lineHeight: 22,
     fontFamily: 'neodgm',
   },
   notificationBodyText: {
-    fontSize: FONT_SIZES.subTitle,
+    // fontSize: FONT_SIZES.subTitle,
     color: COLORS.text,
     textAlign: 'center',
     marginBottom: 20,

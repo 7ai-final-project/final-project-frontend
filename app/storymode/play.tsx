@@ -4,6 +4,7 @@ import { useLocalSearchParams } from "expo-router";
 import StoryModeGame from "../../components/game/StoryModeGame";
 import api from "../../services/api";
 import { useFonts } from "expo-font";
+import { useSettings } from "../../components/context/SettingsContext";
 
 interface SceneData {
   scene: string;
@@ -23,6 +24,8 @@ export default function StorySelectorScreen() {
   const [fontsLoaded, fontError] = useFonts({
     neodgm: require("../../assets/fonts/neodgm.ttf"),
   });
+
+  const { fontSizeMultiplier } = useSettings();
 
   const { story, should_continue } = useLocalSearchParams();
   const [initialHistory, setInitialHistory] = useState<SceneData[] | null>(null);
@@ -82,22 +85,22 @@ export default function StorySelectorScreen() {
   // 가로 모드일 때 사용할 텍스트 스타일
   const getLoadingTextStyle = () => {
     if (isMobile && isLandscape) {
-      return styles.loadingTextMobileLandscape;
+      return [styles.loadingTextMobileLandscape, { fontSize: 14 * fontSizeMultiplier }];
     }
     if (isMobile) {
-      return styles.loadingTextMobile;
+      return [styles.loadingTextMobile, { fontSize: 16 * fontSizeMultiplier }];
     }
-    return styles.loadingText;
+    return [styles.loadingText, { fontSize: 18 * fontSizeMultiplier }];
   };
 
   const getErrorTextStyle = () => {
     if (isMobile && isLandscape) {
-      return styles.errorTextMobileLandscape;
+      return [styles.errorTextMobileLandscape, { fontSize: 14 * fontSizeMultiplier }];
     }
     if (isMobile) {
-      return styles.errorTextMobile;
+      return [styles.errorTextMobile, { fontSize: 16 * fontSizeMultiplier }];
     }
-    return styles.errorText;
+    return [styles.errorText, { fontSize: 18 * fontSizeMultiplier }];
   };
 
   return (
@@ -129,13 +132,14 @@ export default function StorySelectorScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>오류</Text>
-            <Text style={styles.modalMessage}>{errorMessage}</Text>
+            {/* ▼▼▼ 4. 모달 내 텍스트에 동적 폰트 크기 적용 ▼▼▼ */}
+            <Text style={[styles.modalTitle, { fontSize: 22 * fontSizeMultiplier }]}>오류</Text>
+            <Text style={[styles.modalMessage, { fontSize: 16 * fontSizeMultiplier }]}>{errorMessage}</Text>
             <TouchableOpacity
               style={styles.modalButton}
               onPress={() => setErrorModalVisible(false)}
             >
-              <Text style={styles.modalButtonText}>확인</Text>
+              <Text style={[styles.modalButtonText, { fontSize: 16 * fontSizeMultiplier }]}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -169,39 +173,39 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 10,
-    fontSize: 18,
+    // fontSize: 18, // 동적으로 적용되므로 주석 처리
     fontFamily: "neodgm",
     color: "#F4E1D2",
   },
   loadingTextMobile: {
     marginTop: 8,
-    fontSize: 16,
+    // fontSize: 16,
     fontFamily: "neodgm",
     color: "#F4E1D2",
   },
   loadingTextMobileLandscape: {
     marginTop: 6,
-    fontSize: 14,
+    // fontSize: 14,
     fontFamily: "neodgm",
     color: "#F4E1D2",
     textAlign: 'center',
   },
   errorText: {
-    fontSize: 18,
+    // fontSize: 18,
     fontFamily: "neodgm",
     color: "#EF4444",
     textAlign: "center",
     marginBottom: 10,
   },
   errorTextMobile: {
-    fontSize: 16,
+    // fontSize: 16,
     fontFamily: "neodgm",
     color: "#EF4444",
     textAlign: "center",
     marginBottom: 8,
   },
   errorTextMobileLandscape: {
-    fontSize: 14,
+    // fontSize: 14,
     fontFamily: "neodgm",
     color: "#EF4444",
     textAlign: "center",
@@ -222,14 +226,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalTitle: {
-    fontSize: 22,
+    // fontSize: 22,
     fontWeight: "bold",
     color: "#FFFFFF",
     fontFamily: "neodgm",
     marginBottom: 15,
   },
   modalMessage: {
-    fontSize: 16,
+    // fontSize: 16,
     color: "#FFFFFF",
     fontFamily: "neodgm",
     textAlign: "center",
@@ -244,7 +248,7 @@ const styles = StyleSheet.create({
   },
   modalButtonText: {
     color: "white",
-    fontSize: 16,
+    // fontSize: 16,
     fontFamily: "neodgm",
     fontWeight: "bold",
   },

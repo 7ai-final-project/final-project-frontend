@@ -1,5 +1,3 @@
-// frontend\components\game\GameEngineRealtime.tsx
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     SafeAreaView,
@@ -17,7 +15,6 @@ import {
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useWebSocket } from "@/components/context/WebSocketContext";
-// [수정] API 서비스에서 Character 타입과 endGame 함수만 import 합니다.
 import { Character, endGame, getWebSocketNonce, Skill, Item } from "@/services/api";
 import { getStatValue, statMapping, RoundResult, SceneRoundSpec, SceneTemplate, PerRoleResult, Grade, ShariBlock, World, PartyEntry } from "@/util/ttrpg";
 import { Audio } from "expo-av";
@@ -25,13 +22,14 @@ import { useAuth } from "@/hooks/useAuth";
 import ShariHud from "./ShariHud";
 import { useFonts } from 'expo-font';
 import ConfettiCannon from 'react-native-confetti-cannon';
+import { useSettings } from "@/components/context/SettingsContext"; // Settings 훅 임포트
+import OptionsModal from "@/components/OptionsModal"; // OptionsModal 컴포넌트 임포트
 
 interface LoadedSessionData {
   choice_history: any;
   character_history: any;
 }
 
-// [수정] Props 타입: GameSetup에서 넘겨주는 데이터 구조에 맞게 변경
 type Props = {
     roomId: string | string[];
     topic: string | string[];
@@ -62,9 +60,9 @@ export default function GameEngineRealtime({
     turnSeconds = 20,
     isLoadedGame,
 }: Props) {
-    // [수정] setupData에서 필요한 정보를 구조 분해 할당합니다.
     const { user } = useAuth();
     const { myCharacter, aiCharacters, allCharacters } = setupData;
+    const { fontSizeMultiplier, isSfxOn } = useSettings(); // 설정 값 가져오기
     const [fontsLoaded, fontError] = useFonts({
       'neodgm': require('@/assets/fonts/neodgm.ttf'),
     });
@@ -84,7 +82,6 @@ export default function GameEngineRealtime({
     const [diceRollSound, setDiceRollSound] = useState<Audio.Sound | null>(null);
     const [fireworksSound, setFireworksSound] = useState<Audio.Sound | null>(null);
     
-    // [수정] sceneTemplates 배열 대신, 현재 씬 객체 하나만 관리합니다.
     const [currentScene, setCurrentScene] = useState<SceneTemplate | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -99,6 +96,7 @@ export default function GameEngineRealtime({
 
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [isResultsModalVisible, setIsResultsModalVisible] = useState(false);
+    const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false); // 옵션 모달 상태 추가
 
     const [isSaveModalVisible, setIsSaveModalVisible] = useState(false);
     const [saveModalMessage, setSaveModalMessage] = useState("");
@@ -112,7 +110,6 @@ export default function GameEngineRealtime({
 
     const phaseAnim = useRef(new Animated.Value(0)).current;
 
-    // [수정] useMemo 의존성 배열을 sceneTemplates에서 currentScene으로 변경합니다.
     const roundSpec: SceneRoundSpec | null = useMemo(() => {
         return currentScene?.round ?? null;
     }, [currentScene]);
@@ -132,9 +129,9 @@ export default function GameEngineRealtime({
     const [roundResult, setRoundResult] = useState<RoundResult | null>(null);
     const [cinematicText, setCinematicText] = useState<string>("");
 
-    const [usedItems, setUsedItems] = useState<Set<string>>(new Set()); // 사용한 아이템 이름 저장 (1회용)
-    const [skillCooldowns, setSkillCooldowns] = useState<Record<string, number>>({}); // 스킬별 재사용 가능한 씬 인덱스 저장
-    const [pendingUsage, setPendingUsage] = useState<{ type: 'skill' | 'item'; data: Skill | Item } | null>(null); // 다음 씬 요청 시 보낼 사용 정보
+    const [usedItems, setUsedItems] = useState<Set<string>>(new Set());
+    const [skillCooldowns, setSkillCooldowns] = useState<Record<string, number>>({});
+    const [pendingUsage, setPendingUsage] = useState<{ type: 'skill' | 'item'; data: Skill | Item } | null>(null);
     const SKILL_COOLDOWN_SCENES = 2;
 
     const timerAnim = useRef(new Animated.Value(turnSeconds)).current;
@@ -150,10 +147,15 @@ export default function GameEngineRealtime({
     const [isHudModalVisible, setIsHudModalVisible] = useState(false);
     const [hasNewHudInfo, setHasNewHudInfo] = useState(false);
 
-    // ⬇️ 장면 이미지 표시용 상태
     const [sceneImageUrl, setSceneImageUrl] = useState<string | null>(null);
     const [imgLoading, setImgLoading] = useState(false);
 
+    // 효과음 재생 함수 (설정값에 따라 재생)
+    const playSfx = (sound: Audio.Sound | null) => {
+        if (isSfxOn && sound) {
+            sound.replayAsync();
+        }
+    };
 
     useEffect(() => {
         if (shariBlockData?.update && Object.keys(shariBlockData.update).length > 0) {
@@ -164,7 +166,7 @@ export default function GameEngineRealtime({
     useEffect(() => {
         if (phase === 'end') {
             setShowConfetti(true);
-            fireworksSound?.replayAsync();
+            playSfx(fireworksSound);
         }
     }, [phase, fireworksSound]);
 
@@ -185,10 +187,6 @@ export default function GameEngineRealtime({
                 ws.onopen = () => {
                     console.log("✅ GameEngineRealtime WebSocket Connected");
                     setIsLoading(true);
-
-                    // --- ⬇️ [핵심 수정] ⬇️ ---
-                    // isLoadedGame 플래그를 기반으로 서버에 첫 장면을 요청합니다.
-                    // 이제 'continue_game' 메시지는 사용하지 않습니다.
                     const logMessage = isLoadedGame
                         ? "🚀 (불러온 게임) 첫 장면을 요청합니다."
                         : "🚀 (새 게임) 첫 장면을 요청합니다.";
@@ -197,8 +195,8 @@ export default function GameEngineRealtime({
                     ws?.send(JSON.stringify({
                         type: "request_initial_scene",
                         topic: Array.isArray(topic) ? topic[0] : topic,
-                        characters: allCharacters, // 캐릭터 전체 정보 전달
-                        isLoadedGame: isLoadedGame,  // ✅ '깃발'을 여기에 포함하여 전송
+                        characters: allCharacters,
+                        isLoadedGame: isLoadedGame,
                     }));
                 };
 
@@ -226,22 +224,20 @@ export default function GameEngineRealtime({
                         setPartyState(undefined);
                         setShariBlockData(undefined);
                         setIsGeneratingNextScene(false);
-                        setAmIReadyForNext(false); // 👈 내 준비 상태 초기화
+                        setAmIReadyForNext(false);
                         setNextSceneReadyState({ ready_users: [], total_users: 0 });
-                        pageTurnSound?.replayAsync();
+                        playSfx(pageTurnSound);
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
                         } else if (data.type === "game_update" && data.payload.event === "game_loaded") {
                         const { scene, playerState } = data.payload;
-                        setCurrentScene(scene); // 씬 정보 설정
+                        setCurrentScene(scene);
  
-                        // 불러온 스킬/아이템 상태 복원
                         if (playerState) {
-                            setUsedItems(new Set(playerState.usedItems || [])); // Array를 Set으로 변환
+                            setUsedItems(new Set(playerState.usedItems || []));
                             setSkillCooldowns(playerState.skillCooldowns || {});
                         }
  
-                        // 새 씬 시작과 동일한 공통 로직 수행
                         setPhase("choice");
                         setMyChoiceId(null);
                         setRoundResult(null);
@@ -251,7 +247,7 @@ export default function GameEngineRealtime({
                         setAiChoices({});
                         setIsLoading(false);
                         setIsGeneratingNextScene(false);
-                        pageTurnSound?.replayAsync();
+                        playSfx(pageTurnSound);
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
 
@@ -262,7 +258,6 @@ export default function GameEngineRealtime({
                         if (world_update) setWorldState(world_update);
                         if (party_update) setPartyState(party_update);
                         if (shari) setShariBlockData(shari);
-                        // ✅ 이미지 URL 경로를 넓게 커버
                         const imageUrl =
                         data?.payload?.image?.url ??
                         data?.payload?.roundResult?.image?.url ??
@@ -270,33 +265,30 @@ export default function GameEngineRealtime({
                         data?.payload?.result?.image?.url ??
                         null;
 
-                        console.log("🎨 incoming imageUrl:", imageUrl); // (디버깅 필요시 유지)
+                        console.log("🎨 incoming imageUrl:", imageUrl);
                         if (imageUrl) {
                             setImgLoading(true);
                             setSceneImageUrl(imageUrl);
                         } else {
                             setSceneImageUrl(null);
                         }
-                        setTurnWaitingState({ submitted_users: [], total_users: 0 }); // 대기 상태 초기화
+                        setTurnWaitingState({ submitted_users: [], total_users: 0 });
                         setPhase("cinematic");
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
                     
-                    // ▼▼▼▼▼ [핵심 수정] 게임 종료 이벤트 처리 로직 추가 ▼▼▼▼▼
                     } else if (data.type === "game_update" && data.payload.event === "game_over") {
                         const { narration, image } = data.payload;
-                        setCinematicText(narration); // 마지막 서사 설정
+                        setCinematicText(narration);
                         
                         if (image?.url) {
-                            setSceneImageUrl(image.url); // 마지막 이미지 설정
+                            setSceneImageUrl(image.url);
                         }
                         
-                        setPhase("end"); // 게임 단계(phase)를 'end'로 변경
+                        setPhase("end");
                         
-                        // 애니메이션 효과
                         phaseAnim.setValue(0);
                         Animated.timing(phaseAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-                    // ▲▲▲▲▲ [핵심 수정] 게임 종료 이벤트 처리 로직 종료 ▲▲▲▲▲
 
                     } else if (data.type === "save_success") {
                         setSaveModalMessage(data.message);
@@ -333,7 +325,6 @@ export default function GameEngineRealtime({
         };
     }, [roomId, topic, setupData, isLoadedGame]);
 
-    // --- 사운드 로딩 Hook (변경 없음) ---
     useEffect(() => {
         const loadSounds = async () => {
             try {
@@ -356,7 +347,6 @@ export default function GameEngineRealtime({
         };
     }, []);
 
-    // --- 타이머 로직 Hook ---
     useEffect(() => {
         if (phase === "choice" && !myChoiceId) {
             startTimer();
@@ -366,8 +356,6 @@ export default function GameEngineRealtime({
         return () => stopTimer();
     }, [phase, myChoiceId]);
 
-
-    // --- 이벤트 핸들러 및 유틸 함수 ---
 
     const handleReturnToRoom = () => setIsModalVisible(true);
 
@@ -420,7 +408,7 @@ export default function GameEngineRealtime({
     const rollDice = (sides: number = 20) => Math.floor(Math.random() * sides) + 1;
 
     const startDiceRoll = () => {
-        diceRollSound?.replayAsync();
+        playSfx(diceRollSound);
         setIsRolling(true);
         setDiceResult(null);
         spinValue.setValue(0);
@@ -460,7 +448,7 @@ export default function GameEngineRealtime({
                 statValue: myStatValue,
                 modifier: myModifier,
                 total: myTotal,
-                characterName: myCharacter.name, // 내 캐릭터 이름 추가
+                characterName: myCharacter.name,
                 characterId: myCharacter.id,
             };
             
@@ -476,7 +464,6 @@ export default function GameEngineRealtime({
                 })),
             }));
 
-            // ✅ [수정] 결과를 기다리는 'sync' 단계로 전환합니다.
             setPhase("sync");
 
         }, 2000);
@@ -486,10 +473,9 @@ export default function GameEngineRealtime({
         const choice = roundSpec?.choices[myRole!]?.find(c => c.id === choiceId);
         if (!choice) return;
 
-        clickSound?.replayAsync();
+        playSfx(clickSound);
         setMyChoiceId(choiceId);
         stopTimer();
-        // 내부 상태만 'dice_roll'로 변경합니다.
         setPhase("dice_roll");
     };
 
@@ -516,8 +502,8 @@ export default function GameEngineRealtime({
     const handleReadyForNextScene = () => {
         if (!ws || !myRole || !myChoiceId || !currentScene || amIReadyForNext) return;
 
-        setAmIReadyForNext(true); // 내 상태를 '준비됨'으로 변경
-        setIsGeneratingNextScene(true); // UI를 '대기 중'으로 변경
+        setAmIReadyForNext(true);
+        setIsGeneratingNextScene(true);
 
         const myLastChoice = myChoices.find(c => c.id === myChoiceId);
         if (!myLastChoice) {
@@ -526,7 +512,6 @@ export default function GameEngineRealtime({
             return;
         }
 
-        // ✅ [수정] 'ready_for_next_scene' 액션을 서버에 전송
         ws.send(JSON.stringify({
             type: "ready_for_next_scene",
             history: { 
@@ -555,7 +540,6 @@ export default function GameEngineRealtime({
             return;
         }
 
-        // 백엔드로 보낼 데이터를 지정된 포맷에 맞게 가공
         const choicesFormatted = myCurrentChoices.reduce((acc, choice, index) => {
             acc[index] = choice.text;
             return acc;
@@ -567,17 +551,16 @@ export default function GameEngineRealtime({
 
         const saveData = {
             title: roundSpec?.title,
-            description: roundSpec?.title, // 현재 템플릿에서는 title이 주된 설명이므로 동일하게 사용
+            description: roundSpec?.title,
             choices: choicesFormatted,
             selectedChoice: selectedChoiceFormatted,
             sceneIndex: currentScene.index,
             playerState: {
-                usedItems: Array.from(usedItems), // Set을 Array로 변환하여 JSON 직렬화
+                usedItems: Array.from(usedItems),
                 skillCooldowns: skillCooldowns,
             }
         };
 
-        // 웹소켓으로 데이터 전송
         ws.send(JSON.stringify({
             type: "save_game_state",
             data: saveData
@@ -607,38 +590,37 @@ export default function GameEngineRealtime({
         return (
             <View style={styles.center}>
                 <ActivityIndicator size="large" color="#E2C044" />
-                <Text style={styles.subtitle}>LLM이 새로운 세계를 창조하는 중...</Text>
+                <Text style={[styles.subtitle, { fontSize: 14 * fontSizeMultiplier }]}>LLM이 새로운 세계를 창조하는 중...</Text>
             </View>
         );
     }
     if (error) {
         return (
             <View style={styles.center}>
-                <Text style={styles.warn}>오류 발생</Text>
-                <Text style={styles.subtitle}>{error}</Text>
+                <Text style={[styles.warn, { fontSize: 18 * fontSizeMultiplier }]}>오류 발생</Text>
+                <Text style={[styles.subtitle, { fontSize: 14 * fontSizeMultiplier }]}>{error}</Text>
                 <TouchableOpacity
                     style={styles.retryBtn}
-                    onPress={confirmReturnToRoom} // 오류 시 방으로 돌아가기
+                    onPress={confirmReturnToRoom}
                 >
-                    <Text style={styles.retryText}>대기실로 돌아가기</Text>
+                    <Text style={[styles.retryText, { fontSize: 14 * fontSizeMultiplier }]}>대기실로 돌아가기</Text>
                 </TouchableOpacity>
             </View>
         );
     }
     
-    // [수정] roundSpec과 myRole을 currentScene 기반으로 확인합니다.
     if (!roundSpec || !myRole) {
         return (
             <View style={styles.center}>
-                <Text style={styles.warn}>게임 데이터를 불러올 수 없습니다.</Text>
-                <Text style={styles.subtitle}>
+                <Text style={[styles.warn, { fontSize: 18 * fontSizeMultiplier }]}>게임 데이터를 불러올 수 없습니다.</Text>
+                <Text style={[styles.subtitle, { fontSize: 14 * fontSizeMultiplier }]}>
                     현재 씬에 대한 정보를 받지 못했거나, 당신의 역할이 지정되지 않았습니다.
                 </Text>
                 <TouchableOpacity
                     style={styles.retryBtn}
                     onPress={confirmReturnToRoom}
                 >
-                    <Text style={styles.retryText}>대기실로 돌아가기</Text>
+                    <Text style={[styles.retryText, { fontSize: 14 * fontSizeMultiplier }]}>대기실로 돌아가기</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -651,7 +633,7 @@ export default function GameEngineRealtime({
         <SafeAreaView style={styles.safeArea}>
             {showConfetti && (
                 <ConfettiCannon
-                    count={200} // 터지는 개수
+                    count={200}
                     origin={{ x: -10, y: 0 }}
                     autoStart={true}
                     fadeOut={true}
@@ -660,31 +642,34 @@ export default function GameEngineRealtime({
                 />
             )}
             <View style={styles.mainContainer}>
+                {/* 옵션 버튼 추가 */}
+                <TouchableOpacity style={styles.settingsIcon} onPress={() => setIsOptionsModalVisible(true)}>
+                    <Ionicons name="settings-outline" size={28} color="#E0E0E0" />
+                </TouchableOpacity>
+
                 <TouchableOpacity 
                     style={styles.hudIconContainer} 
                     onPress={() => {
                         setIsHudModalVisible(true);
-                        setHasNewHudInfo(false); // 모달을 열면 '새 정보' 알림을 끔
+                        setHasNewHudInfo(false);
                     }}
                 >
                     <Ionicons name="information-circle-outline" size={28} color="#E0E0E0" />
-                    {/* 새로운 정보가 있을 때 느낌표(!) 배지 표시 */}
                     {hasNewHudInfo && (
                         <View style={styles.notificationBadge}>
                             <Text style={styles.notificationText}>!</Text>
                         </View>
                     )}
                 </TouchableOpacity>
-                {/* [수정] selectedCharacter 대신 myCharacter 사용 */}
                 <View style={styles.characterPanel}>
-                    <Text style={styles.characterName}>{myCharacter.name}</Text>
+                    <Text style={[styles.characterName, { fontSize: 22 * fontSizeMultiplier }]}>{myCharacter.name}</Text>
                     <Image
                         source={myCharacter.image}
                         style={styles.characterImage}
                         resizeMode="contain"
                     />
                     {myCharacter.description && (
-                        <Text style={styles.characterDescription}>
+                        <Text style={[styles.characterDescription, { fontSize: 14 * fontSizeMultiplier }]}>
                             {myCharacter.description}
                         </Text>
                     )}
@@ -695,13 +680,13 @@ export default function GameEngineRealtime({
                    >
                        <View style={styles.collapsibleContainer}>
                             <TouchableOpacity style={styles.collapsibleHeader} onPress={() => setIsStatsVisible(!isStatsVisible)}>
-                                <Text style={styles.skillsItemsTitle}>능력치</Text>
+                                <Text style={[styles.skillsItemsTitle, { fontSize: 16 * fontSizeMultiplier }]}>능력치</Text>
                                 <Ionicons name={isStatsVisible ? "chevron-up" : "chevron-down"} size={20} color="#E0E0E0" />
                             </TouchableOpacity>
                             {isStatsVisible && (
                                 <View style={styles.collapsibleContent}>
                                     {Object.entries(myCharacter.stats).map(([stat, value]) => (
-                                        <Text key={stat} style={styles.statText}>
+                                        <Text key={stat} style={[styles.statText, { fontSize: 14 * fontSizeMultiplier }]}>
                                             {stat}: <Text style={{ color: "#E2C044", fontWeight: "bold" }}>{value}</Text>
                                         </Text>
                                     ))}
@@ -709,11 +694,10 @@ export default function GameEngineRealtime({
                             )}
                         </View>
 
-                        {/* ✨ 스킬 토글 섹션 */}
                         {myCharacter.skills && myCharacter.skills.length > 0 && (
                             <View style={styles.collapsibleContainer}>
                                 <TouchableOpacity style={styles.collapsibleHeader} onPress={() => setIsSkillsVisible(!isSkillsVisible)}>
-                                    <Text style={styles.skillsItemsTitle}>스킬</Text>
+                                    <Text style={[styles.skillsItemsTitle, { fontSize: 16 * fontSizeMultiplier }]}>스킬</Text>
                                     <Ionicons name={isSkillsVisible ? "chevron-up" : "chevron-down"} size={20} color="#E0E0E0" />
                                 </TouchableOpacity>
                                 {isSkillsVisible && (
@@ -723,15 +707,15 @@ export default function GameEngineRealtime({
                                             return (
                                                 <View key={skill.name} style={styles.skillItem}>
                                                     <View style={{ flex: 1 }}>
-                                                        <Text style={styles.skillItemName}>- {skill.name}</Text>
-                                                        <Text style={styles.skillItemDesc}>{skill.description}</Text>
+                                                        <Text style={[styles.skillItemName, { fontSize: 14 * fontSizeMultiplier }]}>- {skill.name}</Text>
+                                                        <Text style={[styles.skillItemDesc, { fontSize: 13 * fontSizeMultiplier }]}>{skill.description}</Text>
                                                     </View>
                                                     <TouchableOpacity 
                                                         style={[styles.useButton, (isOnCooldown || pendingUsage) && styles.disabledUseButton]}
                                                         disabled={isOnCooldown || !!pendingUsage}
                                                         onPress={() => handleUseSkill(skill)}
                                                     >
-                                                        <Text style={styles.useButtonText}>
+                                                        <Text style={[styles.useButtonText, { fontSize: 12 * fontSizeMultiplier }]}>
                                                             {isOnCooldown 
                                                                 ? `대기중(${skillCooldowns[skill.name] - (currentScene?.index ?? 0)}턴)` 
                                                                 : "사용"}
@@ -745,11 +729,10 @@ export default function GameEngineRealtime({
                             </View>
                         )}
 
-                        {/* ✨ 아이템 토글 섹션 */}
                         {myCharacter.items && myCharacter.items.length > 0 && (
                             <View style={styles.collapsibleContainer}>
                                 <TouchableOpacity style={styles.collapsibleHeader} onPress={() => setIsItemsVisible(!isItemsVisible)}>
-                                    <Text style={styles.skillsItemsTitle}>아이템</Text>
+                                    <Text style={[styles.skillsItemsTitle, { fontSize: 16 * fontSizeMultiplier }]}>아이템</Text>
                                     <Ionicons name={isItemsVisible ? "chevron-up" : "chevron-down"} size={20} color="#E0E0E0" />
                                 </TouchableOpacity>
                                 {isItemsVisible && (
@@ -759,15 +742,15 @@ export default function GameEngineRealtime({
                                             return (
                                                 <View key={item.name} style={styles.skillItem}>
                                                     <View style={{ flex: 1 }}>
-                                                        <Text style={styles.skillItemName}>- {item.name}</Text>
-                                                        <Text style={styles.skillItemDesc}>{item.description}</Text>
+                                                        <Text style={[styles.skillItemName, { fontSize: 14 * fontSizeMultiplier }]}>- {item.name}</Text>
+                                                        <Text style={[styles.skillItemDesc, { fontSize: 13 * fontSizeMultiplier }]}>{item.description}</Text>
                                                     </View>
                                                     <TouchableOpacity 
                                                         style={[styles.useButton, (isUsed || pendingUsage) && styles.disabledUseButton]}
                                                         disabled={isUsed || !!pendingUsage}
                                                         onPress={() => handleUseItem(item)}
                                                     >
-                                                        <Text style={styles.useButtonText}>{isUsed ? "사용완료" : "사용"}</Text>
+                                                        <Text style={[styles.useButtonText, { fontSize: 12 * fontSizeMultiplier }]}>{isUsed ? "사용완료" : "사용"}</Text>
                                                     </TouchableOpacity>
                                                 </View>
                                             );
@@ -782,14 +765,14 @@ export default function GameEngineRealtime({
                 <View style={styles.gamePanel}>
                     {phase === "choice" && (
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
-                            {currentScene && <Text style={styles.turnCounter}>- {currentScene.index + 1}번째 이야기 -</Text>}
-                            <Text style={styles.title}>{title}</Text>
+                            {currentScene && <Text style={[styles.turnCounter, { fontSize: 16 * fontSizeMultiplier }]}>- {currentScene.index + 1}번째 이야기 -</Text>}
+                            <Text style={[styles.title, { fontSize: 26 * fontSizeMultiplier }]}>{title}</Text>
                             <ScrollView style={styles.descriptionBox} showsVerticalScrollIndicator={false}>
-                                <Text style={styles.descriptionText}>
+                                <Text style={[styles.descriptionText, { fontSize: 15 * fontSizeMultiplier }]}>
                                     {roundSpec.description}
                                 </Text>
                             </ScrollView>
-                            <Text style={styles.subtitle}>
+                            <Text style={[styles.subtitle, { fontSize: 14 * fontSizeMultiplier }]}>
                                 {myCharacter.name}
                             </Text>
 
@@ -806,14 +789,13 @@ export default function GameEngineRealtime({
                                     ]}
                                 />
                             </View>
-                            <Text style={styles.timerText}>남은 시간: {remaining}s</Text>
+                            <Text style={[styles.timerText, { fontSize: 12 * fontSizeMultiplier }]}>남은 시간: {remaining}s</Text>
 
-                            {/* [추가] 다른 참여자 선택 현황 UI */}
                             {Object.keys(aiChoices).length > 0 && (
                                 <View style={styles.aiStatusBox}>
-                                    <Text style={styles.aiStatusTitle}>다른 참여자 선택 현황:</Text>
+                                    <Text style={[styles.aiStatusTitle, { fontSize: 14 * fontSizeMultiplier }]}>다른 참여자 선택 현황:</Text>
                                     {Object.entries(aiChoices).map(([role]) => (
-                                        <Text key={role} style={styles.aiStatusText}>- {role}: 선택 완료 ✅</Text>
+                                        <Text key={role} style={[styles.aiStatusText, { fontSize: 12 * fontSizeMultiplier }]}>- {role}: 선택 완료 ✅</Text>
                                     ))}
                                 </View>
                             )}
@@ -829,8 +811,8 @@ export default function GameEngineRealtime({
                                         disabled={!!myChoiceId || submitting}
                                         onPress={() => submitChoice(c.id)}
                                     >
-                                        <Text style={styles.choiceText}>{c.text}</Text>
-                                        <Text style={styles.hint}>
+                                        <Text style={[styles.choiceText, { fontSize: 16 * fontSizeMultiplier }]}>{c.text}</Text>
+                                        <Text style={[styles.hint, { fontSize: 12 * fontSizeMultiplier }]}>
                                             적용 스탯: {statMapping[c.appliedStat as EnglishStat] ?? c.appliedStat} (보정: {c.modifier >= 0 ? `+${c.modifier}` : c.modifier})
                                         </Text>
                                     </TouchableOpacity>
@@ -839,7 +821,7 @@ export default function GameEngineRealtime({
 
                             {!myChoiceId && (
                                 <TouchableOpacity style={styles.secondary} onPress={autoPickAndSubmit}>
-                                    <Text style={styles.secondaryText}>아무거나 고르기(랜덤)</Text>
+                                    <Text style={[styles.secondaryText, { fontSize: 14 * fontSizeMultiplier }]}>아무거나 고르기(랜덤)</Text>
                                 </TouchableOpacity>
                             )}
                         </Animated.View>
@@ -848,9 +830,8 @@ export default function GameEngineRealtime({
                     {phase === "sync" && (
                         <Animated.View style={[styles.center, { opacity: phaseAnim }]}>
                             <ActivityIndicator size="large" color="#E2C044"/>
-                            <Text style={styles.subtitle}>다른 플레이어의 행동을 기다리는 중...</Text>
-                            {/* ✅ [추가] 대기 현황 텍스트 */}
-                            <Text style={styles.subtitle}>
+                            <Text style={[styles.subtitle, { fontSize: 14 * fontSizeMultiplier }]}>다른 플레이어의 행동을 기다리는 중...</Text>
+                            <Text style={[styles.subtitle, { fontSize: 14 * fontSizeMultiplier }]}>
                                 ({turnWaitingState.submitted_users.length}/{turnWaitingState.total_users}명 제출 완료)
                             </Text>
                         </Animated.View>
@@ -858,7 +839,7 @@ export default function GameEngineRealtime({
 
                     {phase === "dice_roll" && (
                         <Animated.View style={[styles.center, { opacity: phaseAnim }]}>
-                            <Text style={styles.title}>주사위 판정</Text>
+                            <Text style={[styles.title, { fontSize: 26 * fontSizeMultiplier }]}>주사위 판정</Text>
                             <View style={{ height: 16 }} />
                             {isRolling ? (
                                 <Animated.View style={{ transform: [{ rotate: spin }], marginBottom: 20 }}>
@@ -866,7 +847,7 @@ export default function GameEngineRealtime({
                                 </Animated.View>
                             ) : (
                                 <TouchableOpacity style={styles.primary} onPress={startDiceRoll}>
-                                    <Text style={styles.primaryText}>주사위 굴리기</Text>
+                                    <Text style={[styles.primaryText, { fontSize: 16 * fontSizeMultiplier }]}>주사위 굴리기</Text>
                                 </TouchableOpacity>
                             )}
                         </Animated.View>
@@ -874,9 +855,9 @@ export default function GameEngineRealtime({
 
                     {phase === "cinematic" && (
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
-                            {currentScene && <Text style={styles.turnCounter}>- {currentScene.index + 1}번째 이야기 -</Text>}
-                            <Text style={styles.title}>{title}</Text>
-                            {diceResult && <Text style={styles.resultText}>{diceResult}</Text>}
+                            {currentScene && <Text style={[styles.turnCounter, { fontSize: 16 * fontSizeMultiplier }]}>- {currentScene.index + 1}번째 이야기 -</Text>}
+                            <Text style={[styles.title, { fontSize: 26 * fontSizeMultiplier }]}>{title}</Text>
+                            {diceResult && <Text style={[styles.resultText, { fontSize: 18 * fontSizeMultiplier }]}>{diceResult}</Text>}
                             {sceneImageUrl ? (
                             <View style={styles.sceneImageWrap}>
                                 <Image
@@ -890,12 +871,12 @@ export default function GameEngineRealtime({
                                 {imgLoading && <ActivityIndicator style={styles.imgSpinner} />}
 
                                 <ScrollView style={styles.cinematicBox} showsVerticalScrollIndicator={false}>
-                                    <Text style={styles.cinematicText}>{cinematicText}</Text>
+                                    <Text style={[styles.cinematicText, { fontSize: 15 * fontSizeMultiplier }]}>{cinematicText}</Text>
                                 </ScrollView>
                             </View>
                             ) : (
                                 <ScrollView style={styles.cinematicBox_noImage} showsVerticalScrollIndicator={false}>
-                                    <Text style={styles.cinematicText}>{cinematicText}</Text>
+                                    <Text style={[styles.cinematicText, { fontSize: 15 * fontSizeMultiplier }]}>{cinematicText}</Text>
                                 </ScrollView>
                             )}
 
@@ -903,30 +884,28 @@ export default function GameEngineRealtime({
                                 style={styles.secondary}
                                 onPress={() => setIsResultsModalVisible(true)}
                             >
-                                <Text style={styles.secondaryText}>결과 상세 보기</Text>
+                                <Text style={[styles.secondaryText, { fontSize: 14 * fontSizeMultiplier }]}>결과 상세 보기</Text>
                             </TouchableOpacity>
                             
                             <TouchableOpacity
-                                style={styles.saveButton} // 새로운 스타일 적용 필요
+                                style={styles.saveButton}
                                 onPress={handleSaveGame}
                             >
-                                <Text style={styles.primaryText}>지금까지 내용 저장하기</Text>
+                                <Text style={[styles.primaryText, { fontSize: 16 * fontSizeMultiplier }]}>지금까지 내용 저장하기</Text>
                             </TouchableOpacity>
 
-                            {/* [수정] 다음 씬으로 넘어가는 버튼 */}
                             <TouchableOpacity
                                 style={[styles.primary, (amIReadyForNext || isGeneratingNextScene) && styles.disabledButton]}
                                 onPress={handleReadyForNextScene}
                                 disabled={amIReadyForNext || isGeneratingNextScene}
                             >
-                                <Text style={styles.primaryText}>
+                                <Text style={[styles.primaryText, { fontSize: 16 * fontSizeMultiplier }]}>
                                     {amIReadyForNext ? "다른 플레이어 대기 중..." : "다음 이야기 준비 완료"}
                                 </Text>
                             </TouchableOpacity>
 
-                            {/* ✅ [추가] 현재 준비 상태를 보여주는 UI */}
                             {isGeneratingNextScene && (
-                                <Text style={styles.subtitle}>
+                                <Text style={[styles.subtitle, { fontSize: 14 * fontSizeMultiplier }]}>
                                     ({nextSceneReadyState.ready_users.length}/{nextSceneReadyState.total_users}명 준비 완료)
                                 </Text>
                             )}
@@ -935,12 +914,10 @@ export default function GameEngineRealtime({
 
                     {phase === "end" && (
                         <Animated.View style={[styles.center, { opacity: phaseAnim }]}>
-                            <Text style={styles.title}>이야기의 끝</Text>
-                            {/* 최종 서사(내레이션)를 보여주는 부분 */}
+                            <Text style={[styles.title, { fontSize: 26 * fontSizeMultiplier }]}>이야기의 끝</Text>
                             <ScrollView style={[styles.cinematicBox_noImage, { maxHeight: 300, marginBottom: 20 }]} showsVerticalScrollIndicator={false}>
-                                <Text style={styles.cinematicText}>{cinematicText}</Text>
+                                <Text style={[styles.cinematicText, { fontSize: 15 * fontSizeMultiplier }]}>{cinematicText}</Text>
                             </ScrollView>
-                            {/* 최종 이미지가 있다면 보여주는 부분 */}
                             {sceneImageUrl ? (
                                 <View style={[styles.sceneImageWrap, { width: "50%"}]}>
                                     <Image
@@ -949,18 +926,17 @@ export default function GameEngineRealtime({
                                         resizeMode="cover"
                                     />
                                 <ScrollView style={styles.cinematicBox} showsVerticalScrollIndicator={false}>
-                                        <Text style={styles.cinematicText}>{cinematicText}</Text>
+                                        <Text style={[styles.cinematicText, { fontSize: 15 * fontSizeMultiplier }]}>{cinematicText}</Text>
                                     </ScrollView>
                                 </View>
                             ) : (
-                                // 이미지가 없을 경우: 텍스트 박스만 표시
                                 <ScrollView style={[styles.cinematicBox_noImage, { maxHeight: 300, marginBottom: 20 }]}>
-                                    <Text style={styles.cinematicText}>{cinematicText}</Text>
+                                    <Text style={[styles.cinematicText, { fontSize: 15 * fontSizeMultiplier }]}>{cinematicText}</Text>
                                 </ScrollView>
                             )}
-                            <Text style={styles.subtitle}>수고하셨습니다!</Text>
+                            <Text style={[styles.subtitle, { fontSize: 14 * fontSizeMultiplier }]}>수고하셨습니다!</Text>
                             <TouchableOpacity style={styles.primary} onPress={confirmReturnToRoom}>
-                                <Text style={styles.primaryText}>대기실로 돌아가기</Text>
+                                <Text style={[styles.primaryText, { fontSize: 16 * fontSizeMultiplier }]}>대기실로 돌아가기</Text>
                             </TouchableOpacity>
                         </Animated.View>
                     )}
@@ -979,8 +955,8 @@ export default function GameEngineRealtime({
             >
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>방으로 돌아가기</Text>
-                        <Text style={styles.modalMessage}>
+                        <Text style={[styles.modalTitle, { fontSize: 22 * fontSizeMultiplier }]}>방으로 돌아가기</Text>
+                        <Text style={[styles.modalMessage, { fontSize: 16 * fontSizeMultiplier }]}>
                             정말로 게임을 중단하고 방으로 돌아가시겠습니까?{"\n"}
                             현재 게임 상태는 초기화됩니다.
                         </Text>
@@ -989,13 +965,13 @@ export default function GameEngineRealtime({
                                 style={[styles.modalButton, styles.cancelButton]}
                                 onPress={() => setIsModalVisible(false)}
                             >
-                                <Text style={styles.modalButtonText}>취소</Text>
+                                <Text style={[styles.modalButtonText, { fontSize: 16 * fontSizeMultiplier }]}>취소</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.modalButton, styles.confirmButton]}
                                 onPress={confirmReturnToRoom}
                             >
-                                <Text style={styles.modalButtonText}>확인</Text>
+                                <Text style={[styles.modalButtonText, { fontSize: 16 * fontSizeMultiplier }]}>확인</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1010,7 +986,7 @@ export default function GameEngineRealtime({
             >
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>라운드 결과 요약</Text>
+                        <Text style={[styles.modalTitle, { fontSize: 22 * fontSizeMultiplier }]}>라운드 결과 요약</Text>
                         <ScrollView 
                             style={styles.resultsScrollView}
                             showsVerticalScrollIndicator={false} 
@@ -1020,16 +996,16 @@ export default function GameEngineRealtime({
                                 const appliedStatKr = statMapping[result.appliedStat as EnglishStat] ?? result.appliedStat;
                                 return (
                                     <View key={index} style={styles.resultItem}>
-                                        <Text style={styles.resultRole}>
+                                        <Text style={[styles.resultRole, { fontSize: 18 * fontSizeMultiplier }]}>
                                             {result.characterName} {result.characterName === myCharacter.name ? '(나)' : ''}
                                         </Text>
-                                        <Text style={styles.resultDetails}>
+                                        <Text style={[styles.resultDetails, { fontSize: 14 * fontSizeMultiplier }]}>
                                             - 선택: "{choiceText}"
                                         </Text>
-                                        <Text style={styles.resultDetails}>
+                                        <Text style={[styles.resultDetails, { fontSize: 14 * fontSizeMultiplier }]}>
                                             - 판정: d20({result.dice}) + {appliedStatKr}({result.statValue}) + 보정({result.modifier}) = 총합 {result.total}
                                         </Text>
-                                        <Text style={[styles.resultGrade, { color: getGradeColor(result.grade) }]}>
+                                        <Text style={[styles.resultGrade, { color: getGradeColor(result.grade), fontSize: 16 * fontSizeMultiplier }]}>
                                             ⭐ 등급: {getGradeText(result.grade)}
                                         </Text>
                                     </View>
@@ -1040,7 +1016,7 @@ export default function GameEngineRealtime({
                             style={styles.modalCloseButton}
                             onPress={() => setIsResultsModalVisible(false)}
                         >
-                            <Text style={styles.modalButtonText}>닫기</Text>
+                            <Text style={[styles.modalButtonText, { fontSize: 16 * fontSizeMultiplier }]}>닫기</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -1053,13 +1029,12 @@ export default function GameEngineRealtime({
                 onRequestClose={() => setIsHudModalVisible(false)}
             >
                 <View style={styles.modalContainer}>
-                    {/* ShariHud 컴포넌트를 모달 내부에 렌더링 */}
                     <ShariHud
                         world={worldState}
                         party={partyState}
                         shari={shariBlockData}
                         allCharacters={allCharacters}
-                        onClose={() => setIsHudModalVisible(false)} // 닫기 버튼용 함수 전달
+                        onClose={() => setIsHudModalVisible(false)}
                     />
                 </View>
             </Modal>
@@ -1072,19 +1047,25 @@ export default function GameEngineRealtime({
             >
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>알림</Text>
-                        <Text style={styles.modalMessage}>
+                        <Text style={[styles.modalTitle, { fontSize: 22 * fontSizeMultiplier }]}>알림</Text>
+                        <Text style={[styles.modalMessage, { fontSize: 16 * fontSizeMultiplier }]}>
                             {saveModalMessage}
                         </Text>
                         <TouchableOpacity
-                            style={styles.modalCloseButton} // 기존 닫기 버튼 스타일 재사용
+                            style={styles.modalCloseButton}
                             onPress={() => setIsSaveModalVisible(false)}
                         >
-                            <Text style={styles.modalButtonText}>확인</Text>
+                            <Text style={[styles.modalButtonText, { fontSize: 16 * fontSizeMultiplier }]}>확인</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
+
+            {/* 옵션 모달 렌더링 */}
+            <OptionsModal
+                visible={isOptionsModalVisible}
+                onClose={() => setIsOptionsModalVisible(false)}
+            />
         </SafeAreaView>
     );
 }
@@ -1100,6 +1081,20 @@ const styles = StyleSheet.create({
         padding: 20,
         gap: 20,
     },
+    settingsIcon: { // 설정 아이콘 스타일
+        position: 'absolute',
+        top: 145, // <-- 위치 수정 (90과 145의 중간)
+        right: 20,
+        zIndex: 100,
+        width: 44,
+        height: 44,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(44, 52, 78, 0.8)',
+        borderRadius: 22,
+        borderWidth: 1,
+        borderColor: '#444',
+    },
     center: {
         flex: 1,
         alignItems: "center",
@@ -1107,14 +1102,14 @@ const styles = StyleSheet.create({
     },
     warn: {
         color: "#ff6b6b",
-        fontSize: 18,
+        /* fontSize: 18, */
         fontWeight: "bold",
         textAlign: "center",
         fontFamily: 'neodgm',
     },
     subtitle: {
         color: "#D4D4D4",
-        fontSize: 14,
+        /* fontSize: 14, */
         marginTop: 4,
         textAlign: "center",
         fontFamily: 'neodgm',
@@ -1136,72 +1131,44 @@ const styles = StyleSheet.create({
         height: 180,
     },
     characterName: {
-        fontSize: 22,
+        /* fontSize: 22, */
         fontWeight: "bold",
         color: "#E0E0E0",
         marginBottom: 8,
         fontFamily: 'neodgm',
     },
     characterDescription: {
-        fontSize: 14,
+        /* fontSize: 14, */
         color: "#A0A0A0",
         textAlign: "center",
         marginBottom: 10,
         lineHeight: 20,
         fontFamily: 'neodgm',
     },
-    roleText: {
-        fontSize: 16,
-        color: "#A0A0A0",
-        fontStyle: "italic",
-        marginBottom: 10,
-    },
-    statsBox: {
-        width: "100%",
-        marginTop: 15,
-        padding: 15,
-        backgroundColor: "#0B1021",
-        borderRadius: 12,
-    },
-    statsTitle: {
-        fontSize: 16,
-        fontWeight: "bold",
-        color: "#E0E0E0",
-        marginBottom: 8,
-        textAlign: "center",
-        fontFamily: 'neodgm',
-    },
     statText: {
         color: "#D4D4D4",
-        fontSize: 14,
+        /* fontSize: 14, */
         lineHeight: 22,
         fontFamily: 'neodgm',
     },
-    skillsItemsBox: {
-        width: "100%",
-        marginBottom: 15,
-        padding: 15,
-        backgroundColor: "#0B1021",
-        borderRadius: 12,
-    },
     skillItem: {
         marginBottom: 12,
-        flexDirection: 'row', // 가로 정렬
-        alignItems: 'center', // 세로 중앙 정렬
+        flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'space-between',
     },
     skillItemName: {
-        color: "#E2C044", // 노란색으로 강조
+        color: "#E2C044",
         fontWeight: "bold",
-        fontSize: 14,
+        /* fontSize: 14, */
         marginBottom: 4,
         fontFamily: 'neodgm',
     },
     skillItemDesc: {
-        color: "#A0A0A0", // 회색으로 설명 표시
-        fontSize: 13,
+        color: "#A0A0A0",
+        /* fontSize: 13, */
         lineHeight: 18,
-        paddingLeft: 8, // 이름과 맞추기 위해 살짝 들여쓰기
+        paddingLeft: 8,
         fontFamily: 'neodgm',
     },
     useButton: {
@@ -1217,7 +1184,7 @@ const styles = StyleSheet.create({
     useButtonText: {
         color: '#FFFFFF',
         fontWeight: 'bold',
-        fontSize: 12,
+        /* fontSize: 12, */
         fontFamily: 'neodgm',
     },
     gamePanel: {
@@ -1236,7 +1203,7 @@ const styles = StyleSheet.create({
     },
     title: {
         color: "#E0E0E0",
-        fontSize: 26,
+        /* fontSize: 26, */
         fontWeight: "bold",
         marginBottom: 8,
         textAlign: "center",
@@ -1255,7 +1222,7 @@ const styles = StyleSheet.create({
     },
     timerText: {
         color: "#888",
-        fontSize: 12,
+        /* fontSize: 12, */
         textAlign: "center",
         marginTop: 4,
         fontFamily: 'neodgm',
@@ -1274,14 +1241,14 @@ const styles = StyleSheet.create({
     },
     choiceText: {
         color: "#FFFFFF", 
-        fontSize: 16,
+        /* fontSize: 16, */
         fontWeight: "bold",
         fontFamily: 'neodgm',
     },
     hint: {
         color: "#A0A0E0",
         marginTop: 6,
-        fontSize: 12,
+        /* fontSize: 12, */
         fontFamily: 'neodgm',
     },
     secondary: {
@@ -1295,6 +1262,7 @@ const styles = StyleSheet.create({
     secondaryText: {
         color: "#ddd",
         fontWeight: "bold",
+        /* fontSize: 14, */
         fontFamily: 'neodgm',
     },
     primary: {
@@ -1307,31 +1275,31 @@ const styles = StyleSheet.create({
     primaryText: {
         color: "#fff",
         fontWeight: "bold",
-        fontSize: 16,
+        /* fontSize: 16, */
         fontFamily: 'neodgm',
     },
     disabledButton: {
         backgroundColor: '#5A5A5A',
     },
-    saveButton: { // [추가] 저장 버튼 스타일
+    saveButton: {
         marginTop: 12,
-        backgroundColor: "#1D4ED8", // 다른 색상으로 구분
+        backgroundColor: "#1D4ED8",
         paddingVertical: 14,
         borderRadius: 10,
         alignItems: "center",
     },
     cinematicBox: {
-        position: 'absolute',      // ✅ 이미지 위에 띄우기 위해 절대 위치로 설정
-        bottom: 0,                 // ✅ 이미지 하단에 배치
+        position: 'absolute',
+        bottom: 0,
         left: 0,
         right: 0,
-        maxHeight: '40%',          // ✅ 자막 박스의 최대 높이를 이미지의 40%로 제한
-        backgroundColor: 'rgba(0, 0, 0, 0.7)', // ✅ 반투명한 배경으로 자막 가독성 확보
+        maxHeight: '40%',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
         padding: 16,
-        borderTopLeftRadius: 12,   // ✅ 위쪽 모서리만 둥글게 처리하여 이미지와 자연스럽게 연결
+        borderTopLeftRadius: 12,
         borderTopRightRadius: 12,
     },
-    cinematicBox_noImage: {        // ✅ 이미지가 없을 때 사용할 기존 스타일
+    cinematicBox_noImage: {
         flex: 1,
         marginTop: 16,
         backgroundColor: "#222736",
@@ -1342,7 +1310,7 @@ const styles = StyleSheet.create({
     },
     cinematicText: {
         color: "#E0E0E0",
-        fontSize: 15,
+        /* fontSize: 15, */
         lineHeight: 22,
         fontFamily: 'neodgm',
     },
@@ -1356,6 +1324,7 @@ const styles = StyleSheet.create({
     retryText: {
         color: "#fff",
         fontWeight: "bold",
+        /* fontSize: 14, */
         fontFamily: 'neodgm',
     },
     aiStatusBox: {
@@ -1368,20 +1337,20 @@ const styles = StyleSheet.create({
     },
     aiStatusTitle: {
         color: "#4CAF50",
-        fontSize: 14,
+        /* fontSize: 14, */
         fontWeight: "bold",
         marginBottom: 4,
         fontFamily: 'neodgm',
     },
     aiStatusText: {
         color: "#4CAF50",
-        fontSize: 12,
+        /* fontSize: 12, */
         marginTop: 2,
         fontFamily: 'neodgm',
     },
     resultText: {
         color: "#E0E0E0",
-        fontSize: 18,
+        /* fontSize: 18, */
         fontWeight: "bold",
         textAlign: "center",
         marginBottom: 20,
@@ -1389,7 +1358,7 @@ const styles = StyleSheet.create({
     },
     returnButton: {
         position: 'absolute',
-        top: 145,
+        top: 200,
         right: 20,
         zIndex: 9999,
         backgroundColor: 'rgba(44, 52, 78, 0.8)',
@@ -1423,14 +1392,14 @@ const styles = StyleSheet.create({
         borderColor: '#444',
     },
     modalTitle: {
-        fontSize: 22,
+        /* fontSize: 22, */
         fontWeight: 'bold',
         color: '#E0E0E0',
         marginBottom: 15,
         fontFamily: 'neodgm',
     },
     modalMessage: {
-        fontSize: 16,
+        /* fontSize: 16, */
         color: '#D4D4D4',
         textAlign: 'center',
         marginBottom: 25,
@@ -1457,7 +1426,7 @@ const styles = StyleSheet.create({
     },
     modalButtonText: {
         color: '#FFFFFF',
-        fontSize: 16,
+        /* fontSize: 16, */
         fontWeight: 'bold',
         fontFamily: 'neodgm',
     },
@@ -1474,19 +1443,19 @@ const styles = StyleSheet.create({
     },
     resultRole: {
         color: '#E2C044',
-        fontSize: 18,
+        /* fontSize: 18, */
         fontWeight: 'bold',
         marginBottom: 5,
         fontFamily: 'neodgm',
     },
     resultDetails: {
         color: '#D4D4D4',
-        fontSize: 14,
+        /* fontSize: 14, */
         lineHeight: 20,
         fontFamily: 'neodgm',
     },
     resultGrade: {
-        fontSize: 16,
+        /* fontSize: 16, */
         fontWeight: 'bold',
         marginTop: 8,
         fontFamily: 'neodgm',
@@ -1500,7 +1469,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     descriptionBox: {
-        maxHeight: 100, // 설명이 너무 길 경우를 대비해 최대 높이 설정
+        maxHeight: 100,
         marginVertical: 12,
         padding: 12,
         backgroundColor: "rgba(0,0,0,0.2)",
@@ -1508,7 +1477,7 @@ const styles = StyleSheet.create({
     },
     descriptionText: {
         color: '#D4D4D4',
-        fontSize: 15,
+        /* fontSize: 15, */
         lineHeight: 22,
         fontFamily: 'neodgm',
     },
@@ -1531,7 +1500,7 @@ const styles = StyleSheet.create({
         borderTopColor: '#444',
     },
     skillsItemsTitle: {
-        fontSize: 16,
+        /* fontSize: 16, */
         fontWeight: "bold",
         color: "#E0E0E0",
         fontFamily: 'neodgm',
@@ -1570,7 +1539,7 @@ const styles = StyleSheet.create({
     sceneImageWrap: {
         width: "40%",
         alignSelf: 'center',
-        aspectRatio: 1,      // 1024x1024 기본 가정
+        aspectRatio: 1,
         borderRadius: 12,
         overflow: "hidden",
         marginTop: 12,
@@ -1591,7 +1560,7 @@ const styles = StyleSheet.create({
     },
     turnCounter: {
         color: '#A0A0E0',
-        fontSize: 16,
+        /* fontSize: 16, */
         textAlign: 'center',
         marginBottom: 8,
         fontFamily: 'neodgm',
