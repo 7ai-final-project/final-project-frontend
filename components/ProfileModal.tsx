@@ -107,7 +107,7 @@ const AchievementSection: React.FC<{
           style={[styles.achievementTabButton, activeAchievementTab === 'story' && styles.activeAchievementTabButton]}
           onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setActiveAchievementTab('story'); }}
         >
-          <Text style={styles.achievementTabButtonText}>스토리모드</Text>
+          <Text style={styles.achievementTabButtonText}>스토리 모드</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.achievementTabButton, activeAchievementTab === 'single' && styles.activeAchievementTabButton]}
@@ -277,7 +277,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user, onU
 
   // --- 렌더링 ---
   return (
-    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
+    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
       {/* 아래 View를 Pressable로 변경하고 onPress 속성을 추가합니다. */}
       <Pressable style={styles.centeredView} onPress={onClose}>
         {/* 이 TouchableOpacity는 내용 클릭 시 창이 닫히는 것을 막아주므로 그대로 둡니다. */}
@@ -306,7 +306,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, user, onU
 
 // --- 스타일 정의 ---
 const styles = StyleSheet.create({
-  centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.7)', },
+  centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)', },
   modalView: { width: '60%', height: '70%', maxWidth: 900, maxHeight: 600, backgroundColor: '#2C2B29', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5, borderWidth: 2, borderColor: '#F4E4BC', },
   modalViewMobile: { width: '95%', height: '85%', padding: 10, },
   closeButton: { position: 'absolute', top: 15, right: 15, zIndex: 10, },
