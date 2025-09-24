@@ -790,7 +790,7 @@ export default function GameEngineRealtime({
                                 </Text>
                             </ScrollView>
                             <Text style={styles.subtitle}>
-                                {myCharacter.name} — {myRole}
+                                {myCharacter.name}
                             </Text>
 
                             <View style={styles.timerContainer}>

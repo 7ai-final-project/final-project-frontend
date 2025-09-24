@@ -14,7 +14,7 @@ import {
 import { Audio } from "expo-av";
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
-import { router, useFocusEffect } from 'expo-router'; // This part is correct
+import { router, useFocusEffect } from 'expo-router';
 import {
   fetchScenarios,
   fetchDifficulties,
@@ -25,6 +25,7 @@ import {
   checkSingleGameSession,
 } from '../../../services/api';
 import { useSettings } from '../../../components/context/SettingsContext';
+import OptionsModal from "../../../components/OptionsModal";
 
 // --- 인터페이스 정의 ---
 interface Scenario {
@@ -91,6 +92,7 @@ export default function GameStarterScreen() {
     'neodgm': require('../../../assets/fonts/neodgm.ttf'),
   });
 
+  const [optionsModalVisible, setOptionsModalVisible] = useState(false);
   const [isNotificationModalVisible, setNotificationModalVisible] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState({ title: '', body: '' });
 
@@ -388,6 +390,9 @@ export default function GameStarterScreen() {
       <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
         <Ionicons name="home" size={24} color={COLORS.subText} />
       </TouchableOpacity>
+      <TouchableOpacity style={styles.settingsButton} onPress={() => setOptionsModalVisible(true)}>
+        <Ionicons name="settings-sharp" size={24} color={COLORS.subText} />
+      </TouchableOpacity>
       <ImageBackground
         source={currentBackgroundImage}
         style={styles.backgroundImage}
@@ -536,6 +541,10 @@ export default function GameStarterScreen() {
           </View>
         </View>
       </Modal>
+      <OptionsModal
+        visible={optionsModalVisible}
+        onClose={() => setOptionsModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -573,6 +582,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 50,
     left: 20,
+    zIndex: 10,
+    padding: 10,
+  },
+  settingsButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
     zIndex: 10,
     padding: 10,
   },

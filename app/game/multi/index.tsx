@@ -9,6 +9,7 @@ import CreateRoomScreen from './room/create_room';
 import { Audio } from "expo-av";
 import { useFonts } from 'expo-font';
 import { useSettings } from '../../../components/context/SettingsContext';
+import OptionsModal from "../../../components/OptionsModal";
 
 // Android에서 LayoutAnimation을 사용하기 위한 설정
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -42,6 +43,7 @@ export default function MultiModeLobby() {
   const [showAvailableOnly, setShowAvailableOnly] = useState(false);
   const [isConfirmModalVisible, setIsConfirmModalVisible] = useState(false);
   const [roomToDelete, setRoomToDelete] = useState<number | null>(null);
+  const [optionsModalVisible, setOptionsModalVisible] = useState(false);
 
   const { isBgmOn } = useSettings();
   const musicRef = useRef<Audio.Sound | null>(null);
@@ -256,9 +258,15 @@ export default function MultiModeLobby() {
           <Ionicons name="arrow-back" size={32} color="#61dafb" />
         </TouchableOpacity>
         <Text style={styles.header}>멀티 모드 로비</Text>
-        <TouchableOpacity style={styles.headerIcon} onPress={() => setCreateRoomModalVisible(true)}>
-          <Ionicons name="add-circle" size={32} color="#61dafb" />
-        </TouchableOpacity>
+        {/* 오른쪽 아이콘들을 View로 묶습니다. */}
+        <View style={styles.headerRightIcons}>
+          <TouchableOpacity style={styles.headerIcon} onPress={() => setCreateRoomModalVisible(true)}>
+            <Ionicons name="add-circle" size={32} color="#61dafb" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIcon} onPress={() => setOptionsModalVisible(true)}>
+            <Ionicons name="settings-sharp" size={28} color="#E2C044" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -315,6 +323,10 @@ export default function MultiModeLobby() {
           </View>
         </View>
       </Modal>
+      <OptionsModal
+        visible={optionsModalVisible}
+        onClose={() => setOptionsModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -323,12 +335,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0B1021", paddingTop: 20 },
   headerContainer: { 
     flexDirection: "row", 
-    justifyContent: "space-between",
     alignItems: "center", 
     paddingHorizontal: 20, 
     marginBottom: 10 
   },
-  header: { fontSize: 28, fontWeight: "bold", color: "#E2C044", fontFamily: 'neodgm' },
+  header: { 
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 28, 
+    fontWeight: "bold", 
+    color: "#E2C044", 
+    fontFamily: 'neodgm' 
+  },
   headerIcon: {
     padding: 5,
   },
@@ -423,5 +441,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'neodgm',
     fontWeight: 'bold',
+  },
+  headerRightIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
   },
 });
