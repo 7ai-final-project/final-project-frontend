@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Settings } from "lucide-react";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Image, useWindowDimensions, LayoutAnimation, UIManager, Platform, ScrollView, Modal } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import { Audio } from "expo-av";
 import api from "../../services/api";
 import OptionsModal from "../../components/OptionsModal";
 import { useSettings } from "../../components/context/SettingsContext";
@@ -55,6 +56,47 @@ export default function StorySelectorScreen() {
   useEffect(() => {
     if (fontError) throw fontError;
   }, [fontError]);
+
+  const musicRef = useRef<Audio.Sound | null>(null);
+  
+    useFocusEffect(
+      useCallback(() => {
+        const manageMusic = async () => {
+            if (isBgmOn) {
+              if (!musicRef.current) {
+                  try {
+                  await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+                  const { sound } = await Audio.Sound.createAsync(
+                      require('../../../assets/sounds/storylist.mp3'),
+                      { isLooping: true }
+                  );
+                  await sound.playAsync();
+                  musicRef.current = sound;
+                  } catch (error) {
+                  console.error("배경 음악 로딩 실패:", error);
+                  }
+              }
+              else {
+                  await musicRef.current.playAsync();
+              }
+            } 
+            else {
+              if (musicRef.current) {
+                  await musicRef.current.stopAsync();
+              }
+            }
+        };
+  
+        manageMusic();
+  
+        return () => {
+            if (musicRef.current) {
+              musicRef.current.unloadAsync();
+              musicRef.current = null;
+            }
+        };
+        }, [isBgmOn]) 
+    );
 
   // 이야기 목록 조회
   useEffect(() => {

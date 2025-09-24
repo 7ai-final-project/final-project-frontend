@@ -148,7 +148,7 @@ export default function GameSetup({
                     source={
                       char.image
                         ? { uri: char.image }
-                        : require("@/assets/images/game/multi_mode/character/knight.png")
+                        : require("@/assets/images/game/multi/character/knight.png")
                     }
                     style={styles.characterImage}
                     resizeMode="contain"

@@ -256,8 +256,8 @@ export default function GameSetup({
   
   useEffect(() => {
     const images = [
-      require("@/assets/images/game/multi_mode/background/loading.png"),
-      require("@/assets/images/game/multi_mode/background/loading1.png"),
+      require("@/assets/images/game/multi/background/loading.png"),
+      require("@/assets/images/game/multi/background/loading1.png"),
     ];
     setLoadingImage(images[Math.floor(Math.random() * images.length)]);
   }, []);
@@ -364,7 +364,7 @@ export default function GameSetup({
                       onPress={() => handleCharacterSelect(char.id)}
                     >
                       <Image
-                        source={char.image || require("@/assets/images/game/multi_mode/character/knight.png")}
+                        source={char.image || require("@/assets/images/game/multi/character/knight.png")}
                         style={styles.characterImage}
                         resizeMode="contain"
                       />

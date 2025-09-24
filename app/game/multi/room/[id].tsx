@@ -96,8 +96,8 @@ export default function RoomScreen() {
   const roomId = id as string;
 
   const backgroundImages = [
-    require('../../../../assets/images/game/multi_mode/background/gameroom_image_1.png'),
-    require('../../../../assets/images/game/multi_mode/background/gameroom_image_2.png'),
+    require('../../../../assets/images/game/multi/background/gameroom_image_1.png'),
+    require('../../../../assets/images/game/multi/background/gameroom_image_2.png'),
   ];
    const [fontsLoaded, fontError] = useFonts({
     'neodgm': require('../../../../assets/fonts/neodgm.ttf'),
