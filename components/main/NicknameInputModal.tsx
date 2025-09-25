@@ -77,9 +77,10 @@ export default function NicknameInputModal({
 
       onSave(nickname.trim());
       setIsSuccess(true);
-      setTimeout(() => {
-        onClose(true);
-      }, 1000);
+      // 1. setTimeout 제거: 이제 자동으로 닫히지 않습니다.
+      // setTimeout(() => {
+      //   onClose(true);
+      // }, 1000);
     } catch (error: any) {
       console.error("닉네임 업데이트 중 오류 발생: ", error);
       if (error.response && error.response.data && error.response.data.message) {
@@ -109,17 +110,23 @@ export default function NicknameInputModal({
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => !isSuccess && onClose(false)} // 성공 메시지 표시 중에는 배경 클릭으로 닫히지 않도록
+          onPress={() => !isSuccess && onClose(false)}
         >
           <TouchableWithoutFeedback>
             <View style={styles.modalBox}>
-              {/* 4. isSuccess 값에 따라 다른 UI를 렌더링 */}
               {isSuccess ? (
                 <>
                   <Text style={styles.successTitle}>🎉</Text>
                   <Text style={styles.successMessage}>
                     닉네임이 성공적으로 설정되었습니다!
                   </Text>
+                  {/* 2. 확인 버튼 추가 */}
+                  <TouchableOpacity
+                    style={[styles.saveButton, { marginTop: 30 }]} // 기존 저장 버튼 스타일 재사용
+                    onPress={() => onClose(true)} // 버튼을 누르면 onClose 함수 호출
+                  >
+                    <Text style={styles.saveButtonText}>확인</Text>
+                  </TouchableOpacity>
                 </>
               ) : (
                 <>
@@ -174,6 +181,7 @@ export default function NicknameInputModal({
 }
 
 const styles = StyleSheet.create({
+  // ... (기존 스타일은 변경 없음)
   overlayWrapper: {
     flex: 1,
     justifyContent: 'center',
@@ -201,6 +209,8 @@ const styles = StyleSheet.create({
     position: 'relative',
     borderWidth: 2,
     borderColor: '#4a4e69',
+    minHeight: 250,
+    justifyContent: 'center'
   },
   closeIcon: {
     position: 'absolute',

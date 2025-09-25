@@ -270,7 +270,6 @@ export default function HomeScreen() {
     if(tempLoginUser) {
       const updatedUser = { ...tempLoginUser, nickname: newNickname };
       setUser(updatedUser); 
-      setNicknameInputModalVisible(false); 
       setLoginModalVisible(false);  
       setTempLoginUser(null);       
     }
