@@ -30,6 +30,7 @@ export default function NicknameInputModal({
   const [nickname, setNickname] = useState(initialNickname);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const [fontsLoaded] = useFonts({
     'neodgm': require('../../assets/fonts/neodgm.ttf'),
@@ -40,6 +41,7 @@ export default function NicknameInputModal({
       setNickname(initialNickname);
       setErrorMessage('');
       setIsSaving(false);
+      setIsSuccess(false);
     }
   }, [visible, initialNickname]);
 
@@ -74,8 +76,10 @@ export default function NicknameInputModal({
       }
 
       onSave(nickname.trim());
-      alert('닉네임이 성공적으로 설정되었습니다!');
-      onClose(true);
+      setIsSuccess(true);
+      setTimeout(() => {
+        onClose(true);
+      }, 1000);
     } catch (error: any) {
       console.error("닉네임 업데이트 중 오류 발생: ", error);
       if (error.response && error.response.data && error.response.data.message) {
@@ -102,55 +106,65 @@ export default function NicknameInputModal({
         style={styles.overlayWrapper}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* 배경을 터치하면 닫히도록 */}
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => onClose(false)}
+          onPress={() => !isSuccess && onClose(false)} // 성공 메시지 표시 중에는 배경 클릭으로 닫히지 않도록
         >
-          {/* 모달 안쪽은 터치 이벤트 전파 막기 */}
           <TouchableWithoutFeedback>
             <View style={styles.modalBox}>
-              <TouchableOpacity
-                style={styles.closeIcon}
-                onPress={() => onClose(false)}
-              >
-                <Ionicons name="close" size={24} color="#aaa" />
-              </TouchableOpacity>
+              {/* 4. isSuccess 값에 따라 다른 UI를 렌더링 */}
+              {isSuccess ? (
+                <>
+                  <Text style={styles.successTitle}>🎉</Text>
+                  <Text style={styles.successMessage}>
+                    닉네임이 성공적으로 설정되었습니다!
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.closeIcon}
+                    onPress={() => onClose(false)}
+                  >
+                    <Ionicons name="close" size={24} color="#aaa" />
+                  </TouchableOpacity>
 
-              <Text style={styles.modalTitle}>닉네임 설정</Text>
-              <Text style={styles.modalDescription}>
-                모험을 시작하기 전에 멋진 닉네임을 설정해주세요!
-              </Text>
+                  <Text style={styles.modalTitle}>닉네임 설정</Text>
+                  <Text style={styles.modalDescription}>
+                    모험을 시작하기 전에 멋진 닉네임을 설정해주세요!
+                  </Text>
 
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.nicknameInput}
-                  placeholder="여기에 닉네임을 입력하세요"
-                  placeholderTextColor="#888"
-                  value={nickname}
-                  onChangeText={setNickname}
-                  maxLength={10}
-                  autoCapitalize="none"
-                  keyboardAppearance="dark"
-                />
-              </View>
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={styles.nicknameInput}
+                      placeholder="여기에 닉네임을 입력하세요"
+                      placeholderTextColor="#888"
+                      value={nickname}
+                      onChangeText={setNickname}
+                      maxLength={10}
+                      autoCapitalize="none"
+                      keyboardAppearance="dark"
+                    />
+                  </View>
 
-              {errorMessage ? (
-                <Text style={styles.errorMessage}>{errorMessage}</Text>
-              ) : null}
+                  {errorMessage ? (
+                    <Text style={styles.errorMessage}>{errorMessage}</Text>
+                  ) : null}
 
-              <TouchableOpacity
-                style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-                onPress={handleSave}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <Text style={styles.saveButtonText}>저장 중...</Text>
-                ) : (
-                  <Text style={styles.saveButtonText}>닉네임 저장</Text>
-                )}
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                    onPress={handleSave}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <Text style={styles.saveButtonText}>저장 중...</Text>
+                    ) : (
+                      <Text style={styles.saveButtonText}>닉네임 저장</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
@@ -256,5 +270,16 @@ const styles = StyleSheet.create({
     fontFamily: 'neodgm',
     fontWeight: 'bold',
     color: '#fff',
+  },
+  successTitle: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  successMessage: {
+    fontSize: 20,
+    fontFamily: 'neodgm',
+    color: '#F4E4BC',
+    textAlign: 'center',
+    lineHeight: 28,
   },
 });
