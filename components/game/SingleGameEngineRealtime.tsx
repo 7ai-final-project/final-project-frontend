@@ -204,6 +204,8 @@ export default function GameEngineRealtime({
                         myCharacter: setupData.myCharacter,
                         allCharacters: setupData.allCharacters,
                         isLoadedGame: false,
+                        difficulty: Array.isArray(difficulty) ? difficulty[0] : difficulty,
+                        genre: Array.isArray(genre) ? genre[0] : genre,
                     });
                     setCurrentScene(response.data.scene);
                     setGameState(response.data.initial_state);
@@ -229,6 +231,13 @@ export default function GameEngineRealtime({
             }).start();
         }
     }, [phase]);
+
+    useEffect(() => {
+        if (phase === 'end') {
+            setShowConfetti(true);
+            playSfx(fireworksSound);
+        }
+    }, [phase, fireworksSound]);
 
     useEffect(() => {
         const loadSounds = async () => {
@@ -329,6 +338,7 @@ export default function GameEngineRealtime({
             })
         );
         spinAnim.start();
+        
 
         setTimeout(async () => {
             spinAnim.stop();
@@ -375,6 +385,7 @@ export default function GameEngineRealtime({
                     usage: pendingUsage,
                     gameState: gameState,
                     allCharacters: allCharacters,
+                    difficulty: Array.isArray(difficulty) ? difficulty[0] : difficulty, // ◀ difficulty 정보 추가
                 });
 
                 const { narration, roundResult, nextGameState, shari, party_state, is_final_turn } = response.data;
@@ -587,6 +598,16 @@ export default function GameEngineRealtime({
 
     return (
         <SafeAreaView style={styles.safeArea}>
+            {showConfetti && (
+                <ConfettiCannon
+                    count={200}
+                    origin={{ x: -10, y: 0 }}
+                    autoStart={true}
+                    fadeOut={true}
+                    explosionSpeed={400}
+                    fallSpeed={3000}
+                />
+            )}
             <View style={styles.mainContainer}>
                 <TouchableOpacity style={styles.settingsIcon} onPress={() => setIsOptionsModalVisible(true)}>
                     <Ionicons name="settings-outline" size={28} color="#E0E0E0" />
@@ -709,6 +730,7 @@ export default function GameEngineRealtime({
                 <View style={styles.gamePanel}>
                     {phase === "choice" && (
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
+                            {currentScene && <Text style={[styles.turnCounter, { fontSize: 16 * fontSizeMultiplier }]}>- {currentScene.index + 1}번째 이야기 -</Text>}
                             <Text style={[styles.title, { fontSize: 26 * fontSizeMultiplier }]}>{title}</Text>
                             <ScrollView style={styles.descriptionBox} showsVerticalScrollIndicator={false}>
                                 <Text style={[styles.descriptionText, { fontSize: 15 * fontSizeMultiplier }]}>
@@ -784,6 +806,7 @@ export default function GameEngineRealtime({
 
                     {phase === "cinematic" && (
                         <Animated.View style={[styles.contentBox, { opacity: phaseAnim }]}>
+                            {currentScene && <Text style={[styles.turnCounter, { fontSize: 16 * fontSizeMultiplier }]}>- {currentScene.index + 1}번째 이야기 -</Text>}
                             <Text style={[styles.title, { fontSize: 26 * fontSizeMultiplier }]}>{title}</Text>
                             {diceResult && <Text style={[styles.resultText, { fontSize: 18 * fontSizeMultiplier }]}>{diceResult}</Text>}
                             <View style={styles.ttsControlsTopLeft}>
@@ -1336,6 +1359,12 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         alignItems: 'center',
         marginHorizontal: 10,
+    },
+    turnCounter: {
+        color: '#A0A0E0',
+        textAlign: 'center',
+        marginBottom: 8,
+        fontFamily: 'neodgm',
     },
     cancelButton: {
         backgroundColor: '#4A5568',

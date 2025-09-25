@@ -107,9 +107,11 @@ export const fetchCharactersByTopic = async (topic: string): Promise<Character[]
  */
 export const getInitialScene = (data: {
     topic: string;
-    myCharacter: Character; // ✅ 이 줄을 추가하세요
+    myCharacter: Character;
     allCharacters: Character[];
     isLoadedGame: boolean;
+    difficulty?: string; // ▼▼▼ 이 두 줄을 추가해주세요 ▼▼▼
+    genre?: string;
 }) => {
     // allCharacters 대신 characters 키로 백엔드에 전달 (기존 방식 유지)
     return api.post("/game/single/initial/", { ...data, characters: data.allCharacters });
@@ -126,6 +128,7 @@ export const submitChoiceAndGetNextScene = (data: {
   currentScene: SceneTemplate | null;
   usage: { type: 'skill' | 'item'; data: Skill | Item } | null;
   gameState: any;
+  
 }) => api.post("game/single/proceed/", data);
 
 
@@ -151,6 +154,7 @@ export const resolveTurn = (data: {
     usage: any;
     gameState: any;
     allCharacters: Character[];
+    difficulty?: string;
 }) => {
     return api.post("/game/single/proceed/", data);
 };
