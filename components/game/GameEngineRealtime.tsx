@@ -51,6 +51,8 @@ const statKrToEn = Object.fromEntries(
     Object.entries(statMapping).map(([en, kr]) => [kr, en])
 );
 
+const FALLBACK_IMAGE_URI = require("@/assets/images/game/multi/background/error.png");
+
 export default function GameEngineRealtime({
     roomId,
     topic,
@@ -862,6 +864,7 @@ export default function GameEngineRealtime({
                             <View style={styles.sceneImageWrap}>
                                 <Image
                                 source={{ uri: sceneImageUrl }}
+                                defaultSource={FALLBACK_IMAGE_URI}
                                 style={styles.sceneImage}
                                 resizeMode="cover"
                                 onLoadStart={() => setImgLoading(true)}
@@ -922,6 +925,7 @@ export default function GameEngineRealtime({
                                 <View style={[styles.sceneImageWrap, { width: "50%"}]}>
                                     <Image
                                         source={{ uri: sceneImageUrl }}
+                                        defaultSource={FALLBACK_IMAGE_URI}
                                         style={styles.sceneImage}
                                         resizeMode="cover"
                                     />

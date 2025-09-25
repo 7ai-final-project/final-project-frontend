@@ -738,7 +738,7 @@ export default function GameEngineRealtime({
                                 </Text>
                             </ScrollView>
                             <Text style={[styles.subtitle, { fontSize: 14 * fontSizeMultiplier }]}>
-                                {myCharacter.name} — {myRole}
+                                {myCharacter.name}
                             </Text>
 
                             <View style={styles.timerContainer}>
@@ -865,8 +865,11 @@ export default function GameEngineRealtime({
                                 </TouchableOpacity>
                             )}
                         </View>
-                        <View style={styles.cinematicContainer}>
-                            <ScrollView style={[styles.cinematicBox, { maxHeight: 300, flex: 0 }]} showsVerticalScrollIndicator={false}>
+                        <View style={styles.cinematicContainer}> 
+                            <ScrollView 
+                                style={styles.cinematicBox}
+                                showsVerticalScrollIndicator={false}
+                            >
                                 <Text style={[styles.cinematicText, { fontSize: 15 * fontSizeMultiplier }]}>{cinematicText}</Text>
                             </ScrollView>
                         </View>
