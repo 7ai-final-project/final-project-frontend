@@ -198,7 +198,7 @@ export default function StorySelectorScreen() {
       <View style={isMobile ? styles.headerMobile : styles.header}>
         <TouchableOpacity
           style={isMobile ? styles.headerButtonMobile : styles.headerButton}
-          onPress={() => router.back()}
+          onPress={() => router.push('/')}
         >
           <Ionicons name="arrow-back" size={isMobile ? 24 : 28} color="#F4E4BC" />
         </TouchableOpacity>
